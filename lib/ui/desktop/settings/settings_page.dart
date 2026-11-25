@@ -10,10 +10,13 @@ import 'package:dio/dio.dart' show DioException;
 import '../../../core/companion/companion_process_manager.dart';
 import '../../../core/companion/companion_spider_api.dart';
 import '../../../core/config/models/vod_config.dart';
+import '../../../core/config/models/custom_site.dart';
 import '../../../core/build_info.dart';
 import '../../../core/diagnostics/error_log.dart';
 import '../../../core/danmaku/danmaku_api.dart';
-import '../../../core/danmaku/danmaku_settings.dart';
+import '../../../core/danmaku/danmaku_service_config.dart';
+import '../../../core/subtitle/custom_provider.dart';
+import '../../../core/subtitle/subtitle_service_config.dart';
 import '../player/danmaku_source_dropdown.dart';
 import '../../../core/live/epg_repository.dart';
 import '../../../core/live/live_repository.dart';
@@ -21,11 +24,14 @@ import '../../../core/live/live_source_history.dart';
 import '../../../core/player/models/player_settings.dart';
 import '../../../core/settings/models/appearance_preferences.dart';
 import '../../../core/settings/models/external_player_settings.dart';
+import '../../theme/app_accent.dart';
 import '../../theme/app_icon_assets.dart';
 import '../../theme/app_palette.dart';
 import '../widgets/app_message.dart';
 import '../widgets/app_motion.dart';
+import '../dialogs/agreement_dialog.dart';
 import '../dialogs/app_dialog.dart';
+import '../dialogs/custom_site_dialog.dart';
 import '../widgets/focus_ring.dart';
 import '../../theme/app_tokens.dart';
 import '../../../core/settings/models/play_skip_preferences.dart';
@@ -36,6 +42,8 @@ import '../../../core/storage/data_directory_manager.dart';
 import '../../../core/storage/data_restore_guard.dart';
 import '../../../core/storage/models/data_backup.dart';
 import '../../../core/player/player_engine.dart';
+import '../../../core/runtime/runtime_component.dart';
+import '../../../core/runtime/runtime_installer.dart';
 import '../../../core/player/player_settings_application.dart';
 import '../../../core/settings/models/config_source_entry.dart';
 import '../../../core/settings/models/history_preferences.dart';
@@ -55,9 +63,11 @@ import 'source_category_controls.dart';
 import 'source_history_table.dart';
 import 'tmdb_settings_card.dart';
 import '../keyboard/player_shortcuts.dart';
+import '../../../core/brand.dart';
 
 part 'player_shortcuts_panel.dart';
 part 'external_player_panel.dart';
+part 'runtime_panel.dart';
 
 /// 设置中心分区
 enum SettingsSection {
@@ -66,6 +76,7 @@ enum SettingsSection {
   general,
   appearance,
   player,
+  runtime,
   shortcuts,
   about
 }
@@ -228,65 +239,75 @@ class _SettingsPageState extends State<SettingsPage> {
                             type: AppTransitionType.vertical,
                             reverse: _reverseSection,
                             child: switch (_section) {
-                            SettingsSection.configSources => TextSelectionTheme(
-                                data: TextSelectionTheme.of(context).copyWith(
-                                    selectionColor: context.palette.sourceInputSelection),
-                                child: ConfigSourcesPanel(
-                                  key: const ValueKey('settings-config-sources'),
+                              SettingsSection.configSources =>
+                                TextSelectionTheme(
+                                  data: TextSelectionTheme.of(context).copyWith(
+                                      selectionColor:
+                                          context.palette.sourceInputSelection),
+                                  child: ConfigSourcesPanel(
+                                    key: const ValueKey(
+                                        'settings-config-sources'),
+                                    configRepository: widget.configRepository,
+                                    settingsRepository:
+                                        widget.settingsRepository,
+                                    onAddConfig: widget.onAddConfig,
+                                    selectDepot: widget.selectDepot,
+                                    pickExportPath: widget.pickExportPath,
+                                    companionSpiderApi:
+                                        widget.companionSpiderApi,
+                                  ),
+                                ),
+                              SettingsSection.liveSources => switch (
+                                    widget.liveRepository) {
+                                  final liveRepository? => LiveSourcesPanel(
+                                      key: const ValueKey(
+                                          'settings-live-sources'),
+                                      liveRepository: liveRepository,
+                                      configRepository: widget.configRepository,
+                                    ),
+                                  null => const SizedBox.shrink(),
+                                },
+                              SettingsSection.general => GeneralSettingsPanel(
+                                  key: const ValueKey('settings-general'),
                                   configRepository: widget.configRepository,
                                   settingsRepository: widget.settingsRepository,
-                                  onAddConfig: widget.onAddConfig,
-                                  selectDepot: widget.selectDepot,
-                                  pickExportPath: widget.pickExportPath,
+                                  cacheMaintenance: widget.cacheMaintenance,
+                                  epgRepository: widget.epgRepository,
+                                  dataBackupService: widget.dataBackupService,
+                                  isPlaybackActive: widget.isPlaybackActive,
+                                  pickBackupSavePath: widget.pickBackupSavePath,
+                                  pickBackupOpenPath: widget.pickBackupOpenPath,
                                   companionSpiderApi: widget.companionSpiderApi,
                                 ),
-                              ),
-                            SettingsSection.liveSources => switch (
-                                  widget.liveRepository) {
-                                final liveRepository? => LiveSourcesPanel(
-                                    key:
-                                        const ValueKey('settings-live-sources'),
-                                    liveRepository: liveRepository,
-                                  ),
-                                null => const SizedBox.shrink(),
-                              },
-                            SettingsSection.general => GeneralSettingsPanel(
-                                key: const ValueKey('settings-general'),
-                                configRepository: widget.configRepository,
-                                settingsRepository: widget.settingsRepository,
-                                cacheMaintenance: widget.cacheMaintenance,
-                                epgRepository: widget.epgRepository,
-                                dataBackupService: widget.dataBackupService,
-                                isPlaybackActive: widget.isPlaybackActive,
-                                pickBackupSavePath: widget.pickBackupSavePath,
-                                pickBackupOpenPath: widget.pickBackupOpenPath,
-                                companionSpiderApi: widget.companionSpiderApi,
-                              ),
-                            SettingsSection.appearance => AppearancePanel(
-                                key: const ValueKey('settings-appearance'),
-                                settingsRepository: widget.settingsRepository,
-                                wallpaperStore: widget.wallpaperStore ??
-                                    WallpaperStore(
-                                        probeSize: probeWallpaperImageSize),
-                                pickWallpaperPath: widget.pickWallpaperPath,
-                              ),
-                            SettingsSection.player => PlayerSettingsPanel(
-                                key: const ValueKey('settings-player'),
-                                settingsRepository: widget.settingsRepository,
-                                application: widget.playerSettingsApplication,
-                                danmakuAvailable: widget.danmakuAvailable,
-                              ),
-                            SettingsSection.shortcuts => PlayerShortcutsPanel(
-                                key: const ValueKey('settings-shortcuts'),
-                                settingsRepository: widget.settingsRepository,
-                              ),
-                            SettingsSection.about => AboutPanel(
-                                key: const ValueKey('settings-about'),
-                                playerEngine: widget.playerEngine,
-                                updateSection: widget.updateSection,
-                                onResetAll: widget.onResetAll,
-                              ),
-                          },
+                              SettingsSection.appearance => AppearancePanel(
+                                  key: const ValueKey('settings-appearance'),
+                                  settingsRepository: widget.settingsRepository,
+                                  wallpaperStore: widget.wallpaperStore ??
+                                      WallpaperStore(
+                                          probeSize: probeWallpaperImageSize),
+                                  pickWallpaperPath: widget.pickWallpaperPath,
+                                ),
+                              SettingsSection.player => PlayerSettingsPanel(
+                                  key: const ValueKey('settings-player'),
+                                  settingsRepository: widget.settingsRepository,
+                                  application: widget.playerSettingsApplication,
+                                  danmakuAvailable: widget.danmakuAvailable,
+                                ),
+                              SettingsSection.runtime =>
+                                const RuntimeSettingsPanel(
+                                  key: ValueKey('settings-runtime'),
+                                ),
+                              SettingsSection.shortcuts => PlayerShortcutsPanel(
+                                  key: const ValueKey('settings-shortcuts'),
+                                  settingsRepository: widget.settingsRepository,
+                                ),
+                              SettingsSection.about => AboutPanel(
+                                  key: const ValueKey('settings-about'),
+                                  playerEngine: widget.playerEngine,
+                                  updateSection: widget.updateSection,
+                                  onResetAll: widget.onResetAll,
+                                ),
+                            },
                           ),
                         ),
                       ]),
@@ -373,6 +394,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     label: '播放器与解码',
                     selected: _section == SettingsSection.player,
                     onTap: () => _selectSection(SettingsSection.player),
+                  ),
+                  const SizedBox(height: 8),
+                  _SectionTab(
+                    icon: Icons.memory_rounded,
+                    label: '运行时',
+                    selected: _section == SettingsSection.runtime,
+                    onTap: () => _selectSection(SettingsSection.runtime),
                   ),
                   const SizedBox(height: 8),
                   _SectionTab(
@@ -541,7 +569,10 @@ ButtonStyle _outlinedStyle(BuildContext context) => OutlinedButton.styleFrom(
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.sm)),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: AppType.label),
+      textStyle: Theme.of(context)
+          .textTheme
+          .labelLarge
+          ?.copyWith(fontSize: AppType.label),
     );
 
 /// 主按钮（品牌底）统一样式：弹窗确认、添加配置源、选择壁纸共用。
@@ -555,7 +586,10 @@ ButtonStyle _primaryStyle(BuildContext context) => ElevatedButton.styleFrom(
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.sm)),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: AppType.label),
+      textStyle: Theme.of(context)
+          .textTheme
+          .labelLarge
+          ?.copyWith(fontSize: AppType.label),
     );
 
 /// 设置项行内下拉的统一外观：深底 + 描边 + 定宽。
@@ -763,6 +797,50 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
 
   Future<void> _reload() => _runLoad('reload', _repo.reloadCurrent, '已重新加载');
 
+  /// 清除当前生效配置：历史里可能已经没有这条源（被移除或从未记录），
+  /// 光删历史清不掉它，必须单独给一个出口。
+  Future<void> _clearCurrentConfig() async {
+    if (_loadingKey != null) return;
+    final confirmed = await showAppDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.palette.raised,
+        title: Text('清除当前配置',
+            style: TextStyle(
+                fontSize: AppType.heading, color: context.palette.textTitle)),
+        content: Text(
+          '将移除当前已加载的站点、直播与解析，回到「尚未加载配置」。\n'
+          '配置源历史、自建站源、播放历史与收藏都不受影响，可随时从历史里重新启用。',
+          style: TextStyle(
+              fontSize: AppType.label,
+              height: 1.5,
+              color: context.palette.textBody),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('清除', style: TextStyle(color: context.palette.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _loadingKey = 'clear');
+    try {
+      await _repo.clearCurrentConfig();
+      if (mounted) _toast('已清除当前配置');
+    } catch (error) {
+      if (mounted) {
+        _toast('清除失败：${_errorText(error)}', type: AppMessageType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _loadingKey = null);
+    }
+  }
+
   Future<void> _setHomeSite(Site? site, String identity) async {
     try {
       await _repo.setDefaultHomeSite(site, configIdentity: identity);
@@ -770,6 +848,177 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
       if (_repo.homeSiteSaveError == null) {
         _toast(_errorText(error), type: AppMessageType.error);
       }
+    }
+  }
+
+  /// 自建站源卡片：本地 / 远程 JAR 直接建站源，不依赖改写配置 JSON。
+  Widget _buildCustomSitesCard() {
+    final sites = _repo.customSites;
+    return _card(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('自定义站点（JAR）',
+                  style: TextStyle(
+                      fontSize: AppType.label,
+                      fontWeight: FontWeight.bold,
+                      color: context.palette.textMain)),
+              const SizedBox(width: 8),
+              Text('${sites.length}',
+                  style: TextStyle(
+                      fontSize: AppType.body, color: context.palette.textSub)),
+              const Spacer(),
+              OutlinedButton.icon(
+                key: const ValueKey('custom-site-add'),
+                onPressed: () => unawaited(_openCustomSiteEditor()),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('新建站点'),
+                style: _outlinedStyle(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '用本地或远程 JAR 直接建一个站源，不用改配置 JSON。JAR 站源首次加载要下载 / 解密 / '
+            '转换，通常几十秒到几分钟，之后走本机缓存；加固包更慢。',
+            style: TextStyle(
+                fontSize: AppType.body,
+                height: 1.5,
+                color: context.palette.textSub),
+          ),
+          if (sites.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text('还没有自定义站点。点「新建站点」选择 spider.jar，类名会自动扫描。',
+                  style: TextStyle(
+                      fontSize: AppType.body, color: context.palette.textDim)),
+            )
+          else ...[
+            const SizedBox(height: 6),
+            for (final site in sites) _customSiteRow(site),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _customSiteRow(CustomSite site) {
+    final jarName = _jarFileName(site.jar);
+    return Container(
+      key: ValueKey('custom-site-row:${site.id}'),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.palette.divider)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.extension_rounded,
+              size: 16, color: context.palette.accentInk),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(site.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: AppType.label,
+                        fontWeight: FontWeight.w600,
+                        color: context.palette.textMain)),
+                const SizedBox(height: 2),
+                Tooltip(
+                  message: site.jar.trim().isEmpty ? site.api : site.jar,
+                  child: Text(
+                    jarName.isEmpty ? site.api : '${site.api} · $jarName',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: AppType.body, color: context.palette.textSub),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: ValueKey('custom-site-edit:${site.id}'),
+            tooltip: '编辑',
+            onPressed: () => unawaited(_openCustomSiteEditor(site)),
+            icon: Icon(Icons.edit_rounded,
+                size: 16, color: context.palette.textSub),
+          ),
+          IconButton(
+            key: ValueKey('custom-site-delete:${site.id}'),
+            tooltip: '删除',
+            onPressed: () => unawaited(_deleteCustomSite(site)),
+            icon: Icon(Icons.delete_outline_rounded,
+                size: 16, color: context.palette.textSub),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// JAR 地址只展示文件名：完整路径通常很长，悬停看全量。
+  static String _jarFileName(String jar) {
+    final trimmed = jar.split(';md5;').first.trim();
+    if (trimmed.isEmpty) return '';
+    final index = trimmed.lastIndexOf(RegExp(r'[\\/]'));
+    return index < 0 ? trimmed : trimmed.substring(index + 1);
+  }
+
+  Future<void> _openCustomSiteEditor([CustomSite? site]) async {
+    final result = await showAppDialog<CustomSite>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CustomSiteDialog(
+        initial: site,
+        spiderApi: widget.companionSpiderApi,
+      ),
+    );
+    if (result == null || !mounted) return;
+    final creating = site == null;
+    try {
+      await _repo.upsertCustomSite(result);
+      if (!mounted) return;
+      _toast(
+        creating ? '已添加站点「${result.name}」' : '已保存站点「${result.name}」',
+        type: AppMessageType.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _toast('站点保存失败：${_errorText(error)}', type: AppMessageType.error);
+    }
+  }
+
+  Future<void> _deleteCustomSite(CustomSite site) async {
+    final confirmed = await showAppDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除站点'),
+        content: Text('删除「${site.name}」？只删这个自建站源，不影响配置里的站点，'
+            '已缓存的 JAR 文件也保留。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _repo.removeCustomSite(site.id);
+      if (!mounted) return;
+      _toast('已删除站点「${site.name}」', type: AppMessageType.success);
+    } catch (error) {
+      if (!mounted) return;
+      _toast('删除失败：${_errorText(error)}', type: AppMessageType.error);
     }
   }
 
@@ -931,35 +1180,69 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
   }
 
   Future<void> _remove(ConfigSourceEntry entry) async {
+    final isCurrent = entry.location == _repo.currentSourceLocation &&
+        entry.kind == _repo.currentSourceKind;
+    var clearCurrent = false;
     final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: context.palette.raised,
-        title: Text('移除配置源',
-            style: TextStyle(
-                fontSize: AppType.heading, color: context.palette.textTitle)),
-        content: Text(
-          '从历史中移除「${entry.displayName}」？\n不影响当前已加载的配置，也不会删除本地文件。',
-          style: TextStyle(
-              fontSize: AppType.label,
-              height: 1.5,
-              color: context.palette.textBody),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消')),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            // 「移除配置源」是破坏性操作，按 destructive-emphasis 用危险色
-            child: Text('移除', style: TextStyle(color: context.palette.danger)),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: context.palette.raised,
+          title: Text('移除配置源',
+              style: TextStyle(
+                  fontSize: AppType.heading, color: context.palette.textTitle)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '从历史中移除「${entry.displayName}」？\n不影响当前已加载的配置，也不会删除本地文件。',
+                style: TextStyle(
+                    fontSize: AppType.label,
+                    height: 1.5,
+                    color: context.palette.textBody),
+              ),
+              if (isCurrent)
+                CheckboxListTile(
+                  key: const ValueKey('config-remove-clear-current'),
+                  value: clearCurrent,
+                  onChanged: (value) =>
+                      setDialogState(() => clearCurrent = value ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  title: Text('同时清除当前配置',
+                      style: TextStyle(
+                          fontSize: AppType.label,
+                          color: context.palette.textMain)),
+                  subtitle: Text('回到「尚未加载配置」，其它源与播放历史不受影响。',
+                      style: TextStyle(
+                          fontSize: AppType.body,
+                          color: context.palette.textSub)),
+                ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              // 「移除配置源」是破坏性操作，按 destructive-emphasis 用危险色
+              child:
+                  Text('移除', style: TextStyle(color: context.palette.danger)),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
     await _saveWithStatus(_settings.removeConfigSource(entry.location));
     if (mounted) setState(() => _probeResults.remove(entry.location));
+    if (isCurrent && clearCurrent) {
+      await _saveWithStatus(_repo.clearCurrentConfig());
+      if (mounted) _toast('已移除并清除当前配置');
+    }
   }
 
   Future<String?> _defaultPickExportPath(String suggestedName) async {
@@ -1023,6 +1306,12 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
     final hasConfig = config.sites.isNotEmpty || config.lives.isNotEmpty;
     final canReload =
         hasConfig && currentKind != null && currentLocation != null;
+    // 当前配置的来源是否还在历史里：移除 / 清空历史后配置仍会保留，
+    // 但「重新加载」已无从下手，需要提示并提供清除出口。
+    final sourceInHistory = currentLocation != null &&
+        sources.any((entry) =>
+            entry.kind == currentKind && entry.location == currentLocation);
+    final sourceDetached = hasConfig && !sourceInHistory;
     final companionSites =
         config.sites.where((site) => site.usesCompanion).toList();
     final sourceText = !hasConfig
@@ -1138,10 +1427,24 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
               const SizedBox(height: 8),
               SelectableText(
                 sourceText,
-                selectionColor: Theme.of(context).textSelectionTheme.selectionColor,
+                selectionColor:
+                    Theme.of(context).textSelectionTheme.selectionColor,
                 style: TextStyle(
                     fontSize: AppType.label, color: context.palette.textSub),
               ),
+              if (sourceDetached) ...[
+                const SizedBox(height: 8),
+                Text(
+                  currentLocation == null
+                      ? '当前配置来自粘贴内容，不在配置源历史里；如需回到空白状态，可清除当前配置。'
+                      : '「$currentLocation」已不在配置源历史中，但当前配置仍在使用它加载的内容。可重新添加该源，或清除当前配置。',
+                  key: const ValueKey('config-current-detached'),
+                  style: TextStyle(
+                      fontSize: AppType.body,
+                      height: 1.5,
+                      color: context.palette.warning),
+                ),
+              ],
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
@@ -1176,6 +1479,25 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
                     style: _outlinedStyle(context),
                   ),
                   OutlinedButton.icon(
+                    key: const ValueKey('config-clear-current'),
+                    onPressed: hasConfig && _loadingKey == null
+                        ? _clearCurrentConfig
+                        : null,
+                    icon: _loadingKey == 'clear'
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.delete_sweep_rounded, size: 16),
+                    label: const Text('清除当前配置'),
+                    style: _outlinedStyle(context).copyWith(
+                      foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.disabled)
+                              ? context.palette.textSub
+                              : context.palette.danger),
+                    ),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: selfCheckEnabled && companionSites.isNotEmpty
                         ? () => unawaited(_openSelfCheck(config))
                         : null,
@@ -1206,6 +1528,8 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        _buildCustomSitesCard(),
         const SizedBox(height: 16),
         _buildHomeSiteCard(),
       ],
@@ -1607,11 +1931,15 @@ class _ProbeLine extends StatelessWidget {
 
 class LiveSourcesPanel extends StatefulWidget {
   final LiveRepository liveRepository;
+
+  /// 主配置来源：用来列出「视频源里带了哪几条直播（lives）」，供用户挑一条。
+  final ConfigRepository configRepository;
   final Future<String?> Function()? pickImportPath;
 
   const LiveSourcesPanel({
     super.key,
     required this.liveRepository,
+    required this.configRepository,
     this.pickImportPath,
   });
 
@@ -1639,6 +1967,10 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
 
   LiveRepository get _repo => widget.liveRepository;
 
+  /// 当前视频源（主配置）里的直播线路；切换配置源时同步刷新。
+  List<Live> _mainLives = const [];
+  StreamSubscription<VodConfig>? _configChanges;
+
   /// 别处（直播频道列表「自定义源」菜单、播放器抽屉）改了直播源时同步刷新。
   StreamSubscription<void>? _sourceChanges;
 
@@ -1647,7 +1979,18 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
     super.initState();
     _categories.addListener(_categoryChanged);
     _listenSourceChanges();
+    _listenConfig();
     unawaited(_loadHistory());
+  }
+
+  /// 订阅主配置：视频源换了之后，这里的线路清单要跟着换。
+  void _listenConfig() {
+    unawaited(_configChanges?.cancel());
+    _mainLives = widget.configRepository.currentVodConfig.lives;
+    _configChanges = widget.configRepository.vodConfigStream.listen((config) {
+      if (!mounted) return;
+      setState(() => _mainLives = config.lives);
+    });
   }
 
   @override
@@ -1659,12 +2002,16 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
       unawaited(_loadHistory());
       _listenSourceChanges();
     }
+    if (oldWidget.configRepository != widget.configRepository) {
+      _listenConfig();
+    }
   }
 
   @override
   void dispose() {
     unawaited(_sourceChanges?.cancel());
     unawaited(_historyChanges?.cancel());
+    unawaited(_configChanges?.cancel());
     _categories.dispose();
     _input.dispose();
     super.dispose();
@@ -1813,6 +2160,54 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
         }
       });
 
+  String _mainLiveName(int index) {
+    final name = _mainLives[index].name.trim();
+    return name.isEmpty ? '线路 ${index + 1}' : name;
+  }
+
+  /// 「当前直播源」一行摘要：跟随主配置时说明用了哪条线路。
+  String _mainLiveSummary() {
+    if (_mainLives.isEmpty) return '跟随主配置源：当前视频源没有直播（lives）';
+    final index = _repo.mainLiveIndex;
+    if (index == null || index >= _mainLives.length) {
+      return '跟随主配置源：全部 ${_mainLives.length} 条直播线路合并';
+    }
+    return '跟随主配置源：第 ${index + 1} 条「${_mainLiveName(index)}」';
+  }
+
+  /// 线路副标题：让人一眼看出这条是清单、脚本还是单频道直链。
+  String _mainLiveSubtitle(Live live) {
+    final target = live.url.trim();
+    if (live.isScripted) {
+      return '脚本直播（需要站点服务）：${live.api?.trim() ?? ''}';
+    }
+    if (live.isPlaylist) {
+      return target.isEmpty ? '频道清单' : '频道清单：$target';
+    }
+    return target.isEmpty ? '单频道' : '单频道直链：$target';
+  }
+
+  Future<void> _selectMainLive(int? index) {
+    final value = index == null || index < 0 ? null : index;
+    // 已经是这条线路：不必重载频道，也不弹重复提示。
+    if (_repo.mainLiveIndex == value) return Future<void>.value();
+    final key = value == null ? 'main-live' : 'main-live-$value';
+    return _run(key, () async {
+      try {
+        await _repo.selectMainLive(value);
+        if (!mounted) return;
+        _toast(
+          value == null
+              ? '直播已改用全部线路合并'
+              : '直播线路已切换：${_mainLiveName(value)}',
+          type: AppMessageType.success,
+        );
+      } catch (error) {
+        _toast('切换线路失败：${_errorText(error)}', type: AppMessageType.error);
+      }
+    });
+  }
+
   Future<void> _remove(LiveSourceEntry entry) async {
     if (_busyKey != null) return;
     final isActive = _repo.sourceHistory.active == entry.location;
@@ -1907,6 +2302,11 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
     final visibleSources = history.entries.where((entry) =>
         _categoryFilter == null || entry.category == _categoryFilter);
     final active = history.activeEntry;
+    // 序号越界（换了视频源、线路变少）按「全部线路」展示，与实际加载保持一致。
+    final storedIndex = history.mainLiveIndex;
+    final mainSelected = storedIndex != null && storedIndex < _mainLives.length
+        ? storedIndex
+        : null;
     final manualChannels = _repo.manualChannels;
     final labelStyle = TextStyle(
         fontSize: AppType.label,
@@ -1977,11 +2377,53 @@ class _LiveSourcesPanelState extends State<LiveSourcesPanel> {
               const SizedBox(height: 8),
               SelectableText(
                 active == null
-                    ? '跟随主配置源：使用主配置里的直播（lives）'
+                    ? _mainLiveSummary()
                     : '${_liveSourceKindLabel(active.kind)}：${active.location}',
                 style: TextStyle(
                     fontSize: AppType.label, color: context.palette.textSub),
               ),
+              if (active == null && _mainLives.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Row(children: [
+                  Text('视频源里的直播线路（${_mainLives.length}）',
+                      style: TextStyle(
+                          fontSize: AppType.label,
+                          fontWeight: FontWeight.w600,
+                          color: context.palette.textMain)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _mainLives.length > 1
+                          ? '可只播其中一条，频道列表更干净'
+                          : '这个视频源只带了一条直播',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: AppType.caption,
+                          color: context.palette.textSub),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                if (_mainLives.length > 1)
+                  _MainLiveRow(
+                    key: const ValueKey('main-live-all'),
+                    name: '全部线路（合并）',
+                    subtitle: '${_mainLives.length} 条线路的频道合成一个列表，与改造前一致',
+                    selected: mainSelected == null,
+                    busy: _busyKey == 'main-live',
+                    onTap: () => unawaited(_selectMainLive(null)),
+                  ),
+                for (var index = 0; index < _mainLives.length; index++)
+                  _MainLiveRow(
+                    key: ValueKey('main-live-$index'),
+                    name: _mainLiveName(index),
+                    subtitle: _mainLiveSubtitle(_mainLives[index]),
+                    selected: mainSelected == index,
+                    busy: _busyKey == 'main-live-$index',
+                    onTap: () => unawaited(_selectMainLive(index)),
+                  ),
+              ],
               if (active != null) ...[
                 const SizedBox(height: 10),
                 _StatChip(label: '频道', value: active.channelCount),
@@ -2162,6 +2604,115 @@ class _ManualChannelRow extends StatelessWidget {
 }
 
 /// 直播源行（直播源历史中的一条）
+/// 主配置里的一条直播线路（视频源 lives 的一项）。
+///
+/// 与「直播源历史」不同：这些不是独立源，只决定「跟随主配置源」时播哪一条，
+/// 所以只有单选态，没有删除 / 备注。
+class _MainLiveRow extends StatelessWidget {
+  final String name;
+  final String subtitle;
+  final bool selected;
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _MainLiveRow({
+    super.key,
+    required this.name,
+    required this.subtitle,
+    required this.selected,
+    required this.busy,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: FocusRing(
+        onTap: onTap,
+        semanticLabel: '直播线路：$name${selected ? '（使用中）' : ''}',
+        borderRadius: const BorderRadius.all(Radius.circular(AppRadii.sm)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          hoverColor: palette.hover,
+          // 焦点由外层 FocusRing 承担，避免双重焦点节点
+          canRequestFocus: false,
+          onTap: onTap,
+          child: Container(
+            // FocusRing 内含 Stack（StackFit.loose），不撑满会收缩到文字宽度。
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected
+                  ? palette.accent.withValues(alpha: 0.12)
+                  : palette.card,
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+              border: Border.all(
+                color: selected ? palette.accentInk : palette.border,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 18,
+                  color: selected ? palette.accentInk : palette.textSub,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: AppType.label,
+                            fontWeight:
+                                selected ? FontWeight.w600 : FontWeight.w500,
+                            color: selected
+                                ? palette.textMain
+                                : palette.textTitle),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: AppType.caption,
+                            color: palette.textSub),
+                      ),
+                    ],
+                  ),
+                ),
+                if (busy) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                ] else if (selected) ...[
+                  const SizedBox(width: 8),
+                  Text('使用中',
+                      style: TextStyle(
+                          fontSize: AppType.caption,
+                          color: palette.accentInk)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LiveSourceRow extends StatelessWidget {
   final SourceCategoryController controller;
   final LiveSourceEntry entry;
@@ -2322,6 +2873,19 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   bool _playSkipReadFailed = false;
   StreamSubscription<PlaySkipPreferences>? _playSkipSubscription;
 
+  // ---- §43 弹幕服务地址 / 令牌：用户可后期自填，改动即落盘、下一次请求就生效 ----
+  late final TextEditingController _danmakuUrl;
+  late final TextEditingController _danmakuToken;
+  bool _danmakuTesting = false;
+  String? _danmakuStatus;
+  bool _danmakuStatusError = false;
+
+  // ---- 在线字幕来源：assrt token 与自定义接口，同样自填即生效 ----
+  late final TextEditingController _assrtToken;
+  late final TextEditingController _customSubtitleApis;
+  String? _subtitleStatus;
+  bool _subtitleStatusError = false;
+
   @override
   void initState() {
     super.initState();
@@ -2335,12 +2899,169 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
         _playSkipReadFailed = settingsRepository.playSkipReadFailed;
       });
     });
+    final service = settingsRepository.playerSettings.danmakuService;
+    _danmakuUrl = TextEditingController(text: service.url);
+    _danmakuToken = TextEditingController(text: service.token);
+    final subtitle = settingsRepository.playerSettings.subtitleService;
+    _assrtToken = TextEditingController(text: subtitle.assrtToken);
+    _customSubtitleApis = TextEditingController(text: subtitle.customApis);
   }
 
   @override
   void dispose() {
     unawaited(_playSkipSubscription?.cancel());
+    _danmakuUrl.dispose();
+    _danmakuToken.dispose();
+    _assrtToken.dispose();
+    _customSubtitleApis.dispose();
     super.dispose();
+  }
+
+  /// 输入框里的草稿（保存与测试共用同一份归一化结果）。
+  DanmakuServiceConfig get _danmakuDraft => DanmakuServiceConfig(
+        url: _danmakuUrl.text.trim(),
+        token: _danmakuToken.text.trim(),
+      );
+
+  /// 地址格式护栏：留空合法（等于不启用），填了就必须是 http(s) 绝对地址。
+  String? get _danmakuUrlError {
+    final raw = _danmakuUrl.text.trim();
+    if (raw.isEmpty) return null;
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https') || uri.host.isEmpty) {
+      return '地址要以 http:// 或 https:// 开头';
+    }
+    return null;
+  }
+
+  void _saveDanmakuService({String? status}) {
+    final error = _danmakuUrlError;
+    if (error != null) {
+      setState(() {
+        _danmakuStatus = error;
+        _danmakuStatusError = true;
+      });
+      return;
+    }
+    final next = _danmakuDraft;
+    if (next != settingsRepository.playerSettings.danmakuService) {
+      _update(settingsRepository.playerSettings.copyWith(danmakuService: next));
+    }
+    if (!mounted) return;
+    setState(() {
+      _danmakuStatus = status ?? (next.isEmpty ? '已清空：不再请求弹幕服务' : '已保存');
+      _danmakuStatusError = false;
+    });
+  }
+
+  /// 保存在线字幕来源。自定义接口按行解析，识别不到有效地址时明确告知，
+  /// 但仍落盘（用户可能先粘贴、再回头改）。
+  void _saveSubtitleService() {
+    final rawApis = _customSubtitleApis.text.trim();
+    final parsed = parseCustomSubtitleApis(rawApis);
+    final next = SubtitleServiceConfig(
+      assrtToken: _assrtToken.text.trim(),
+      customApis: rawApis,
+    );
+    if (next != settingsRepository.playerSettings.subtitleService) {
+      _update(settingsRepository.playerSettings.copyWith(subtitleService: next));
+    }
+    if (!mounted) return;
+    final notes = <String>[];
+    if (next.hasAssrt) notes.add('assrt 已填 token');
+    if (parsed.isNotEmpty) {
+      notes.add('自定义接口 ${parsed.length} 个');
+    } else if (rawApis.isNotEmpty) {
+      notes.add('自定义接口未识别到有效地址（需 http(s):// 开头，每行一个）');
+    }
+    setState(() {
+      _subtitleStatus = notes.isEmpty
+          ? '已清空：只使用免 token 的公开字幕源'
+          : '已保存：${notes.join('，')}';
+      _subtitleStatusError = parsed.isEmpty && rawApis.isNotEmpty;
+    });
+  }
+
+  /// 字幕分组的两行说明：都只在用户填过之后才显示「已配置」。
+  String get _assrtHint => _assrtToken.text.trim().isEmpty
+      ? '未配置。assrt.net 的开放 API 需要 token（在其站点个人中心申请）；'
+          '不填也能用 SubtitleCat 免 token 源在线搜字幕'
+      : '已填写。检索中文影视字幕时优先走 assrt';
+
+  String get _customSubtitleHint {
+    final parsed = parseCustomSubtitleApis(_customSubtitleApis.text);
+    if (parsed.isEmpty) {
+      return '未配置。每行一个：名称@https://example.com/sub?title={title}&episode={episode}；'
+          '接口可返回 JSON 候选列表或字幕文件';
+    }
+    return '已启用 ${parsed.length} 个：${parsed.map((e) => e.name).join('、')}';
+  }
+
+  /// 「保存并测试」：先用真实接口探一次（FongMi 兼容的 `?name=` 搜索），通了再落盘。
+  Future<void> _testDanmakuService() async {
+    final formatError = _danmakuUrlError;
+    if (formatError != null) {
+      setState(() {
+        _danmakuStatus = formatError;
+        _danmakuStatusError = true;
+      });
+      return;
+    }
+    final base = composeDanmakuApiBase(_danmakuUrl.text, _danmakuToken.text);
+    if (base.isEmpty) {
+      setState(() {
+        _danmakuStatus = '先填写服务地址';
+        _danmakuStatusError = true;
+      });
+      return;
+    }
+    setState(() {
+      _danmakuTesting = true;
+      _danmakuStatus = '正在连接…';
+      _danmakuStatusError = false;
+    });
+    final api = DanmakuApi(base: base);
+    var ok = false;
+    try {
+      await api.searchKeyword('测试');
+      ok = true;
+    } on DanmakuException catch (error) {
+      // 404 = 接口通、只是这个关键词没结果，同样算连接成功。
+      ok = error.message == '无弹幕';
+      if (!ok && mounted) {
+        setState(() {
+          _danmakuStatus = error.message;
+          _danmakuStatusError = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _danmakuStatus = '连接失败：地址不可达';
+          _danmakuStatusError = true;
+        });
+      }
+    } finally {
+      api.close();
+    }
+    if (!mounted) return;
+    setState(() => _danmakuTesting = false);
+    if (ok) _saveDanmakuService(status: '连接正常，已保存');
+  }
+
+  /// 弹幕服务这一行的说明：区分「有内置值」「完全没配」两种情况。
+  String get _danmakuServiceHint {
+    final hasUser = settingsRepository.playerSettings.danmakuService.isNotEmpty;
+    final hasBuiltin = kBuiltinDanmakuApiBase.isNotEmpty;
+    if (hasUser) {
+      return '已使用你填写的地址（令牌明文保存在本机设置文件）；'
+          '清空后${hasBuiltin ? '回落到内置服务' : '不再请求弹幕服务'}。'
+          '地址末尾不要带 /，令牌按 danmu_api 约定拼在路径第一段';
+    }
+    return hasBuiltin
+        ? '留空则使用内置服务；也可以填自己的 LogVar Danmu API 地址（末尾不带 /，令牌作为路径第一段）'
+        : '填写自部署的 LogVar Danmu API 地址后，播放页才会出现弹幕入口；'
+            '留空则不请求弹幕，其余功能不受影响';
   }
 
   void _update(PlayerSettings next) {
@@ -2611,13 +3332,100 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                 ],
               ),
             ),
-            // §43 弹幕是可选功能：本次构建没配置弹幕服务时整组不出现
-            if (widget.danmakuAvailable ?? danmakuServiceConfigured) ...[
-              const _GroupTitle('弹幕'),
+            // §43 弹幕：地址就在下面自填，所以分组恒显示（没配也能进来填）
+            if (widget.danmakuAvailable ?? true) ...[
+              const _GroupTitle('字幕与弹幕'),
               _card(
                 context,
                 child: Column(
                   children: [
+                    _SettingRow(
+                      title: '弹幕服务',
+                      description: _danmakuServiceHint,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            key: const ValueKey('setting-danmaku-save'),
+                            onPressed: _danmakuTesting
+                                ? null
+                                : () => _saveDanmakuService(),
+                            child: const Text('保存'),
+                          ),
+                          const SizedBox(width: 4),
+                          OutlinedButton(
+                            key: const ValueKey('setting-danmaku-test'),
+                            onPressed: _danmakuTesting
+                                ? null
+                                : () => unawaited(_testDanmakuService()),
+                            child: _danmakuTesting
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Text('保存并测试'),
+                          ),
+                        ],
+                      ),
+                      footer: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  key: const ValueKey('setting-danmaku-url'),
+                                  controller: _danmakuUrl,
+                                  enabled: !_danmakuTesting,
+                                  style: TextStyle(
+                                      fontSize: AppType.label,
+                                      color: context.palette.textMain),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    labelText: '服务地址',
+                                    hintText: 'https://danmu.example.com',
+                                  ),
+                                  onSubmitted: (_) => _saveDanmakuService(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 190,
+                                child: TextField(
+                                  key: const ValueKey('setting-danmaku-token'),
+                                  controller: _danmakuToken,
+                                  enabled: !_danmakuTesting,
+                                  style: TextStyle(
+                                      fontSize: AppType.label,
+                                      color: context.palette.textMain),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    labelText: '访问令牌（可选）',
+                                  ),
+                                  onSubmitted: (_) => _saveDanmakuService(),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_danmakuStatus != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _danmakuStatus!,
+                              style: TextStyle(
+                                fontSize: AppType.body,
+                                color: _danmakuStatusError
+                                    ? context.palette.danger
+                                    : context.palette.textSub,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const _RowDivider(),
                     if (configuredDanmakuSources.length > 1) ...[
                       _SettingRow(
                         title: '弹幕接口',
@@ -2630,7 +3438,8 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                             onChanged: (source) {
                               final current = settingsRepository.playerSettings;
                               _update(current.copyWith(
-                                danmaku: current.danmaku.copyWith(source: source),
+                                danmaku:
+                                    current.danmaku.copyWith(source: source),
                               ));
                             },
                           ),
@@ -2650,9 +3459,85 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                       ),
                     ),
                     const _RowDivider(),
-                    _DanmakuSettingsRows(
-                      value: s.danmaku,
-                      onChanged: (d) => _update(s.copyWith(danmaku: d)),
+                    _SettingRow(
+                      title: 'assrt 字幕 token',
+                      description: _assrtHint,
+                      trailing: TextButton(
+                        key: const ValueKey('setting-assrt-save'),
+                        onPressed: _saveSubtitleService,
+                        child: const Text('保存'),
+                      ),
+                      footer: TextField(
+                        key: const ValueKey('setting-assrt-token'),
+                        controller: _assrtToken,
+                        style: TextStyle(
+                            fontSize: AppType.label,
+                            color: context.palette.textMain),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'token（留空则不用 assrt）',
+                        ),
+                        onSubmitted: (_) => _saveSubtitleService(),
+                      ),
+                    ),
+                    const _RowDivider(),
+                    _SettingRow(
+                      title: '自定义字幕 API',
+                      description: _customSubtitleHint,
+                      trailing: TextButton(
+                        key: const ValueKey('setting-subtitle-api-save'),
+                        onPressed: _saveSubtitleService,
+                        child: const Text('保存'),
+                      ),
+                      footer: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            key: const ValueKey('setting-subtitle-api'),
+                            controller: _customSubtitleApis,
+                            minLines: 2,
+                            maxLines: 4,
+                            style: TextStyle(
+                                fontSize: AppType.label,
+                                height: 1.4,
+                                color: context.palette.textMain),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              hintText:
+                                  '名称@https://example.com/sub?title={title}&episode={episode}',
+                              hintStyle: TextStyle(fontSize: AppType.body),
+                            ),
+                          ),
+                          if (_subtitleStatus != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _subtitleStatus!,
+                              key: const ValueKey('setting-subtitle-status'),
+                              style: TextStyle(
+                                fontSize: AppType.body,
+                                color: _subtitleStatusError
+                                    ? context.palette.danger
+                                    : context.palette.textSub,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const _RowDivider(),
+                    // 详细样式（屏蔽类型 / 密度 / 字号 / 速度）只在播放页抽屉里调，
+                    // 设置中心只留一份入口说明，避免两处维护同一组开关。
+                    _SettingRow(
+                      title: '弹幕样式',
+                      description: '屏蔽类型、密度、合并重复、不透明度、字号、显示区域、'
+                          '滚动/静态速度都在播放页控制条「弹幕设置」抽屉里调整，'
+                          '改完立即生效并同步保存',
+                      trailing: Text(
+                        '播放页内调整',
+                        style: TextStyle(
+                            fontSize: AppType.body,
+                            color: context.palette.textDim),
+                      ),
                     ),
                   ],
                 ),
@@ -2819,255 +3704,6 @@ class _SettingRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [row, const SizedBox(height: 8), footer!],
-    );
-  }
-}
-
-/// §43 弹幕外观与屏蔽（设置页「弹幕」分组的其余行）。改动即时落盘，播放中实时生效。
-class _DanmakuSettingsRows extends StatelessWidget {
-  const _DanmakuSettingsRows({required this.value, required this.onChanged});
-
-  final DanmakuSettings value;
-  final ValueChanged<DanmakuSettings> onChanged;
-
-  static String _areaLabel(double v) {
-    for (final o in DanmakuSettings.areaOptions) {
-      if ((o.$1 - v).abs() < 0.01) return o.$2;
-    }
-    return '${(v * 100).round()}%';
-  }
-
-  Widget _areaDropdown(
-      String key, double current, ValueChanged<double> onPick) {
-    final options = [
-      for (final o in DanmakuSettings.areaOptions)
-        PlayerOption(o.$1.toStringAsFixed(4), o.$2),
-    ];
-    final match = DanmakuSettings.areaOptions.firstWhere(
-        (o) => (o.$1 - current).abs() < 0.01,
-        orElse: () => DanmakuSettings.areaOptions[3]);
-    return _OptionDropdown(
-      key: ValueKey(key),
-      options: options,
-      value: match.$1.toStringAsFixed(4),
-      onChanged: (v) => onPick(double.parse(v)),
-    );
-  }
-
-  Widget _slider(
-          String key,
-          double current,
-          double min,
-          double max,
-          int divisions,
-          String Function(double) format,
-          ValueChanged<double> onCommit) =>
-      _SliderControl(
-        key: ValueKey(key),
-        value: current,
-        min: min,
-        max: max,
-        divisions: divisions,
-        format: format,
-        onCommit: onCommit,
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final d = value;
-    final blocks = <(String, String, bool, DanmakuSettings Function(bool))>[
-      ('scroll', '滚动', d.blockScroll, (b) => d.copyWith(blockScroll: b)),
-      ('top', '顶部', d.blockTop, (b) => d.copyWith(blockTop: b)),
-      ('bottom', '底部', d.blockBottom, (b) => d.copyWith(blockBottom: b)),
-      ('colorful', '彩色', d.blockColorful, (b) => d.copyWith(blockColorful: b)),
-      ('advanced', '高级', d.blockAdvanced, (b) => d.copyWith(blockAdvanced: b)),
-    ];
-    String px(double v) => '${v.round()}';
-    String sec(double v) => '${v.toStringAsFixed(v % 1 == 0 ? 0 : 1)} 秒';
-    return Column(
-      children: [
-        _SettingRow(
-          title: '屏蔽类型',
-          description: '选中的类型不显示；「高级」指定位 / 代码类特殊弹幕（桌面端无法还原其动画，默认屏蔽）',
-          trailing: Wrap(
-            spacing: 6,
-            children: [
-              for (final b in blocks)
-                FilterChip(
-                  key: ValueKey('setting-danmaku-block-${b.$1}'),
-                  label: Text(b.$2),
-                  selected: b.$3,
-                  showCheckmark: false,
-                  visualDensity: VisualDensity.compact,
-                  selectedColor:
-                      context.palette.accentInk.withValues(alpha: 0.22),
-                  side: BorderSide(
-                      color: b.$3
-                          ? context.palette.accentInk
-                          : context.palette.borderStrong),
-                  onSelected: (sel) => onChanged(b.$4(sel)),
-                ),
-            ],
-          ),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '弹幕密度',
-          description: '弹幕太多时只显示其中一部分（按条均匀抽取，拖动进度后显示的仍是同一批）',
-          trailing: _OptionDropdown(
-            key: const ValueKey('setting-danmaku-density'),
-            options: [
-              for (final o in DanmakuSettings.densityOptions)
-                PlayerOption('${o.$1}', o.$2)
-            ],
-            value: '${d.density}',
-            onChanged: (v) => onChanged(d.copyWith(density: int.parse(v))),
-          ),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '合并重复弹幕',
-          description:
-              '${DanmakuSettings.mergeWindow.round()} 秒内内容相同的弹幕只显示一条，并标出条数（如「哈哈 x 3」）；'
-              '全角半角、叠字、末尾标点不同也算相同',
-          trailing: Switch(
-            key: const ValueKey('setting-danmaku-merge'),
-            value: d.mergeDuplicates,
-            onChanged: (v) => onChanged(d.copyWith(mergeDuplicates: v)),
-          ),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '显示区域',
-          description: '弹幕占用画面的范围（自上而下），当前：${_areaLabel(d.area)}',
-          trailing: _areaDropdown('setting-danmaku-area', d.area,
-              (v) => onChanged(d.copyWith(area: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '画中画显示区域',
-          description: '画中画小窗里弹幕的范围（小窗字号自动缩小）',
-          trailing: _areaDropdown('setting-danmaku-pip-area', d.pipArea,
-              (v) => onChanged(d.copyWith(pipArea: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '不透明度',
-          description: '数值越小越透明',
-          trailing: _slider(
-              'setting-danmaku-opacity',
-              d.opacity,
-              DanmakuSettings.minOpacity,
-              DanmakuSettings.maxOpacity,
-              18,
-              (v) => '${(v * 100).round()}%',
-              (v) => onChanged(d.copyWith(opacity: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '字体粗细',
-          description: '弹幕文字的字重',
-          trailing: _OptionDropdown(
-            key: const ValueKey('setting-danmaku-font-weight'),
-            options: [
-              for (final o in DanmakuSettings.fontWeightOptions)
-                PlayerOption('${o.$1}', o.$2)
-            ],
-            value: '${d.fontWeight}',
-            onChanged: (v) => onChanged(d.copyWith(fontWeight: int.parse(v))),
-          ),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '描边粗细',
-          description: '文字外圈黑色描边，0 为不描边',
-          trailing: _slider(
-              'setting-danmaku-stroke',
-              d.strokeWidth,
-              DanmakuSettings.minStroke,
-              DanmakuSettings.maxStroke,
-              8,
-              (v) => v == 0 ? '无' : v.toStringAsFixed(1),
-              (v) => onChanged(d.copyWith(strokeWidth: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '字体大小',
-          description: '窗口播放时的字号',
-          trailing: _slider(
-              'setting-danmaku-font-size',
-              d.fontSize,
-              DanmakuSettings.minFontSize,
-              DanmakuSettings.maxFontSize,
-              36,
-              px,
-              (v) => onChanged(d.copyWith(fontSize: v.roundToDouble()))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '全屏字体大小',
-          description: '全屏播放时的字号',
-          trailing: _slider(
-              'setting-danmaku-fullscreen-font-size',
-              d.fullscreenFontSize,
-              DanmakuSettings.minFontSize,
-              DanmakuSettings.maxFontSize,
-              36,
-              px,
-              (v) =>
-                  onChanged(d.copyWith(fullscreenFontSize: v.roundToDouble()))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '滚动弹幕时长',
-          description: '滚动弹幕横穿屏幕的时间，越小越快',
-          trailing: _slider(
-              'setting-danmaku-scroll-duration',
-              d.scrollDuration,
-              DanmakuSettings.minScroll,
-              DanmakuSettings.maxScroll,
-              34,
-              sec,
-              (v) => onChanged(d.copyWith(scrollDuration: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '静态弹幕时长',
-          description: '顶部 / 底部弹幕停留的时间',
-          trailing: _slider(
-              'setting-danmaku-fixed-duration',
-              d.fixedDuration,
-              DanmakuSettings.minFixed,
-              DanmakuSettings.maxFixed,
-              18,
-              sec,
-              (v) => onChanged(d.copyWith(fixedDuration: v))),
-        ),
-        const _RowDivider(),
-        _SettingRow(
-          title: '弹幕行高',
-          description: '每行占用的高度（字号的倍数），越大行间距越宽',
-          trailing: _slider(
-              'setting-danmaku-line-height',
-              d.lineHeight,
-              DanmakuSettings.minLineHeight,
-              DanmakuSettings.maxLineHeight,
-              15,
-              (v) => '${v.toStringAsFixed(1)}×',
-              (v) => onChanged(d.copyWith(lineHeight: v))),
-        ),
-        const _RowDivider(),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            key: const ValueKey('setting-danmaku-reset'),
-            onPressed: d == DanmakuSettings.defaults
-                ? null
-                : () => onChanged(DanmakuSettings.defaults),
-            child: const Text('恢复弹幕默认设置'),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -3286,11 +3922,13 @@ class GeneralSettingsPanel extends StatelessWidget {
       return;
     }
     final available = configRepository.currentVodConfig.searchableSites
-        .map((site) => site.key).toSet();
+        .map((site) => site.key)
+        .toSet();
     final all = keys.isNotEmpty && selected.containsAll(keys);
     await _saveWithStatus(repository.updateSearchPreferences(
       repository.searchPreferences.withAggregateSites(
-        configId, all ? null : selected.intersection(available),
+        configId,
+        all ? null : selected.intersection(available),
       ),
     ));
   }
@@ -3524,7 +4162,8 @@ class GeneralSettingsPanel extends StatelessWidget {
                   ? sites.length
                   : sites.where((site) => keys.contains(site.key)).length;
               final enabled = sites.isNotEmpty &&
-                  preferences.aggregate && !repository.searchReadFailed;
+                  preferences.aggregate &&
+                  !repository.searchReadFailed;
               return _card(
                 context,
                 child: _SettingRow(
@@ -3971,8 +4610,7 @@ class _StorageCacheCardState extends State<_StorageCacheCard> {
       final status = await DataDirectoryManager.requestDirectory(target);
       if (!mounted) return;
       setState(() => _dataStatus = status);
-      _toast('已安排迁移到 $target；重启应用后生效，旧目录会保留',
-          type: AppMessageType.success);
+      _toast('已安排迁移到 $target；重启应用后生效，旧目录会保留', type: AppMessageType.success);
     } on DataDirectoryException catch (error) {
       _toast(error.message, type: AppMessageType.error);
     } catch (error) {
@@ -4364,7 +5002,7 @@ class _DataBackupCardState extends State<_DataBackupCard> {
     final location = await getSaveLocation(
       suggestedName: suggestedName,
       acceptedTypeGroups: const [
-        XTypeGroup(label: '修狗TV 数据备份', extensions: ['json']),
+        XTypeGroup(label: '${AppBrand.name} 数据备份', extensions: ['json']),
       ],
     );
     return location?.path;
@@ -4375,7 +5013,7 @@ class _DataBackupCardState extends State<_DataBackupCard> {
     if (pick != null) return pick();
     final file = await openFile(
       acceptedTypeGroups: const [
-        XTypeGroup(label: '修狗TV 数据备份', extensions: ['json']),
+        XTypeGroup(label: '${AppBrand.name} 数据备份', extensions: ['json']),
       ],
     );
     return file?.path;
@@ -4658,7 +5296,8 @@ class _AppearancePanelState extends State<AppearancePanel> {
     try {
       await widget.wallpaperStore.clear();
       final repo = widget.settingsRepository;
-      await repo.updateAppearancePreferences(repo.appearancePreferences.withWallpaper(null));
+      await repo.updateAppearancePreferences(
+          repo.appearancePreferences.withWallpaper(null));
       _setMessage('已恢复默认背景');
     } on DataRestorePendingRestartException catch (error) {
       _setMessage(error.message, isError: true);
@@ -4683,6 +5322,20 @@ class _AppearancePanelState extends State<AppearancePanel> {
     }
   }
 
+  Future<void> _chooseAccent(AppAccent accent) async {
+    final current = widget.settingsRepository.appearancePreferences;
+    if (current.accent == accent) return;
+    try {
+      await widget.settingsRepository
+          .updateAppearancePreferences(current.withAccent(accent));
+      _setMessage('已切换主题色：${accent.label}');
+    } on DataRestorePendingRestartException catch (error) {
+      _setMessage(error.message, isError: true);
+    } catch (_) {
+      _setMessage('主题色切换失败，请重试', isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _PanelScaffold(
@@ -4702,12 +5355,15 @@ class _AppearancePanelState extends State<AppearancePanel> {
                   onChanged: _chooseTheme,
                 ),
                 const SizedBox(height: 16),
+                _AccentCard(
+                  value: preferences.accent,
+                  onChanged: _chooseAccent,
+                ),
+                const SizedBox(height: 16),
                 _WallpaperCard(
                   preferences: preferences,
                   store: widget.wallpaperStore,
                   busy: _busy,
-                  message: _message,
-                  messageIsError: _messageIsError,
                   onChoose: _choose,
                   onReset: _restoreDefault,
                 ),
@@ -4720,6 +5376,18 @@ class _AppearancePanelState extends State<AppearancePanel> {
                         repo.appearancePreferences.withTmdb(next));
                   },
                 ),
+                if (_message != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _message!,
+                    key: const ValueKey('appearance-message'),
+                    style: TextStyle(
+                        fontSize: AppType.body,
+                        color: _messageIsError
+                            ? context.palette.warning
+                            : context.palette.success),
+                  ),
+                ],
               ],
             );
           },
@@ -4782,6 +5450,9 @@ class _ThemeCard extends StatelessWidget {
                         canRequestFocus: false,
                         onTap: () => onChanged(mode),
                         child: Container(
+                          // FocusRing 内部是 StackFit.loose，不写宽度会收缩到
+                          // 文字宽度（「深色」只剩一个窄条）；这里撑满 Expanded 分到的宽度。
+                          width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
                             color: value == mode
@@ -4829,12 +5500,146 @@ class _ThemeCard extends StatelessWidget {
   }
 }
 
+/// 主题色选择：六个色相，选中态加描边与勾选。
+///
+/// 色块画的是「填充 + 前景」两级里**前景**那一层（深色下是提亮档），
+/// 深色主题里也不会糊成一团黑。切换只改品牌色，中性色不动。
+class _AccentCard extends StatelessWidget {
+  final AppAccent value;
+  final ValueChanged<AppAccent> onChanged;
+
+  const _AccentCard({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return _card(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('主题色',
+              style: TextStyle(
+                  fontSize: AppType.label,
+                  fontWeight: FontWeight.bold,
+                  color: context.palette.textMain)),
+          const SizedBox(height: 4),
+          Text('只替换品牌色相，深色 / 浅色主题的对比度与层次保持原样，切换后立即生效。',
+              style: TextStyle(
+                  fontSize: AppType.body, color: context.palette.textSub)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 18,
+            runSpacing: 14,
+            children: [
+              for (final accent in AppAccent.values)
+                FocusRing(
+                  onTap: () => onChanged(accent),
+                  semanticLabel: '主题色：${accent.label}',
+                  borderRadius:
+                      const BorderRadius.all(Radius.circular(AppRadii.md)),
+                  child: InkWell(
+                    key: ValueKey('accent-${accent.name}'),
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    hoverColor: context.palette.hover,
+                    // 焦点由外层 FocusRing 承担，避免双重焦点节点
+                    canRequestFocus: false,
+                    onTap: () => onChanged(accent),
+                    child: Container(
+                      width: 84,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(AppRadii.md),
+                        border: Border.all(
+                          color: value == accent
+                              ? context.palette.accentInk
+                              : Colors.transparent,
+                          width: value == accent ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          _AccentSwatch(
+                            colors: accentColorsFor(accent, brightness),
+                            brightness: brightness,
+                            selected: value == accent,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(accent.label,
+                              style: TextStyle(
+                                fontSize: AppType.caption,
+                                fontWeight: value == accent
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: value == accent
+                                    ? context.palette.textMain
+                                    : context.palette.textSub,
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 主题色色块：外圈是填充色，内圈是前景色（选中时叠勾）。
+class _AccentSwatch extends StatelessWidget {
+  final AccentColors colors;
+  final Brightness brightness;
+  final bool selected;
+
+  const _AccentSwatch({
+    required this.colors,
+    required this.brightness,
+    required this.selected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.fill,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected
+              ? context.palette.textMain
+              : context.palette.borderStrong,
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Container(
+        width: 18,
+        height: 18,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: colors.ink, shape: BoxShape.circle),
+        child: selected
+            ? Icon(
+                Icons.check_rounded,
+                size: 12,
+                // 深色主题的前景色是浅色，勾要用深墨；浅色主题反之
+                color: brightness == Brightness.dark
+                    ? const Color(0xFF101014)
+                    : Colors.white,
+              )
+            : null,
+      ),
+    );
+  }
+}
+
 class _WallpaperCard extends StatelessWidget {
   final AppearancePreferences preferences;
   final WallpaperStore store;
   final bool busy;
-  final String? message;
-  final bool messageIsError;
   final VoidCallback onChoose;
   final VoidCallback onReset;
 
@@ -4842,8 +5647,6 @@ class _WallpaperCard extends StatelessWidget {
     required this.preferences,
     required this.store,
     required this.busy,
-    required this.message,
-    required this.messageIsError,
     required this.onChoose,
     required this.onReset,
   });
@@ -4898,17 +5701,6 @@ class _WallpaperCard extends StatelessWidget {
               ],
             ],
           ),
-          if (message != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              message!,
-              style: TextStyle(
-                  fontSize: AppType.body,
-                  color: messageIsError
-                      ? context.palette.warning
-                      : context.palette.success),
-            ),
-          ],
           const SizedBox(height: 12),
           Text(
             '「恢复默认」只删除应用内的副本，不会删除你的原图；'
@@ -5039,8 +5831,10 @@ class AboutPanel extends StatefulWidget {
     this.errorLog,
   });
 
-  static const String sourceCodeUrl = 'https://github.com/qfw66/xiugou-tv';
-  static const String issuesUrl = 'https://github.com/qfw66/xiugou-tv/issues';
+  static const String sourceCodeUrl =
+      'https://github.com/Diaojiangjun/yingshi-tv';
+  static const String issuesUrl =
+      'https://github.com/Diaojiangjun/yingshi-tv/issues';
 
   @override
   State<AboutPanel> createState() => _AboutPanelState();
@@ -5117,7 +5911,7 @@ class _AboutPanelState extends State<AboutPanel> {
             style: TextStyle(
                 color: context.palette.textTitle, fontSize: AppType.heading)),
         content: Text(
-          '将清空修狗TV 的全部数据并恢复到刚安装的状态：所有设置、播放历史、收藏、配置源、直播源、'
+          '将清空${AppBrand.name}的全部数据并恢复到刚安装的状态：所有设置、播放历史、收藏、配置源、直播源、'
           '片头片尾记录、壁纸、本地备份与缓存，以及各站源里的网盘登录状态（需重新扫码）都会被删除，且无法恢复。\n应用随后自动重启。是否继续？',
           style: TextStyle(
               color: context.palette.textBody,
@@ -5189,14 +5983,14 @@ class _AboutPanelState extends State<AboutPanel> {
                     width: 88, height: 88, filterQuality: FilterQuality.high),
               ),
               const SizedBox(height: 14),
-              Text('修狗TV',
+              Text(AppBrand.name,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: AppType.h2,
                       fontWeight: FontWeight.bold,
                       color: palette.textTitle)),
               const SizedBox(height: 6),
-              Text('面向 Windows 10/11 的影视桌面客户端',
+              Text(AppBrand.tagline,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: AppType.label, color: palette.textSub)),
@@ -5242,6 +6036,15 @@ class _AboutPanelState extends State<AboutPanel> {
                 tooltip: AboutPanel.issuesUrl,
               ),
               AboutLine(
+                key: const ValueKey('about-agreement'),
+                label: '用户协议与免责声明',
+                onTap: () => unawaited(showAgreementTermsDialog(context)),
+                trailing: Text('查看',
+                    style: TextStyle(
+                        fontSize: AppType.body, color: palette.textSub)),
+                tooltip: '首次启动需同意',
+              ),
+              AboutLine(
                 key: const ValueKey('about-error-log'),
                 label: '错误日志',
                 onTap: _openErrorLog,
@@ -5276,7 +6079,8 @@ class _AboutPanelState extends State<AboutPanel> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: () => unawaited(_open('https://www.themoviedb.org/')),
+                  onPressed: () =>
+                      unawaited(_open('https://www.themoviedb.org/')),
                   icon: Container(
                     padding: const EdgeInsets.all(5),
                     color: Colors.black87,
@@ -5288,7 +6092,8 @@ class _AboutPanelState extends State<AboutPanel> {
               ),
               Text(
                 'This product uses the TMDB API but is not endorsed or certified by TMDB.',
-                style: TextStyle(fontSize: AppType.body, color: palette.textSub),
+                style:
+                    TextStyle(fontSize: AppType.body, color: palette.textSub),
               ),
             ],
           ),

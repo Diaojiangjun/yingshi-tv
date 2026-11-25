@@ -2,7 +2,7 @@
   "name": "xiugou-segments-worker",
   "private": true,
   "type": "module",
-  "description": "修狗TV 共享跳过片段服务（Cloudflare Worker + D1），见 README.md",
+  "description": "影视 共享跳过片段服务（Cloudflare Worker + D1），见 README.md",
   "scripts": {
     "test": "node --test test/worker.test.mjs",
     "dev": "wrangler dev",

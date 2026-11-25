@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../../core/config/config_repository.dart';
 import '../../../core/config/models/desktop_window_config.dart';
 import 'window_geometry_guard.dart';
+import '../../../core/brand.dart';
 
 /// Windows 桌面原生窗口生命周期与几何形态管理控制器
 class DesktopWindowManager with WindowListener {
@@ -90,7 +91,7 @@ class DesktopWindowManager with WindowListener {
       backgroundColor: backgroundColor,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
-      title: '修狗TV',
+      title: AppBrand.name,
     );
 
     // 异步等待原生窗口就绪后展示，不阻塞 main() 中 runApp 挂载

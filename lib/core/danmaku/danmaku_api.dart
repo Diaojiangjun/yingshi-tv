@@ -4,7 +4,9 @@ import 'dart:io';
 
 import '../config/app_env.dart';
 import '../net/http_client_factory.dart';
+import '../net/system_proxy.dart';
 import 'danmaku_models.dart';
+import 'danmaku_service_config.dart';
 import 'danmaku_source.dart';
 
 /// §43 弹幕服务地址与访问令牌：由维护者在 `config/app.env` 里配置，代码与仓库里不保存真实值。
@@ -17,10 +19,21 @@ import 'danmaku_source.dart';
 ///
 /// 服务是自部署的 LogVar Danmu API（https://github.com/qfw66/danmu_api），令牌放在路径第一段。
 /// 注意：值会编进发布的 exe，只能防「拿仓库代码就能用」，挡不住拆包或抓包；防滥用靠服务端限流 / 换令牌。
-String get kDanmakuApiBase => composeDanmakuApiBase(
+/// 构建期内置的主接口地址（不含用户自填值）：设置页据此区分「有内置服务」与「完全没配」。
+String get kBuiltinDanmakuApiBase => composeDanmakuApiBase(
     AppEnv.get('XIUGOU_DANMAKU_URL'), AppEnv.get('XIUGOU_DANMAKU_TOKEN'));
 
+/// 主接口的「当前生效」地址：用户在设置里填的优先，留空回落到构建期内置值。
+String get kDanmakuApiBase {
+  final userBase = DanmakuServiceRuntime.primaryBase;
+  if (userBase.isNotEmpty) return userBase;
+  return kBuiltinDanmakuApiBase;
+}
+
 /// 各接口独立取配置：备用地址已包含其访问路径，不复用默认接口的令牌。
+///
+/// 备用接口目前只来自构建期内置——设置页只暴露主接口的地址与令牌，
+/// 用户自填的主接口生效时会覆盖掉「主接口」，不会连带影响备用接口。
 String danmakuApiBaseFor(DanmakuSource source) => switch (source) {
       DanmakuSource.primary => kDanmakuApiBase,
       DanmakuSource.secondary =>
@@ -42,17 +55,6 @@ DanmakuSource resolveDanmakuSource(DanmakuSource preferred) {
 
 /// 是否配置了弹幕服务（为 false 时弹幕功能整体不出现）。
 bool get danmakuServiceConfigured => configuredDanmakuSources.isNotEmpty;
-
-/// `https://host/` + `tk` → `https://host/tk`；地址为空返回空串；令牌可空（服务未设令牌时）。
-String composeDanmakuApiBase(String url, String token) {
-  var base = url.trim();
-  while (base.endsWith('/')) {
-    base = base.substring(0, base.length - 1);
-  }
-  if (base.isEmpty) return '';
-  final t = token.trim().replaceAll(RegExp(r'^/+|/+$'), '');
-  return t.isEmpty ? base : '$base/$t';
-}
 
 /// 取不到弹幕的原因（只用于状态提示，不打断播放）。
 class DanmakuException implements Exception {
@@ -98,16 +100,24 @@ class DanmakuCancelToken {
 class DanmakuApi {
   DanmakuApi({
     String? base,
-    DanmakuSource source = DanmakuSource.primary,
+    this.source = DanmakuSource.primary,
     HttpClient? client,
     String? Function()? proxy,
-  })  : _base = _trimSlash(base ?? danmakuApiBaseFor(source)),
+  })  : _explicitBase = base == null ? null : _trimSlash(base),
         _client = client ?? _defaultClient(proxy ?? systemProxy);
 
   static String _trimSlash(String s) => s.endsWith('/') ? s.substring(0, s.length - 1) : s;
 
-  final String _base;
+  /// 构造时显式给定的地址（测试 / 用户填的地址直接测）；为 null 时按 [source] 现取。
+  final String? _explicitBase;
+
+  /// 使用哪个接口：只决定「地址从哪来」，不影响请求内容。
+  final DanmakuSource source;
   final HttpClient _client;
+
+  /// 每次请求现取，不在构造时定死：用户在设置里改了地址后，
+  /// 已存在的控制器 / 搜索框不必重建就能连上新服务。
+  String get _base => _explicitBase ?? _trimSlash(danmakuApiBaseFor(source));
 
   static const Duration searchTimeout = Duration(seconds: 30);
 
@@ -178,51 +188,9 @@ class DanmakuApi {
 
   void close() => _client.close(force: true);
 
-  /// Windows 系统代理（「设置 → 网络 → 代理」/ Clash 等写入的注册表项）。
-  ///
-  /// 只取 `ProxyEnable=1` 时的 `ProxyServer`；`http=a:1;https=b:2` 形式取 https 项。
-  /// 读失败一律当作无代理（直连）。结果缓存 60 s，避免每个请求都起进程。
-  static String? systemProxy() {
-    final now = DateTime.now();
-    if (_proxyCachedAt != null && now.difference(_proxyCachedAt!) < const Duration(seconds: 60)) {
-      return _proxyCache;
-    }
-    _proxyCachedAt = now;
-    _proxyCache = Platform.isWindows ? _readWindowsProxy() : null;
-    return _proxyCache;
-  }
-
-  static String? _proxyCache;
-  static DateTime? _proxyCachedAt;
-
-  static String? _readWindowsProxy() {
-    try {
-      const key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
-      final enable = Process.runSync('reg', ['query', key, '/v', 'ProxyEnable']);
-      if (!RegExp(r'ProxyEnable\s+REG_DWORD\s+0x0*1\b').hasMatch('${enable.stdout}')) return null;
-      final server = Process.runSync('reg', ['query', key, '/v', 'ProxyServer']);
-      final m = RegExp(r'ProxyServer\s+REG_SZ\s+(\S+)').firstMatch('${server.stdout}');
-      return m == null ? null : parseProxyServer(m.group(1)!);
-    } catch (_) {
-      return null;
-    }
-  }
+  /// Windows 系统代理；实现已抽到 [SystemProxy]（豆瓣 / TMDB / 清单探测 / 在线字幕共用）。
+  static String? systemProxy() => SystemProxy.current;
 
   /// `127.0.0.1:7890` / `http=127.0.0.1:7890;https=127.0.0.1:7891` / `http://h:p` → `host:port`。
-  static String? parseProxyServer(String raw) {
-    var value = raw.trim();
-    if (value.isEmpty) return null;
-    if (value.contains('=')) {
-      final entries = <String, String>{};
-      for (final part in value.split(';')) {
-        final i = part.indexOf('=');
-        if (i > 0) entries[part.substring(0, i).trim().toLowerCase()] = part.substring(i + 1).trim();
-      }
-      value = entries['https'] ?? entries['http'] ?? '';
-      if (value.isEmpty) return null;
-    }
-    value = value.replaceFirst(RegExp(r'^[a-z]+://', caseSensitive: false), '');
-    if (value.endsWith('/')) value = value.substring(0, value.length - 1);
-    return RegExp(r'^[^\s:/]+:\d+$').hasMatch(value) ? value : null;
-  }
+  static String? parseProxyServer(String raw) => SystemProxy.parse(raw);
 }

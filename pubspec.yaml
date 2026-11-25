@@ -1,5 +1,5 @@
 name: xiugou_tv
-description: "修狗TV - Windows 桌面端影视聚合播放器（Flutter + JVM 解析层）"
+description: "影视 - Windows 桌面端本地播放器与信息聚合客户端（Flutter + JVM 解析层，不含任何内容源）"
 publish_to: "none"
 version: 1.2.0
 
@@ -38,6 +38,10 @@ dependencies:
   file_selector: ^1.1.0
   desktop_drop: ^0.8.4
   xml: '>=6.3.0 <8.0.0'
+
+  # 运行时组件（JRE 等）按需下载后解压：纯 Dart 的 zip 解析，
+  # 不依赖系统 tar / 7-Zip（精简版 Windows 可能没有）。
+  archive: ^4.7.1
 
 dev_dependencies:
   flutter_test:

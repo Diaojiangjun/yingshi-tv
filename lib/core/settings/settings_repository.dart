@@ -1,6 +1,8 @@
 import 'dart:async';
 import '../config/config_repository.dart';
+import '../danmaku/danmaku_service_config.dart';
 import '../player/models/player_settings.dart';
+import '../subtitle/subtitle_service_config.dart';
 import 'models/config_source_entry.dart';
 import 'models/config_source_catalog.dart';
 import 'models/source_categories.dart';
@@ -232,6 +234,10 @@ class SettingsRepository {
     final storedPlayer = await _storage.readPlayerSettings();
     _playerSettings = storedPlayer ??
         PlayerSettings.defaults.copyWith(hwdec: PlayerSettings.normalizeHwdec(legacyHwdec));
+    // 弹幕接口地址可运行期配置：先把已保存的值灌进运行时，后续 base 解析才有得用。
+    DanmakuServiceRuntime.apply(_playerSettings.danmakuService);
+    // 在线字幕的 token / 自定义接口同理：检索入口散落在播放器与对话框里。
+    SubtitleServiceRuntime.apply(_playerSettings.subtitleService);
     _playerSettingsController.add(_playerSettings);
 
     List<ConfigSourceEntry>? storedSources;
@@ -345,6 +351,9 @@ class SettingsRepository {
     final normalized = settings.normalized();
     if (normalized == _playerSettings) return;
     _playerSettings = normalized;
+    // 单一写入点：地址 / 令牌一变，运行时的 base 解析立刻跟着变（详情页无需重建）。
+    DanmakuServiceRuntime.apply(normalized.danmakuService);
+    SubtitleServiceRuntime.apply(normalized.subtitleService);
     _playerSettingsController.add(normalized);
     await _persistPlayer();
   }
@@ -388,6 +397,40 @@ class SettingsRepository {
 
   Future<void> renameConfigSource(String location, String name) =>
       _changeSource(location, (entry) => entry.copyWith(name: name.trim()));
+
+  /// 添加配置源时就带上名称与分类：与 [recordConfigLoad] 走同一条保存链，
+  /// 避免「先记录条目、再补名字」的两步竞态把用户填的信息冲掉。
+  ///
+  /// 同名地址已存在时保留原名称（用户没改就沿用），分类以本次选择为准。
+  Future<void> upsertConfigSource({
+    required ConfigSourceKind kind,
+    required String location,
+    String name = '',
+    String category = '',
+    int siteCount = 0,
+    int liveCount = 0,
+  }) {
+    final key = location.trim();
+    if (key.isEmpty) return Future.value();
+    final usedAt = _now();
+    return _commitSources((current) {
+      final existing =
+          current.entries.where((e) => e.location == key).firstOrNull;
+      final base = existing ?? ConfigSourceEntry(kind: kind, location: key);
+      final label = name.trim();
+      final updated = base.copyWith(
+        name: label.isEmpty ? base.name : label,
+        category: category.trim(),
+        siteCount: siteCount,
+        liveCount: liveCount,
+        lastUsedAt: usedAt,
+      );
+      return ConfigSourceCatalog([
+        updated,
+        ...current.entries.where((e) => e.location != key),
+      ].take(maxConfigSources), current.categories.include([category.trim()]));
+    });
+  }
 
   Future<void> updateConfigSourceNote(String location, String note) =>
       _changeSource(location, (entry) => entry.copyWith(note: note.trim()));

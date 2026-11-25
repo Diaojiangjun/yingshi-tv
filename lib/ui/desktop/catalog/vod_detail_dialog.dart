@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/api/douban_repository.dart';
 import '../../../core/api/models/vod_models.dart';
+import '../../../core/api/source_scorer.dart';
 import '../../../core/api/tmdb_repository.dart';
 import '../../../core/config/models/history_record.dart';
 import '../../../core/api/netdisk_share_links.dart';
@@ -19,6 +20,7 @@ import '../dialogs/history_sections.dart';
 import '../widgets/horizontal_scroll_area.dart';
 import 'poster_image.dart';
 import 'douban_poster_image.dart';
+import '../../../core/api/source_probe_controller.dart';
 
 part 'cinematic_vod_detail.dart';
 part 'cinematic_detail_rail.dart';
@@ -127,6 +129,10 @@ class VodDetailDialog extends StatefulWidget {
   final ValueChanged<String>? onSearchRecommendation;
   final EpisodeSelection? historySelection;
 
+  /// 测速控制器注入点：生产不传（每个弹窗自建并自管生命周期）；
+  /// 测试传 fake，避免发真实网络请求。
+  final SourceProbeController? sourceProbe;
+
   const VodDetailDialog({
     super.key,
     required this.detail,
@@ -142,6 +148,7 @@ class VodDetailDialog extends StatefulWidget {
     this.loadHotComments,
     this.onSearchRecommendation,
     this.historySelection,
+    this.sourceProbe,
   });
 
   @override
@@ -153,6 +160,16 @@ class _VodDetailDialogState extends State<VodDetailDialog> {
   late bool _favorited;
   bool _favoriteBusy = false;
   String? _error;
+
+  /// 线路测速（只影响「默认选中 + 提示」，不改线路数据、不改起播）。
+  late final SourceProbeController _probe =
+      widget.sourceProbe ?? SourceProbeController();
+
+  /// 只 dispose 自己创建的控制器（外部注入的由调用方管）。
+  late final bool _ownsProbe = widget.sourceProbe == null;
+
+  /// 用户手动点过线路后，测速结果不再顶掉他的选择。
+  bool _userPicked = false;
 
   /// 播放源横栏的横向滚动控制器（滚轮 / 拖拽共用）。
   final ScrollController _sourceScrollController = ScrollController();
@@ -229,12 +246,30 @@ class _VodDetailDialogState extends State<VodDetailDialog> {
     super.initState();
     _favorited = widget.isFavorite;
     _selectedSourceIndex = _initialSourceIndex();
+    unawaited(_startSourceProbe());
   }
 
   @override
   void dispose() {
+    if (_ownsProbe) _probe.dispose();
     _sourceScrollController.dispose();
     super.dispose();
+  }
+
+  /// 测速完成后，仅在「用户还没自己点过、也没在播 / 没从历史进来」时切到最优线路。
+  ///
+  /// 这条守卫很重要：从播放返回详情时用户正在看某条线路，被自动切走会直接打断播放。
+  Future<void> _startSourceProbe() async {
+    if (widget.detail.sources.length < 2) return;
+    await _probe.start(widget.detail.sources);
+    if (!mounted || _userPicked) return;
+    if (widget.currentEpisode != null || widget.historySelection != null) return;
+    final best = _probe.recommended;
+    final sources = widget.detail.sources;
+    if (best == null || best == _selectedSourceIndex || best >= sources.length) {
+      return;
+    }
+    setState(() => _selectedSourceIndex = best);
   }
 
   /// §15：打开弹窗时落到当前集所在线路；找不到就保持默认（第一条）。
@@ -296,6 +331,7 @@ class _VodDetailDialogState extends State<VodDetailDialog> {
         loadHotComments: widget.loadHotComments,
         current: widget.currentEpisode,
         history: widget.historySelection,
+        sourceProbe: widget.sourceProbe,
         onPlay: widget.onPlayEpisode,
         onSearchRecommendation: widget.onSearchRecommendation,
         favorite: widget.onToggleFavorite == null
@@ -609,26 +645,48 @@ class _VodDetailDialogState extends State<VodDetailDialog> {
 
                   // 播放源切换横栏（Infuse 药丸胶囊）
                   if (sources.length > 1) ...[
-                    SizedBox(
-                      height: 34,
-                      child: HorizontalScrollArea(
-                        controller: _sourceScrollController,
-                        child: ListView.separated(
-                          controller: _sourceScrollController,
-                          // 胶囊自带 onTap，与拖拽同处一个手势竞技场：
-                          // 默认 DragStartBehavior.start 会丢掉接受前的位移。
-                          dragStartBehavior: DragStartBehavior.down,
-                          scrollDirection: Axis.horizontal,
-                          itemCount: sources.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            return _SourcePill(
-                              label: sources[index].name,
-                              isSelected: index == _selectedSourceIndex,
-                              onTap: () =>
-                                  setState(() => _selectedSourceIndex = index),
-                            );
-                          },
+                    ListenableBuilder(
+                      listenable: _probe,
+                      builder: (context, _) => SizedBox(
+                        height: 34,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: HorizontalScrollArea(
+                                controller: _sourceScrollController,
+                                child: ListView.separated(
+                                  controller: _sourceScrollController,
+                                  // 胶囊自带 onTap，与拖拽同处一个手势竞技场：
+                                  // 默认 DragStartBehavior.start 会丢掉接受前的位移。
+                                  dragStartBehavior: DragStartBehavior.down,
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: sources.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(width: 8),
+                                  itemBuilder: (context, index) {
+                                    return _SourcePill(
+                                      label: sources[index].name,
+                                      isSelected: index == _selectedSourceIndex,
+                                      isRecommended:
+                                          _probe.recommended == index,
+                                      status: _probe.scoreOf(index),
+                                      tooltip: _probe.tooltipFor(index),
+                                      onTap: () => setState(() {
+                                        _selectedSourceIndex = index;
+                                        _userPicked = true;
+                                      }),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            _SourceProbeStatus(
+                              loading: _probe.loading,
+                              recommendedLabel: _probe.recommended == null
+                                  ? null
+                                  : sources[_probe.recommended!].name,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -713,15 +771,24 @@ class _CreditLine extends StatelessWidget {
 }
 
 /// 播放源切换胶囊（Infuse 药丸微光）
+///
+/// [isRecommended] 由测速结果给出（前置小闪电），[status] 为 null 时与接入测速前
+/// 完全一致；失败线路只做弱化 + 感叹号，不隐藏（用户仍可手动点它）。
 class _SourcePill extends StatefulWidget {
   final String label;
   final bool isSelected;
+  final bool isRecommended;
+  final SourceScore? status;
+  final String? tooltip;
   final VoidCallback onTap;
 
   const _SourcePill({
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.isRecommended = false,
+    this.status,
+    this.tooltip,
   });
 
   @override
@@ -736,8 +803,9 @@ class _SourcePillState extends State<_SourcePill> {
     final palette = context.palette;
     final isSelected = widget.isSelected;
     final onAccent = Theme.of(context).colorScheme.onPrimary;
+    final failed = widget.status != null && !widget.status!.usable;
 
-    return FocusRing(
+    final content = FocusRing(
       onTap: widget.onTap,
       semanticLabel: widget.label,
       borderRadius: const BorderRadius.all(Radius.circular(AppRadii.pill)),
@@ -770,23 +838,93 @@ class _SourcePillState extends State<_SourcePill> {
             alignment: Alignment.center,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 160),
-              child: Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: AppType.body,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected
-                      ? onAccent
-                      : _isHovered
-                          ? palette.textTitle
-                          : palette.textSub,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.isRecommended) ...[
+                    Icon(
+                      Icons.bolt_rounded,
+                      size: 14,
+                      color: isSelected ? onAccent : palette.accentInk,
+                    ),
+                    const SizedBox(width: 2),
+                  ],
+                  Flexible(
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppType.body,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected
+                            ? onAccent
+                            : failed
+                                ? palette.textDim
+                                : _isHovered
+                                    ? palette.textTitle
+                                    : palette.textSub,
+                      ),
+                    ),
+                  ),
+                  if (failed) ...[
+                    const SizedBox(width: 4),
+                    // 用中性问号而不是红色感叹号：测速失败只代表「这次没测到」
+                    // （403 防盗链、需要 Referer、跨境超时都很常见），
+                    // 不代表这条线路不能播，别用错误色吓退用户。
+                    Icon(
+                      Icons.help_outline_rounded,
+                      size: 13,
+                      color: isSelected ? onAccent : palette.textDim,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+
+    final tooltip = widget.tooltip;
+    if (tooltip == null) return content;
+    return Tooltip(message: tooltip, waitDuration: const Duration(milliseconds: 400), child: content);
+  }
+}
+
+/// 线路栏右侧的测速状态（「测速中」/「已优选 xx」），不占布局高度、无结论时不显示。
+class _SourceProbeStatus extends StatelessWidget {
+  final bool loading;
+  final String? recommendedLabel;
+
+  const _SourceProbeStatus({required this.loading, this.recommendedLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!loading && recommendedLabel == null) return const SizedBox.shrink();
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (loading)
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                color: palette.textDim,
+              ),
+            )
+          else
+            Icon(Icons.bolt_rounded, size: 14, color: palette.accentInk),
+          const SizedBox(width: 5),
+          Text(
+            loading ? '测速中' : '已优选 $recommendedLabel',
+            style: TextStyle(fontSize: AppType.label, color: palette.textDim),
+          ),
+        ],
       ),
     );
   }

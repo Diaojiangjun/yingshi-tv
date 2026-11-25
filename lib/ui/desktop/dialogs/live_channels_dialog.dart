@@ -332,8 +332,31 @@ class _LiveChannelsDialogState extends State<LiveChannelsDialog> {
     return '未找到匹配的直播频道';
   }
 
+  /// 副标题：频道数 + 当前直播源 / 主配置线路，加载不出来时能一眼看出是哪条线路。
+  String _headerSubtitle(int groupCount) {
+    final base = '${_channels.length} 个频道 · $groupCount 个分组';
+    final repository = widget.repository;
+    if (repository == null) return base;
+    if (repository.sourceHistory.active != null) {
+      final name = repository.sourceHistory.activeEntry?.displayName;
+      return name == null || name.isEmpty ? base : '$base · 直播源：$name';
+    }
+    final index = repository.mainLiveIndex;
+    if (index != null && index < widget.lives.length) {
+      final name = widget.lives[index].name.trim();
+      return '$base · 线路：${name.isEmpty ? '第 ${index + 1} 条' : name}';
+    }
+    return widget.lives.length > 1 ? '$base · 全部线路合并' : base;
+  }
+
   String _emptyHint() {
-    if (_channels.isEmpty) return '可导入 M3U / TXT 清单，或直接播放直播流';
+    if (_channels.isEmpty) {
+      if (widget.lives.length > 1) {
+        return '视频源里带了 ${widget.lives.length} 条直播线路：'
+            '可在「设置 → 直播源」换一条，也可导入 M3U / TXT 清单';
+      }
+      return '可导入 M3U / TXT 清单，或直接播放直播流';
+    }
     if (_group == _favoriteGroup) {
       return _layout == LiveChannelsLayout.columns
           ? '在频道行右侧点星标即可收藏'
@@ -412,7 +435,7 @@ class _LiveChannelsDialogState extends State<LiveChannelsDialog> {
                             fontSize: AppType.h1,
                             fontWeight: FontWeight.bold,
                             color: palette.textTitle)),
-                    Text('${_channels.length} 个频道 · ${groups.length} 个分组',
+                    Text(_headerSubtitle(groups.length),
                         style: TextStyle(
                             fontSize: AppType.body, color: palette.textSub)),
                   ])),

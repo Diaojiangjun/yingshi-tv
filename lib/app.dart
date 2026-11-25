@@ -13,6 +13,7 @@ import 'ui/desktop/dialogs/config_auth_dialog.dart';
 import 'ui/desktop/widgets/app_motion.dart';
 import 'core/api/cms_json_api.dart';
 import 'core/api/douban_repository.dart';
+import 'core/api/line_probe_hub.dart';
 import 'core/api/models/vod_models.dart';
 import 'core/api/parse_engine.dart';
 import 'core/api/play_failure_text.dart';
@@ -49,6 +50,8 @@ import 'core/danmaku/danmaku_settings.dart';
 import 'core/danmaku/live_danmaku_client.dart';
 import 'core/segments/segments_api.dart';
 import 'core/segments/segments_controller.dart';
+import 'core/subtitle/subtitle_models.dart';
+import 'core/subtitle/subtitle_query.dart';
 import 'core/player/models/player_settings.dart';
 import 'core/player/models/player_state.dart';
 import 'core/player/hls_playlist_probe.dart';
@@ -113,6 +116,7 @@ import 'ui/desktop/player/live_danmaku_binding.dart';
 import 'ui/desktop/player/playback_mode_badge.dart';
 import 'ui/desktop/settings/about_update_section.dart';
 import 'ui/desktop/settings/settings_page.dart';
+import 'ui/desktop/settings/source_category_controls.dart';
 import 'ui/desktop/shell/desktop_sidebar.dart';
 import 'ui/desktop/widgets/app_message.dart';
 import 'ui/desktop/widgets/desktop_window_frame.dart';
@@ -121,6 +125,7 @@ import 'ui/desktop/widgets/filter_pill.dart';
 import 'ui/desktop/widgets/home_search_bar_host.dart';
 import 'ui/desktop/widgets/horizontal_scroll_area.dart';
 import 'ui/desktop/window/desktop_window_manager.dart';
+import 'ui/theme/app_accent.dart';
 import 'ui/theme/app_palette.dart';
 import 'ui/theme/app_tokens.dart';
 import 'ui/theme/app_theme.dart';
@@ -128,6 +133,13 @@ import 'core/player/cross_site_failover_planner.dart';
 import 'core/player/cross_site_search_service.dart';
 import 'core/player/playback_source_loader.dart';
 import 'core/player/external_player_launcher.dart';
+import 'core/party/party_server.dart';
+import 'core/party/party_state.dart';
+import 'core/party/party_sync.dart';
+import 'core/party/watch_party_service.dart';
+import 'ui/desktop/dialogs/agreement_dialog.dart';
+import 'ui/desktop/dialogs/party_dialog.dart';
+import 'core/brand.dart';
 
 part 'playback_source_actions.dart';
 part 'playback_external_actions.dart';
@@ -172,9 +184,52 @@ final themeModeProvider = Provider<AppThemeMode>((ref) {
   return preferences.themeMode;
 });
 
+/// 当前主题色：默认冷灰（与历史观感一致）。
+final appAccentProvider = Provider<AppAccent>((ref) {
+  final preferences = ref.watch(appearancePreferencesProvider).valueOrNull ??
+      ref.read(settingsRepositoryProvider).appearancePreferences;
+  return preferences.accent;
+});
+
+/// 两套 ThemeData：只在主题色变化时重建。
+///
+/// 不能直接在 build 里现算——每次都 new 一份 ThemeData 会让
+/// `MaterialApp` 认为主题变了，`AnimatedTheme` 反复播放过渡动画（表现为卡死）。
+final appThemesProvider = Provider<({ThemeData light, ThemeData dark})>((ref) {
+  final accent = ref.watch(appAccentProvider);
+  return (
+    light: buildAppTheme(
+      brightness: Brightness.light,
+      palette: AppPalette.light
+          .withAccent(accentColorsFor(accent, Brightness.light)),
+    ),
+    dark: buildAppTheme(
+      brightness: Brightness.dark,
+      palette: AppPalette.dark
+          .withAccent(accentColorsFor(accent, Brightness.dark)),
+    ),
+  );
+});
+
 /// 壁纸副本管理。像素探针依赖 `dart:ui`，因此在这里（UI 层）装配。
 final wallpaperStoreProvider = Provider<WallpaperStore>(
     (ref) => WallpaperStore(probeSize: probeWallpaperImageSize));
+
+/// 「一起看」服务：进程级单例。
+///
+/// 进程内只应有一份：房主的房间数据与本地 HTTP 服务是一一对应的，
+/// 建两个实例会各自抢 9979 端口。退出时连同局域网服务一起释放。
+final watchPartyProvider = ChangeNotifierProvider<WatchPartyService>((ref) {
+  final server = PartyServer(deviceName: defaultPartyDeviceName);
+  final service = WatchPartyService(
+    server: server,
+    deviceName: defaultPartyDeviceName,
+  );
+  // service 本身由 ChangeNotifierProvider 负责 dispose（重复 dispose 会断言），
+  // 这里只关掉它持有的监听端口。
+  ref.onDispose(() => unawaited(server.stop()));
+  return service;
+});
 
 /// 本次启动解析出的有效主入口。
 ///
@@ -2218,9 +2273,21 @@ PlayerEpisodeListNav? _buildEpisodeListNav(
               session.failedLines.contains(lineSwitchKey(i, sources[i].name)),
         ),
   ];
+  // 线路测速：按会话指纹缓存，抽屉打开时才真正开始测（见 ensureStarted）。
+  final probe = sources.length > 1
+      ? LineProbeHub.instance.feedFor(
+          LineProbeHub.keyFor(
+            siteKey: session.site?.key ?? '',
+            vodId: session.item.id,
+            sources: sources,
+          ),
+          sources,
+        )
+      : null;
   return PlayerEpisodeListNav(
     episodes: episodes,
     lines: lines,
+    probe: probe,
     lineName: browseSource.name,
     browsingPlayingLine: browsingPlayingLine,
     switching: session.switching || busy,
@@ -2257,6 +2324,14 @@ PlayerLineNav? _buildLineNav(WidgetRef ref, PlaybackSession? session,
   return PlayerLineNav(
     options: options,
     busy: busy || session.switching,
+    probe: LineProbeHub.instance.feedFor(
+      LineProbeHub.keyFor(
+        siteKey: session.site?.key ?? '',
+        vodId: session.item.id,
+        sources: session.sources,
+      ),
+      session.sources,
+    ),
     onSelect: (index) =>
         unawaited(ref.read(manualLineSwitchProvider)(session, index)),
   );
@@ -2321,7 +2396,10 @@ void showConfigDialog(BuildContext context, WidgetRef ref) {
   final repo = ref.read(configRepositoryProvider);
   showAppDialog<void>(
     context: context,
-    builder: (_) => ConfigDialog(repository: repo),
+    builder: (_) => ConfigDialog(
+      repository: repo,
+      settingsRepository: ref.read(settingsRepositoryProvider),
+    ),
   );
 }
 
@@ -2333,17 +2411,34 @@ void openSettingsPage(WidgetRef ref) {
 /// 频道抽屉头部「直播源」下拉：只换直播（独立直播源），点播 / 主配置不动。
 /// 选项：跟随主配置源 + 带直播的其它配置源 + 直播源历史（按地址去重）。
 LiveSourceNav _buildLiveSourceNav(WidgetRef ref, BuildContext context) {
-  final history = ref.read(liveRepositoryProvider).sourceHistory;
+  final liveRepository = ref.read(liveRepositoryProvider);
+  final history = liveRepository.sourceHistory;
   final summary = ref.watch(configSourceSummaryProvider);
   final entries = ref.watch(configSourcesProvider).valueOrNull ??
       ref.read(settingsRepositoryProvider).configSources;
   final active = history.active;
+  // 主配置自带的直播线路（lives）：多于一条时才值得单独列出来切换。
+  final mainLives = ref.watch(vodConfigProvider).lives;
+  final mainIndex = history.mainLiveIndex;
+  final mainLineName = mainIndex != null && mainIndex < mainLives.length
+      ? _mainLiveName(mainLives[mainIndex], mainIndex)
+      : null;
   final options = <LiveSourceOption>[
     LiveSourceOption(
       name: '跟随主配置源',
-      subtitle: '主配置：${summary.displayName}',
-      current: active == null,
+      subtitle: mainLineName == null
+          ? '主配置：${summary.displayName}'
+          : '主配置：${summary.displayName} · 全部 ${mainLives.length} 条线路',
+      current: active == null && mainIndex == null,
     ),
+    if (mainLives.length > 1)
+      for (var index = 0; index < mainLives.length; index++)
+        LiveSourceOption(
+          name: '主配置线路 · ${_mainLiveName(mainLives[index], index)}',
+          subtitle: '视频源带来的第 ${index + 1} 条直播',
+          mainLiveIndex: index,
+          current: active == null && mainIndex == index,
+        ),
   ];
   final listed = <String>{};
   for (final entry in entries) {
@@ -2367,11 +2462,18 @@ LiveSourceNav _buildLiveSourceNav(WidgetRef ref, BuildContext context) {
     ));
   }
   return LiveSourceNav(
-    label: history.activeEntry?.displayName ?? '跟随主配置源',
+    label: history.activeEntry?.displayName ??
+        (mainLineName == null ? '跟随主配置源' : '主配置 · $mainLineName'),
     options: options,
     onSelect: (option) => _selectLiveSource(ref, option),
     onManage: () => unawaited(_showLiveManagerDialog(context, ref)),
   );
+}
+
+/// 主配置线路的显示名：配置里没写名字时退回「线路 N」。
+String _mainLiveName(Live live, int index) {
+  final name = live.name.trim();
+  return name.isEmpty ? '线路 ${index + 1}' : name;
 }
 
 /// 配置源历史 → 独立直播源地址：本地文件转 file:// URI，远程只收 http(s)。
@@ -2398,8 +2500,17 @@ Future<void> _selectLiveSource(WidgetRef ref, LiveSourceOption option) async {
   final location = option.location;
   try {
     if (location == null) {
-      await repository.clearActiveSource();
-      showAppMessage('直播已改用主配置源', type: AppMessageType.success);
+      // 先退回「跟随主配置源」，再按需挑线路；两步都走后只触发一次重载。
+      if (repository.sourceHistory.active != null) {
+        await repository.clearActiveSource();
+      }
+      await repository.selectMainLive(option.mainLiveIndex);
+      showAppMessage(
+        option.mainLiveIndex == null
+            ? '直播已改用主配置源'
+            : '直播线路已切换：${option.name}',
+        type: AppMessageType.success,
+      );
       return;
     }
     final used = await repository.useSourceEntry(location);
@@ -2777,11 +2888,18 @@ void showSiteSelectorDialog(BuildContext context, WidgetRef ref) {
 class ConfigDialog extends StatefulWidget {
   final ConfigRepository repository;
 
+  /// 配置源历史（可选）：把「名称 / 分类」和本次加载写进同一条历史记录。
+  /// 省略时（旧调用点或测试）不写元信息，行为与之前一致。
+  final SettingsRepository? settingsRepository;
+
   /// 本地配置文件选择器（可注入以便测试；缺省弹出系统文件对话框）
   final Future<String?> Function()? pickConfigFile;
 
   const ConfigDialog(
-      {super.key, required this.repository, this.pickConfigFile});
+      {super.key,
+      required this.repository,
+      this.settingsRepository,
+      this.pickConfigFile});
 
   @override
   State<ConfigDialog> createState() => _ConfigDialogState();
@@ -2789,11 +2907,41 @@ class ConfigDialog extends StatefulWidget {
 
 class _ConfigDialogState extends State<ConfigDialog> {
   late final TextEditingController _controller;
+  final TextEditingController _nameController = TextEditingController();
   bool _isLoading = false;
   bool _isPickingFile = false;
   String? _errorMessage;
 
+  /// 空串 = 未分类（与历史条目的 category 语义一致）。
+  String _category = '';
+
+  /// 下拉重建计数：FormField 的 initialValue 只生效一次，选「新建分类…」
+  /// 需要把控件拉回原选择时靠它换 key。
+  int _categoryRevision = 0;
+
+  /// 下拉里的「新建分类…」哨兵值：分类名不允许控制字符，不会撞名。
+  static const String _newCategoryValue = '\u0001new';
+
   bool get _busy => _isLoading || _isPickingFile;
+
+  List<String> get _categories => List<String>.from(
+      widget.settingsRepository?.configSourceCategories ?? const [])
+    ..sort();
+
+  /// 下拉里合法的选择值：未分类（空串）+ 目录中的分类名。
+  static Set<String> _categoryItems(List<String> categories) =>
+      {'', ...categories};
+
+  /// 直接粘贴配置正文时不会产生历史记录（没有来源地址），名称与分类无处可存。
+  bool get _isPastingContent {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return false;
+    if (_inputHost(text) != null) return false;
+    if (text.contains('\n') || text.contains('{') || text.contains('<')) {
+      return true;
+    }
+    return text.length > 300;
+  }
 
   @override
   void initState() {
@@ -2806,6 +2954,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   @override
   void dispose() {
     _controller.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -2883,6 +3032,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
 
     try {
       await _runWithCredentials(task, host: host);
+      await _persistSourceMeta();
       if (mounted) Navigator.of(context).pop();
     } on DepotSelectionCancelled {
       if (!mounted) return;
@@ -2894,6 +3044,53 @@ class _ConfigDialogState extends State<ConfigDialog> {
         _errorMessage = _formatError(error);
       });
     }
+  }
+
+  /// 把弹窗里填的名称 / 分类写进刚产生的历史记录。
+  ///
+  /// 粘贴内容不产生历史（没有来源地址），此时静默跳过；写失败也不阻断加载——
+  /// 源已经在用了，用户仍可稍后在列表里改名或分类。
+  Future<void> _persistSourceMeta() async {
+    final settings = widget.settingsRepository;
+    if (settings == null) return;
+    final location = widget.repository.currentSourceLocation?.trim() ?? '';
+    if (location.isEmpty) return;
+    final config = widget.repository.currentVodConfig;
+    try {
+      await settings.upsertConfigSource(
+        kind: widget.repository.currentSourceKind ?? ConfigSourceKind.url,
+        location: location,
+        name: _nameController.text,
+        category: _category,
+        siteCount: config.sites.length,
+        liveCount: config.lives.length,
+      );
+    } catch (_) {
+      // 历史落盘失败不影响本次加载结果。
+    }
+  }
+
+  /// 「新建分类…」：确认后进目录并选中，避免先建空分类再回来选。
+  Future<void> _createCategory() async {
+    final settings = widget.settingsRepository;
+    if (settings == null || _busy) return;
+    // 不在 onSave 里 pop：SourceCategoryDialog 保存成功后自己会关闭，
+    // 这里再 pop 一次会把外层「配置源设置」一起关掉。
+    String? created;
+    await showAppDialog<void>(
+      context: context,
+      builder: (_) => SourceCategoryDialog(
+        initialCategory: '',
+        categories: _categories,
+        createOnly: true,
+        onSave: (value) async {
+          await settings.createConfigSourceCategory(value);
+          created = value;
+        },
+      ),
+    );
+    if (!mounted || created == null) return;
+    setState(() => _category = created!);
   }
 
   /// 两种触发方式，都用同一张框：
@@ -3002,6 +3199,8 @@ class _ConfigDialogState extends State<ConfigDialog> {
               enabled: !_busy,
               minLines: 1,
               maxLines: 6,
+              // 只影响下面「粘贴内容不会入历史」的提示文案。
+              onChanged: (_) => setState(() {}),
               style: TextStyle(
                   fontSize: AppType.label, color: context.palette.textMain),
               decoration: InputDecoration(
@@ -3017,6 +3216,99 @@ class _ConfigDialogState extends State<ConfigDialog> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    key: const ValueKey('config-source-name'),
+                    controller: _nameController,
+                    enabled: !_busy,
+                    style: TextStyle(
+                        fontSize: AppType.label,
+                        color: context.palette.textMain),
+                    decoration: InputDecoration(
+                      labelText: '名称（可选）',
+                      hintText: '例如：饭太硬',
+                      labelStyle: TextStyle(color: context.palette.textBody),
+                      hintStyle: TextStyle(color: context.palette.textDim),
+                      isDense: true,
+                      filled: true,
+                      fillColor: context.palette.raised,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        borderSide:
+                            BorderSide(color: context.palette.borderStrong),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey(
+                        'config-source-category:$_category:$_categoryRevision'),
+                    initialValue:
+                        _categoryItems(_categories).contains(_category)
+                            ? _category
+                            : '',
+                    isDense: true,
+                    dropdownColor: context.palette.raised,
+                    style: TextStyle(
+                        fontSize: AppType.label,
+                        color: context.palette.textMain),
+                    decoration: InputDecoration(
+                      labelText: '分类',
+                      labelStyle: TextStyle(color: context.palette.textBody),
+                      isDense: true,
+                      filled: true,
+                      fillColor: context.palette.raised,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        borderSide:
+                            BorderSide(color: context.palette.borderStrong),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('未分类')),
+                      for (final name in _categories)
+                        DropdownMenuItem(
+                            value: name,
+                            child: Text(name,
+                                maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      const DropdownMenuItem(
+                          value: _newCategoryValue,
+                          child: Text('＋ 新建分类…')),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) {
+                            if (value == _newCategoryValue) {
+                              setState(() => _categoryRevision++);
+                              unawaited(_createCategory());
+                              return;
+                            }
+                            setState(() => _category = value ?? '');
+                          },
+                  ),
+                ),
+              ],
+            ),
+            if (_isPastingContent) ...[
+              const SizedBox(height: 6),
+              Text(
+                '粘贴的配置内容不会记入配置源历史；名称与分类只在地址或本地文件加载时生效。',
+                style: TextStyle(
+                    fontSize: AppType.body, color: context.palette.textSub),
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -3094,6 +3386,199 @@ class _ConfigDialogState extends State<ConfigDialog> {
       ],
     );
   }
+}
+
+/// 「一起看」的播放器侧装配。
+///
+/// · 房主：每 1.5 秒把「第几集 + 进度 + 播放 / 暂停」发布到局域网；
+/// · 观众：收到房主状态后切集 / 校正进度 / 跟随播放暂停。
+///
+/// 只服务点播剧集：直播没有稳定位置，推送直链没有集顺序，两者都不参与。
+/// 组件本身不持有 socket，全部逻辑走 [WatchPartyService]，便于单测。
+class _PartySessionSync extends StatefulWidget {
+  const _PartySessionSync({
+    required this.session,
+    required this.engine,
+    required this.party,
+    required this.onOpenEpisode,
+    required this.onNotice,
+    required this.child,
+  });
+
+  final PlaybackSession? session;
+  final MpvPlayerEngine engine;
+  final WatchPartyService party;
+
+  /// 观众跟随房主切集；参数是会话内的集下标。
+  final void Function(int index) onOpenEpisode;
+
+  /// 一次性提示（切集 / 片名不一致）。
+  final void Function(String message) onNotice;
+
+  final Widget child;
+
+  @override
+  State<_PartySessionSync> createState() => _PartySessionSyncState();
+}
+
+class _PartySessionSyncState extends State<_PartySessionSync> {
+  /// 房主发布节拍：1.5 秒一次足够让观众跟上，又不至于把状态刷成洪水。
+  static const Duration _publishEvery = Duration(milliseconds: 1500);
+
+  /// 切集后等新集加载；超过这个时间还没等到就当失败，允许下一轮重试。
+  static const Duration _switchTimeout = Duration(seconds: 12);
+
+  Timer? _publishTimer;
+  StreamSubscription<PlaybackStatus>? _statusSubscription;
+
+  /// 切集后要补的位置与播放状态（新集加载完成才生效）。
+  Duration? _pendingSeek;
+  bool? _pendingPlaying;
+
+  /// 正在切往哪一集；同时也是防重入闸门。
+  int? _switchingTo;
+  Timer? _switchGuard;
+
+  /// 已经提示过的片名，避免每次轮询都弹一次。
+  String? _mismatchTitle;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.party.addListener(_onPartyChanged);
+    _statusSubscription = widget.engine.statusStream.listen(_onStatus);
+    _publishTimer = Timer.periodic(_publishEvery, _onPublishTick);
+  }
+
+  @override
+  void didUpdateWidget(_PartySessionSync old) {
+    super.didUpdateWidget(old);
+    if (old.party != widget.party) {
+      old.party.removeListener(_onPartyChanged);
+      widget.party.addListener(_onPartyChanged);
+    }
+    // 集已经换过去了：解除闸门。
+    if (_switchingTo != null && widget.session?.index == _switchingTo) {
+      _clearSwitchGuard();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.party.removeListener(_onPartyChanged);
+    _publishTimer?.cancel();
+    _switchGuard?.cancel();
+    unawaited(_statusSubscription?.cancel());
+    // 离开播放页 = 退出一起看：房主不关房会让观众端一直看到一个不再更新的房间；
+    // 观众不退出则会在后台每秒轮询。放到微任务里做，避开正在拆除的子树。
+    if (widget.party.active) {
+      unawaited(Future<void>.microtask(widget.party.leave));
+    }
+    super.dispose();
+  }
+
+  void _clearSwitchGuard() {
+    _switchingTo = null;
+    _switchGuard?.cancel();
+    _switchGuard = null;
+  }
+
+  /// 房主：把当前播放状态推给局域网。
+  void _onPublishTick(Timer _) {
+    final session = widget.session;
+    if (!widget.party.hosting || session == null || session.episodes.isEmpty) {
+      return;
+    }
+    final status = widget.engine.status;
+    if (status == PlaybackStatus.idle || status == PlaybackStatus.error) return;
+    final index = session.index.clamp(0, session.episodes.length - 1);
+    widget.party.publish(PartyState(
+      title: session.item.name,
+      episodeName: session.episodes[index].name,
+      episodeIndex: index,
+      positionMs: widget.engine.position.inMilliseconds,
+      playing: status == PlaybackStatus.playing,
+    ));
+  }
+
+  /// 新集加载完成后补位置：切集时拿到的 `positionMs` 在旧集上是没有意义的。
+  void _onStatus(PlaybackStatus status) {
+    if (!mounted) return;
+    if (_pendingSeek == null) return;
+    if (status != PlaybackStatus.playing && status != PlaybackStatus.paused) {
+      return;
+    }
+    final target = _pendingSeek!;
+    final playing = _pendingPlaying;
+    _pendingSeek = null;
+    _pendingPlaying = null;
+    unawaited(widget.engine.seek(target));
+    if (playing != null) {
+      unawaited(playing ? widget.engine.resume() : widget.engine.pause());
+    }
+  }
+
+  /// 观众：按房主状态跟随。
+  void _onPartyChanged() {
+    final session = widget.session;
+    final party = widget.party;
+    if (session == null || !party.joined) return;
+    final remote = party.remote;
+    if (remote == null) return;
+    if (!samePartyShow(remote.title, session.item.name)) {
+      if (_mismatchTitle != remote.title) {
+        _mismatchTitle = remote.title;
+        widget.onNotice('房主正在看《${remote.title}》，请打开同一部片子再跟随');
+      }
+      return;
+    }
+    _mismatchTitle = null;
+    if (_switchingTo != null) return;
+    final status = widget.engine.status;
+    // 正在缓冲时不要抢方向盘：既不该 seek（会重置缓冲），也不该暂停。
+    if (status == PlaybackStatus.buffering) return;
+
+    final follow = decidePartyFollow(
+      remote: remote,
+      localEpisodeIndex: session.index,
+      localPosition: widget.engine.position,
+      localPlaying: status == PlaybackStatus.playing,
+      compensation: party.remoteCompensation,
+    );
+
+    final switchTo = follow.switchToEpisode;
+    if (switchTo != null) {
+      // 房主的集数与本地不一致（不同站点的分集不同）时不要越界切集，
+      // 否则会走进「解析失败」的分支，看起来像一起看把播放搞坏了。
+      if (switchTo < 0 || switchTo >= session.episodes.length) {
+        if (_mismatchTitle != remote.title) {
+          _mismatchTitle = remote.title;
+          widget.onNotice('房主所在的线路分集与本地不同，无法跟随切集');
+        }
+        return;
+      }
+      _switchingTo = switchTo;
+      _pendingSeek = follow.seekTo;
+      _pendingPlaying = follow.setPlaying;
+      _switchGuard?.cancel();
+      _switchGuard = Timer(_switchTimeout, () {
+        if (mounted) _clearSwitchGuard();
+      });
+      widget.onOpenEpisode(switchTo);
+      widget.onNotice('房主切换到了第 ${switchTo + 1} 集');
+      return;
+    }
+
+    final seekTo = follow.seekTo;
+    if (seekTo != null) unawaited(widget.engine.seek(seekTo));
+    final setPlaying = follow.setPlaying;
+    if (setPlaying != null) {
+      unawaited(setPlaying ? widget.engine.resume() : widget.engine.pause());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// 点播连播：自然结束与越过片尾点共用一次切集机会。
@@ -3808,16 +4293,41 @@ class XiugouTvApp extends ConsumerWidget {
         ref.watch(playSkipPreferencesProvider).valueOrNull ??
             ref.read(settingsRepositoryProvider).playSkipPreferences;
     final isRealMpvEngine = playerEngine.runtimeType == MpvPlayerEngine;
-    final trackNavs =
-        isRealMpvEngine ? buildPlayerTrackNavs(playerEngine) : null;
+    // 在线字幕只对点播剧集有意义：直播 / 直链没有剧名与集号，
+    // 传 null 后字幕菜单里就不会出现「搜索在线字幕」。
+    final SubtitleQuery Function()? onlineSubtitleQuery = livePage
+        ? null
+        : () {
+            final session = ref.read(activePlaybackSessionProvider);
+            if (session == null) return const SubtitleQuery(title: '');
+            final episodeName = session.index >= 0 &&
+                    session.index < session.episodes.length
+                ? session.episodes[session.index].name
+                : '';
+            final parsed = int.tryParse(extractEp(episodeName));
+            return SubtitleQuery(
+              title: session.item.name,
+              year: int.tryParse(session.item.year ?? ''),
+              // 单集（电影）没有集号时留空，剧集则退回「第几集」的序号
+              episode: parsed ??
+                  (session.episodes.length > 1 ? session.index + 1 : null),
+              rawName: episodeName,
+            );
+          };
+    final trackNavs = isRealMpvEngine
+        ? buildPlayerTrackNavs(playerEngine,
+            readOnlineQuery: onlineSubtitleQuery)
+        : null;
+
+    // 主题色只换品牌色相，中性色与组件尺寸不变；
+    // ThemeData 走 provider 缓存，避免每帧都判定「主题变了」而反复播过渡动画
+    final themes = ref.watch(appThemesProvider);
 
     return MaterialApp(
-      title: '修狗TV',
+      title: AppBrand.name,
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(
-          brightness: Brightness.light, palette: AppPalette.light),
-      darkTheme:
-          buildAppTheme(brightness: Brightness.dark, palette: AppPalette.dark),
+      theme: themes.light,
+      darkTheme: themes.dark,
       themeMode: switch (ref.watch(themeModeProvider)) {
         AppThemeMode.dark => ThemeMode.dark,
         AppThemeMode.light => ThemeMode.light,
@@ -3842,6 +4352,9 @@ class XiugouTvApp extends ConsumerWidget {
             right: 0,
             child: Center(child: PrewarmBanner()),
           ),
+          // 用户协议与免责声明：没同意之前盖住整个界面（含消息浮层）；
+          // 放在拖动带之下，弹窗期间仍能拖窗口。
+          const Positioned.fill(child: AgreementGuard()),
           DialogDragStrip(
             windowManager: windowMgr,
             observer: _dialogRouteObserver,
@@ -3925,7 +4438,9 @@ class XiugouTvApp extends ConsumerWidget {
                               context: pageContext,
                               builder: (_) => ConfigDialog(
                                   repository:
-                                      ref.read(configRepositoryProvider)),
+                                      ref.read(configRepositoryProvider),
+                                  settingsRepository:
+                                      ref.read(settingsRepositoryProvider)),
                             ),
                           )
                         : null,
@@ -3940,6 +4455,17 @@ class XiugouTvApp extends ConsumerWidget {
                         : Stack(
                             fit: StackFit.expand,
                             children: [
+                              // 「一起看」逻辑层：不占视觉，只负责发布 / 跟随。
+                              _PartySessionSync(
+                                session: livePage ? null : activeSession,
+                                engine: playerEngine,
+                                party: ref.read(watchPartyProvider),
+                                onOpenEpisode: (index) => unawaited(
+                                    _handleEpisodeSwitch(context, ref, index)),
+                                onNotice: (message) =>
+                                    showAppMessage(message),
+                                child: const SizedBox.shrink(),
+                              ),
                               _LineSwitchNoticeHost(
                                 child: _EpisodeAdvanceWatcher(
                                   engine: playerEngine,
@@ -4005,6 +4531,37 @@ class XiugouTvApp extends ConsumerWidget {
                                           },
                                           builder: (_, liveDanmakuNav) =>
                                               DesktopVideoPlayer(
+                                            // 直播没有稳定进度、推送直链没有集顺序：
+                                            // 两者都不提供「一起看」入口。
+                                            partyNav: livePage ||
+                                                    activeSession == null
+                                                ? null
+                                                : PlayerPartyNav(
+                                                    isActive: () => ref
+                                                        .read(watchPartyProvider)
+                                                        .active,
+                                                    isHosting: () => ref
+                                                        .read(watchPartyProvider)
+                                                        .hosting,
+                                                    statusText: () {
+                                                      final party = ref.read(
+                                                          watchPartyProvider);
+                                                      if (party.hosting) {
+                                                        return '房主 · ${party.roomCode}';
+                                                      }
+                                                      if (party.joined) {
+                                                        return '跟随 ${party.hostName}';
+                                                      }
+                                                      return '';
+                                                    },
+                                                    listenable: ref.read(
+                                                        watchPartyProvider),
+                                                    onOpen: () => unawaited(
+                                                        showPartyDialog(
+                                                            playerContext,
+                                                            ref.read(
+                                                                watchPartyProvider))),
+                                                  ),
                                             onHoldBaseRateChanged: (rate) =>
                                                 _holdBaseRate = rate,
                                             liveDanmakuNav: liveDanmakuNav,
@@ -6688,7 +7245,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
               ),
               const SizedBox(height: 18),
               Text(
-                '修狗TV',
+                AppBrand.name,
                 style: TextStyle(
                   fontSize: AppType.h1,
                   fontWeight: FontWeight.bold,

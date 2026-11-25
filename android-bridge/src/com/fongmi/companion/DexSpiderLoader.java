@@ -670,6 +670,126 @@ public class DexSpiderLoader {
         return sb.toString();
     }
 
+    /** Spider 基类的内部名（ASM 里的写法是斜杠分隔）。 */
+    private static final String SPIDER_BASE_INTERNAL = "com/github/catvod/crawler/Spider";
+
+    /** 扫描结果上限：混淆载荷里可能有上百个候选，界面只适合展示前一截。 */
+    private static final int MAX_SCAN_RESULTS = 120;
+
+    /**
+     * 扫描 jar 内可实例化的 Spider 子类，供「新建 JAR 站源」界面自动填 api。
+     *
+     * <p>与 {@link #spiderClasses(ClassLoader)} 的差别：这里做静态字节码分析（ASM），
+     * 不 {@code Class.forName}、不实例化——用户选中一个 jar 只是为了列类名，
+     * 不该顺带跑一遍蜘蛛初始化；扫描范围与加载器一致（{@code com.github.catvod.spider}），
+     * 列出的类名直接换成 {@code csp_类名} 就能加载。
+     *
+     * @return 全限定类名（点号分隔，已排序）；jar 准备失败时返回空表，原因记在 ParseStage。
+     */
+    public java.util.List<String> scanSpiderClasses(String jarSpec) {
+        ClassLoader loader = loadJar(jarSpec);
+        if (loader == null || loader == getClass().getClassLoader()) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.List<String> scanned = scanClassesStatically(loader);
+        if (!scanned.isEmpty()) return scanned;
+        // 兜底：读不到 class 字节（如目录型 classpath / 加密容器）时退回「加载 + 反射」的老路。
+        return spiderClasses(loader);
+    }
+
+    private java.util.List<String> scanClassesStatically(ClassLoader loader) {
+        if (!(loader instanceof URLClassLoader)) return java.util.Collections.emptyList();
+        // class 内部名 -> 父类内部名 / 访问标志，最后沿继承链找 Spider。
+        Map<String, String> parents = new HashMap<>();
+        Map<String, Integer> flags = new HashMap<>();
+        for (URL url : ((URLClassLoader) loader).getURLs()) {
+            File file;
+            try {
+                file = new File(url.toURI());
+            } catch (Throwable t) {
+                continue;
+            }
+            try {
+                if (file.isDirectory()) {
+                    collectClassesFromDirectory(file, parents, flags);
+                } else if (file.isFile()) {
+                    collectClassesFromZip(file, parents, flags);
+                }
+            } catch (Throwable t) {
+                System.err.println("[DexSpiderLoader] 静态扫描 " + file + " 失败: " + t);
+            }
+        }
+        java.util.Set<String> result = new java.util.TreeSet<>();
+        for (Map.Entry<String, String> entry : parents.entrySet()) {
+            Integer access = flags.get(entry.getKey());
+            if (access == null) continue;
+            if ((access & org.objectweb.asm.Opcodes.ACC_INTERFACE) != 0) continue;
+            if ((access & org.objectweb.asm.Opcodes.ACC_ABSTRACT) != 0) continue;
+            String superName = entry.getValue();
+            for (int depth = 0; superName != null && depth < 32; depth++) {
+                if (SPIDER_BASE_INTERNAL.equals(superName)) {
+                    result.add(entry.getKey().replace('/', '.'));
+                    break;
+                }
+                superName = parents.get(superName);
+            }
+            if (result.size() >= MAX_SCAN_RESULTS) break;
+        }
+        System.out.println("[DexSpiderLoader] 静态扫描到 Spider 子类 " + result.size() + " 个"
+                + (result.isEmpty() ? "" : " " + shortNames(new ArrayList<>(result))));
+        return new ArrayList<>(result);
+    }
+
+    private void collectClassesFromZip(File file, Map<String, String> parents, Map<String, Integer> flags) throws IOException {
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) {
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> it = zip.entries();
+            while (it.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = it.nextElement();
+                if (entry.isDirectory()) continue;
+                String name = entry.getName();
+                if (!isScannableClassEntry(name)) continue;
+                try (InputStream in = zip.getInputStream(entry)) {
+                    collectClass(readFully(in), parents, flags);
+                }
+            }
+        }
+    }
+
+    private void collectClassesFromDirectory(File dir, Map<String, String> parents, Map<String, Integer> flags) throws IOException {
+        File[] children = dir.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (child.isDirectory()) {
+                collectClassesFromDirectory(child, parents, flags);
+            } else if (isScannableClassEntry(child.getName())) {
+                collectClass(java.nio.file.Files.readAllBytes(child.toPath()), parents, flags);
+            }
+        }
+    }
+
+    private static boolean isScannableClassEntry(String entry) {
+        // 只扫加载器认得的包：api 最终按 `com.github.catvod.spider.<类名>` 解析
+        // （见 tryLoadFromJar）——列出别的包里的 Spider 子类，用户选了也加载不了。
+        if (!entry.startsWith("com/github/catvod/spider/")) return false;
+        if (!entry.endsWith(".class")) return false;
+        if (entry.contains("$")) return false;
+        if (entry.endsWith("module-info.class")) return false;
+        // 壳框架的混淆类有上万条，永远不是用户要选的蜘蛛，跳过能省掉大部分解析。
+        return !entry.startsWith("com/github/catvod/spider/merge/");
+    }
+
+    private static void collectClass(byte[] bytes, Map<String, String> parents, Map<String, Integer> flags) {
+        try {
+            org.objectweb.asm.ClassReader reader = new org.objectweb.asm.ClassReader(bytes);
+            String name = reader.getClassName();
+            if (name == null) return;
+            parents.put(name, reader.getSuperName());
+            flags.put(name, reader.getAccess());
+        } catch (Throwable ignored) {
+            // 单个坏 class 不影响整包扫描。
+        }
+    }
+
     /**
      * 许多第三方 spider jar（如 Yoursmile 系列）内置 com.github.catvod.spider.Init 宿主桥，
      * 其 Init.context() 返回的结果来自 Init.init(Context) 注入。宿主（手机端 APK）在启动时

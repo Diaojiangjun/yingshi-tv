@@ -11,6 +11,7 @@ import '../../theme/app_tokens.dart';
 import '../widgets/app_message.dart';
 import '../widgets/focus_ring.dart';
 import '../dialogs/escape_closable.dart';
+import '../../../core/brand.dart';
 
 /// 站点体检弹窗：对当前配置里的 Spider 站点逐个探测，边跑边出结果。
 ///
@@ -132,7 +133,7 @@ class _SiteSelfCheckDialogState extends State<SiteSelfCheckDialog> {
     final timeout = _entries.where((e) => e.isTimeout).length;
     final failed = _entries.length - ok - degraded - timeout;
     final buffer = StringBuffer()
-      ..writeln('修狗TV 站点体检结果')
+      ..writeln('${AppBrand.name} 站点体检结果')
       ..writeln(
           '共 ${_entries.length} 站：可用 $ok / 降级 $degraded / 失败 $failed / 超时 $timeout');
     for (final entry in _entries) {

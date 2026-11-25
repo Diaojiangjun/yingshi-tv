@@ -1,4 +1,6 @@
+import '../../danmaku/danmaku_service_config.dart';
 import '../../danmaku/danmaku_settings.dart';
+import '../../subtitle/subtitle_service_config.dart';
 import '../../settings/models/external_player_settings.dart';
 import '../../settings/models/player_shortcut_bindings.dart';
 
@@ -61,6 +63,17 @@ class PlayerSettings {
   /// 弹幕外观与屏蔽（§43 二期），嵌套保存为 `danmaku` 对象。
   final DanmakuSettings danmaku;
 
+  /// 用户自填的弹幕服务地址与令牌，嵌套保存为 `danmakuService` 对象。
+  ///
+  /// 与构建期内置值并存：填了优先用填的，留空回落到内置（见 `danmaku_api.dart`）。
+  /// 单独一层而不塞进 [danmaku]：那是外观设置，重置外观不该把服务地址一起清掉。
+  final DanmakuServiceConfig danmakuService;
+
+  /// 用户自填的在线字幕来源（assrt token / 自定义 API），嵌套保存为 `subtitleService`。
+  ///
+  /// 与弹幕服务分开一层：两者是不同服务，重置其中一项不该影响另一项。
+  final SubtitleServiceConfig subtitleService;
+
   /// 共享片段（§44）：2 人以上确认的片段是否自动跳过 / 静音。默认 true；
   /// 关闭后共享片段只在「片段」抽屉里列出，1 票的提示胶囊照常出现。
   final bool segmentsAutoApply;
@@ -122,6 +135,8 @@ class PlayerSettings {
     this.hideWindowTitleBar = true,
     this.danmakuEnabled = true,
     this.danmaku = DanmakuSettings.defaults,
+    this.danmakuService = DanmakuServiceConfig.empty,
+    this.subtitleService = SubtitleServiceConfig.empty,
     this.segmentsAutoApply = true,
     this.showMiniProgress = true,
     this.showResolution = false,
@@ -241,6 +256,8 @@ class PlayerSettings {
       hideWindowTitleBar: json['hideWindowTitleBar'] != false,
       danmakuEnabled: json['danmakuEnabled'] != false,
       danmaku: DanmakuSettings.fromJson(json['danmaku']),
+      danmakuService: DanmakuServiceConfig.fromJson(json['danmakuService']),
+      subtitleService: SubtitleServiceConfig.fromJson(json['subtitleService']),
       segmentsAutoApply: json['segmentsAutoApply'] != false,
       showMiniProgress: json['showMiniProgress'] != false,
       showResolution: json['showResolution'] == true,
@@ -276,6 +293,8 @@ class PlayerSettings {
         'hideWindowTitleBar': hideWindowTitleBar,
         'danmakuEnabled': danmakuEnabled,
         'danmaku': danmaku.toJson(),
+        'danmakuService': danmakuService.toJson(),
+        'subtitleService': subtitleService.toJson(),
         'segmentsAutoApply': segmentsAutoApply,
         'showMiniProgress': showMiniProgress,
         'showResolution': showResolution,
@@ -332,6 +351,8 @@ class PlayerSettings {
     bool? hideWindowTitleBar,
     bool? danmakuEnabled,
     DanmakuSettings? danmaku,
+    DanmakuServiceConfig? danmakuService,
+    SubtitleServiceConfig? subtitleService,
     bool? segmentsAutoApply,
     bool? showMiniProgress,
     bool? showResolution,
@@ -360,6 +381,8 @@ class PlayerSettings {
       hideWindowTitleBar: hideWindowTitleBar ?? this.hideWindowTitleBar,
       danmakuEnabled: danmakuEnabled ?? this.danmakuEnabled,
       danmaku: danmaku ?? this.danmaku,
+      danmakuService: danmakuService ?? this.danmakuService,
+      subtitleService: subtitleService ?? this.subtitleService,
       segmentsAutoApply: segmentsAutoApply ?? this.segmentsAutoApply,
       showMiniProgress: showMiniProgress ?? this.showMiniProgress,
       showResolution: showResolution ?? this.showResolution,
@@ -393,6 +416,8 @@ class PlayerSettings {
       other.hideWindowTitleBar == hideWindowTitleBar &&
       other.danmakuEnabled == danmakuEnabled &&
       other.danmaku == danmaku &&
+      other.danmakuService == danmakuService &&
+      other.subtitleService == subtitleService &&
       other.segmentsAutoApply == segmentsAutoApply &&
       other.showMiniProgress == showMiniProgress &&
       other.showResolution == showResolution &&
@@ -408,6 +433,6 @@ class PlayerSettings {
   @override
   int get hashCode => Object.hashAll([hwdec, defaultVolume, defaultRate, audioChannels, audioDelayMs,
       toneMapping, scale, brightness, contrast, saturation, gamma, cacheSecs, hideWindowTitleBar,
-      danmakuEnabled, danmaku, segmentsAutoApply, showMiniProgress, showResolution, autoLineSwitch, autoPlayNextEpisode, holdRate, shortcuts,
+      danmakuEnabled, danmaku, danmakuService, subtitleService, segmentsAutoApply, showMiniProgress, showResolution, autoLineSwitch, autoPlayNextEpisode, holdRate, shortcuts,
       externalPlayer, autoHideCursor, browserHeaders, autoDetectLiveDirectMode]);
 }

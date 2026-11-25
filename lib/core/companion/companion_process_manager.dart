@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../net/http_client_factory.dart';
+import '../runtime/runtime_component.dart';
+import '../runtime/runtime_installer.dart';
 import '../storage/data_directory_manager.dart';
 import 'companion_log.dart';
 import 'companion_recovery.dart';
@@ -281,6 +283,27 @@ class CompanionProcessManager implements CompanionRecoveryHost {
     return null;
   }
 
+  /// 已安装运行时的 `-D` 覆盖参数。
+  ///
+  /// Java 侧默认只认 jar 同级的 `dist/pyruntime`、`dist/noderuntime`、
+  /// `dist/phpruntime`；按需下载把它们放到了 `%APPDATA%/XiugouTV/runtime/`，
+  /// 所以必须在启动时显式告诉它去哪找，否则下载了也等于没装。
+  Future<List<String>> _runtimeSystemProperties() async {
+    final args = <String>[];
+    for (final component in runtimeComponents) {
+      final property = component.systemProperty;
+      if (property == null) continue;
+      final status = await RuntimeInstaller.instance.status(component);
+      final dir = status.installedPath ?? status.bundledPath;
+      if (dir == null) continue;
+      final executable = File(p.join(
+          dir, Platform.isWindows ? '${component.id}.exe' : component.id));
+      if (!executable.existsSync()) continue;
+      args.add('-$property=${executable.path}');
+    }
+    return args;
+  }
+
   /// 检查系统或内嵌环境是否安装 Java 运行时
   Future<bool> checkJavaAvailable() async {
     final javaCmd = await resolveJavaExecutable();
@@ -343,7 +366,8 @@ class CompanionProcessManager implements CompanionRecoveryHost {
         _status = CompanionStatus.unsupported;
         _lastError =
             'Java Runtime Environment (JRE) >= $minimumJavaMajorVersion '
-            'not found in runtime/jre, APPDATA, JAVA_HOME or PATH.';
+            'not found in runtime/jre, APPDATA, JAVA_HOME or PATH. '
+            '请到「设置 → 运行时」下载 JVM 运行时（约 46 MB）。';
         _log.write('[start] 失败：$_lastError');
         return false;
       }
@@ -387,6 +411,9 @@ class CompanionProcessManager implements CompanionRecoveryHost {
         // 只改控制台输出编码，不动 file.encoding：后者会影响载荷里 new String(bytes) 的语义。
         if (debugCompanion) '-Dsun.stdout.encoding=UTF-8',
         if (debugCompanion) '-Dsun.stderr.encoding=UTF-8',
+        // 按需下载的运行时装在 APPDATA，Java 侧默认只找 jar 同级的 dist/，
+        // 这里用 -D 把实际路径告诉它们（三个运行时都支持显式覆盖）。
+        ...await _runtimeSystemProperties(),
         '-jar',
         resolvedJar,
         '--port=$targetPort',

@@ -112,6 +112,23 @@ Remove-Item -LiteralPath $bcprov
 Assert-Throws { New-StagedApplicationTree $source (Join-Path $testRoot 'missing-runtime') } 'Required package runtime missing'
 Write-Fixture $source 'companion/dist/bcprov-jdk18on-1.78.1.jar'
 
+# JRE 按需下载（-IncludeJre:$false）：发布包不再携带 runtime/jre，必需清单也不得要求它。
+# 默认行为必须保持不变（上一段刚验证过缺 JRE 仍会失败），否则内置 JRE 的包会悄悄少文件。
+$onDemandEntries = Get-PackageRequiredEntries -IncludeJre:$false
+Assert-True (@($onDemandEntries | Where-Object { $_ -like 'runtime/jre/*' }).Count -eq 0) 'On-demand mode still requires bundled JRE.'
+Assert-True (@($onDemandEntries | Where-Object { $_ -eq 'companion/dist/companion-service.jar' }).Count -eq 1) 'On-demand mode lost core runtime entries.'
+$noJreSource = Join-Path $testRoot 'source-no-jre'
+[void][System.IO.Directory]::CreateDirectory($noJreSource)
+foreach ($rel in ($runtimeFiles | Where-Object { $_ -notlike 'runtime/jre/*' })) {
+    $destination = Join-Path $noJreSource $rel
+    [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destination))
+    Copy-Item -LiteralPath (Join-Path $source $rel) -Destination $destination
+}
+$noJreStage = Join-Path $testRoot 'stage-no-jre'
+$noJreResult = New-StagedApplicationTree -SourceDir $noJreSource -StageDir $noJreStage -IncludeJre:$false
+Assert-True (@($noJreResult.Files | Where-Object { $_ -like 'runtime/jre/*' }).Count -eq 0) 'On-demand stage picked up a JRE.'
+Assert-Throws { New-StagedApplicationTree $noJreSource (Join-Path $testRoot 'stage-no-jre-required') } 'Required package runtime missing'
+
 # Junctions require no symlink privilege and exercise the same rejection before traversal.
 $linkPath = Join-Path $source 'data/flutter_assets/linked'
 New-Item -ItemType Junction -Path $linkPath -Value (Join-Path $source 'user_data') | Out-Null

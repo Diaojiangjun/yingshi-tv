@@ -8,6 +8,8 @@ import 'core/companion/companion_process_manager.dart';
 import 'core/config/config_repository.dart';
 import 'core/config/models/builtin_sites.dart';
 import 'core/diagnostics/error_log.dart';
+import 'core/legal/agreement_providers.dart';
+import 'core/legal/agreement_store.dart';
 import 'core/net/http_client_factory.dart';
 import 'core/danmaku/danmaku_api.dart';
 import 'core/player/mpv_player_engine.dart';
@@ -26,8 +28,9 @@ Future<void> main() async {
     // 超出按 LRU 淘汰、重复浏览会再解码，换取常驻内存下降。
     PaintingBinding.instance.imageCache.maximumSizeBytes = 48 << 20;
     await loadAppVersionLabel();
-    // §43：可选服务是否启用（只打印是否配置，不打印地址 / 令牌）
-    debugPrint('[xiugou-tv] 弹幕服务：${danmakuServiceConfigured ? '已配置' : '未配置（config/app.env）'}');
+    // §43：可选服务是否可用（只打印是否配置，不打印地址 / 令牌）。
+    // 用户还可以在「设置 → 播放器与解码 → 弹幕 → 弹幕服务」里自填，所以这里只反映内置态。
+    debugPrint('[xiugou-tv] 弹幕服务（构建期内置）：${kBuiltinDanmakuApiBase.isNotEmpty ? '已配置' : '未配置'}');
 
     // 先解析数据目录并执行待定迁移，再创建任何存储（避免运行中双目录写入）。
     // 便携版默认目录是 exe 旁的 user_data，重置标记也放在默认目录，所以必须先解析。
@@ -63,6 +66,15 @@ Future<void> main() async {
     );
     // 应用生命周期内常驻：成功加载的 URL / 本地文件记入配置源历史
     settingsRepository.bindConfigRepository(configRepository);
+
+    // 用户协议与免责声明：同意过才放行主界面（首启由 AgreementGuard 遮挡）。
+    final agreementStore = AgreementStore();
+    var agreementAccepted = false;
+    try {
+      agreementAccepted = await agreementStore.isAccepted();
+    } catch (error) {
+      debugPrint('[xiugou-tv] 读取协议同意状态失败: $error');
+    }
 
     // SET-05：播放历史保留上限从设置同步一次（trim: false——启动不静默裁剪，见方案 §2.2）
     await configRepository.setHistoryLimit(
@@ -140,6 +152,8 @@ Future<void> main() async {
           playerEngineProvider.overrideWithValue(playerEngine),
           settingsRepositoryProvider.overrideWithValue(settingsRepository),
           startupEntryProvider.overrideWithValue(startupEntry),
+          agreementStoreProvider.overrideWithValue(agreementStore),
+          agreementInitialProvider.overrideWithValue(agreementAccepted),
         ],
         child: const XiugouTvApp(),
       ),

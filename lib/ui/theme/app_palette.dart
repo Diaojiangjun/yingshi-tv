@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'app_accent.dart';
 
 /// 应用语义调色板。
 ///
@@ -192,8 +195,83 @@ class AppPalette extends ThemeExtension<AppPalette> {
   static AppPalette of(BuildContext context) =>
       Theme.of(context).extension<AppPalette>() ?? dark;
 
+  /// 换主题色：只替换品牌色相关的 5 个字段，其余中性色保持不变。
+  AppPalette withAccent(AccentColors accentColors) => AppPalette(
+        background: background,
+        panel: panel,
+        card: card,
+        raised: raised,
+        border: border,
+        borderStrong: borderStrong,
+        divider: divider,
+        textTitle: textTitle,
+        textMain: textMain,
+        textBody: textBody,
+        textSub: textSub,
+        textDim: textDim,
+        accent: accentColors.fill,
+        accentInk: accentColors.ink,
+        accentWash: accentColors.wash,
+        selectionFill: accentColors.selectionFill,
+        selectionInk: accentColors.selectionInk,
+        onSelectionInk: onSelectionInk,
+        sourceInputSelection: sourceInputSelection,
+        danger: danger,
+        success: success,
+        warning: warning,
+        hover: hover,
+        pressed: pressed,
+        scrim: scrim,
+        playerChrome: playerChrome,
+        playerText: playerText,
+      );
+
   @override
   AppPalette copyWith() => this;
+
+  /// 值相等：调色板是不可变值对象，内容相同即相等。
+  ///
+  /// **必须实现**：`MaterialApp` 用 `ThemeData ==` 判断要不要跑主题过渡动画，
+  /// 而 `ThemeData` 的相等性包含 `extensions`。若调色板按引用比较，
+  /// 每次重建都得到「不等」的主题，`AnimatedTheme` 就会无限重启动画，
+  /// 表现为窗口卡死、无法拖动。
+  List<Object> get _values => [
+        background,
+        panel,
+        card,
+        raised,
+        border,
+        borderStrong,
+        divider,
+        textTitle,
+        textMain,
+        textBody,
+        textSub,
+        textDim,
+        accent,
+        accentInk,
+        accentWash,
+        selectionFill,
+        selectionInk,
+        onSelectionInk,
+        sourceInputSelection,
+        danger,
+        success,
+        warning,
+        hover,
+        pressed,
+        scrim,
+        playerChrome,
+        playerText,
+      ];
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppPalette && listEquals(_values, other._values);
+
+  @override
+  int get hashCode => Object.hashAll(_values);
 
   @override
   AppPalette lerp(covariant AppPalette? other, double t) {

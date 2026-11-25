@@ -66,6 +66,7 @@ public class SpiderServer {
 
         server.createContext("/health", guarded(new HealthHandler()));
         server.createContext("/spider/load", guarded(new LoadHandler()));
+        server.createContext("/jar/scan", guarded(new JarScanHandler()));
         server.createContext("/spider/call", guarded(new CallHandler()));
         server.createContext("/spider/cancel", guarded(new CancelHandler()));
         server.createContext("/spider/reset", guarded(new ResetHandler()));
@@ -325,6 +326,56 @@ public class SpiderServer {
             }
             String resp = "{\"code\":0,\"msg\":\"loaded\",\"siteKey\":\"" + escapeJson(loadedKey) + "\"}";
             sendJsonResponse(exchange, 200, resp);
+        }
+    }
+
+    /**
+     * 扫描 jar 内的 Spider 子类，供桌面端「新建 JAR 站源」自动填 api。
+     *
+     * <p>请求：{@code {"jar": "<URL 或本地路径>", "timeoutMs": 180000, "rpcId": "..."}}；
+     * 响应：{@code {"code":0,"jar":"...","classes":["com.github.catvod.spider.Xxx"]}}。
+     * 准备失败时仍回 200，但带 {@code stage}/{@code detail}，让界面能说清卡在哪一步
+     * （下载 / 解密 / dex2jar），而不是只有一句「没有找到类」。
+     */
+    private class JarScanHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+            Map<String, Object> payload = JsonCodec.parseObject(readBody(exchange));
+            Map<String, String> map = new HashMap<>();
+            for (Map.Entry<String, Object> entry : payload.entrySet()) {
+                Object value = entry.getValue();
+                map.put(entry.getKey(), value instanceof String ? (String) value : JsonCodec.stringify(value));
+            }
+            final String jar = map.getOrDefault("jar", "").trim();
+            if (jar.isEmpty()) {
+                sendJsonResponse(exchange, 200, "{\"code\":-1,\"error\":\"jar 为空\"}");
+                return;
+            }
+            long timeoutMs = resolveTimeoutMs(map);
+            final String scanTag = "scan@" + Integer.toHexString(jar.hashCode());
+            String result = runWithWatchdog(exchange, scanTag, rpcTagOf(scanTag, map.get("rpcId")), timeoutMs, () -> {
+                java.util.List<String> classes = loader.scanSpiderClasses(jar);
+                ParseStage.Failure failure = ParseStage.current();
+                StringBuilder sb = new StringBuilder();
+                sb.append("{\"code\":0,\"jar\":\"").append(escapeJson(jar)).append("\",\"classes\":[");
+                for (int i = 0; i < classes.size(); i++) {
+                    if (i > 0) sb.append(',');
+                    sb.append('"').append(escapeJson(classes.get(i))).append('"');
+                }
+                sb.append(']');
+                if (failure != null) {
+                    sb.append(",\"stage\":\"").append(escapeJson(failure.stage)).append('"');
+                    sb.append(",\"detail\":\"").append(escapeJson(failure.detail)).append('"');
+                }
+                sb.append('}');
+                return sb.toString();
+            });
+            if (result == null) return;
+            sendJsonResponse(exchange, 200, result);
         }
     }
 

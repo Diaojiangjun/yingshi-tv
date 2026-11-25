@@ -7,6 +7,7 @@ import '../storage/data_restore_guard.dart';
 import 'config_credentials.dart';
 import 'models/desktop_window_config.dart';
 import 'models/config_snapshot.dart';
+import 'models/custom_site.dart';
 import 'models/history_record.dart';
 import 'models/home_site_preference.dart';
 import 'models/vod_config.dart';
@@ -17,6 +18,9 @@ class WindowsConfigStorage {
   static const String _vodConfigCacheFileName = 'cached_vod_config.json';
   static const String _historyFileName = 'history.json';
   static const String _favoritesFileName = 'favorites.json';
+
+  /// 用户自建站源：与订阅配置分开存，换订阅 / 重新加载配置都不会丢。
+  static const String _customSitesFileName = 'custom_sites.json';
 
   /// 配置源凭据（按主机）：与订阅地址分开存，换地址不影响已记住的账号。
   static const String _configCredentialsFileName = 'config_credentials.json';
@@ -257,6 +261,55 @@ class WindowsConfigStorage {
     final jsonList = items.map((e) => e.toJson()).toList();
     await _atomicWrite(targetPath, jsonEncode(jsonList),
         throwWhenBlocked: true);
+  }
+
+  /// 读取用户自建站源（JAR 源等）。
+  ///
+  /// 单条坏记录跳过：用户手填的 JAR 路径 / 参数最容易被改坏，一条残缺条目不该让
+  /// 其余自建站源一起消失。
+  Future<List<CustomSite>> readCustomSites() async {
+    try {
+      final dir = await getStorageDirectory();
+      final file = File(p.join(dir.path, _customSitesFileName));
+      if (!await file.exists()) return [];
+
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) return [];
+
+      final decoded = jsonDecode(content);
+      final rawList = switch (decoded) {
+        List() => decoded,
+        Map() => decoded['sites'],
+        _ => null,
+      };
+      if (rawList is! List) return [];
+
+      final sites = <CustomSite>[];
+      final seen = <String>{};
+      for (final entry in rawList.whereType<Map>()) {
+        final site = CustomSite.tryFromJson(
+            Map<String, dynamic>.from(entry));
+        if (site == null || !seen.add(site.id)) continue;
+        sites.add(site);
+      }
+      return sites;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// 保存用户自建站源（原子写入；数据恢复待重启时抛出，由调用方提示未保存）。
+  Future<void> saveCustomSites(List<CustomSite> sites) async {
+    final dir = await getStorageDirectory();
+    final targetPath = p.join(dir.path, _customSitesFileName);
+    await _atomicWrite(
+      targetPath,
+      jsonEncode({
+        'version': 1,
+        'sites': sites.map((e) => e.toJson()).toList(),
+      }),
+      throwWhenBlocked: true,
+    );
   }
 
   /// 读取直播收藏（§33）。

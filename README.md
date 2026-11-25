@@ -1,9 +1,11 @@
-# 修狗TV（xiugou-tv）
+# 影视（yingshi-tv）
 
-一款面向 Windows 的桌面影视聚合播放客户端。
+一款面向 Windows 的本地影视播放器与信息聚合客户端：不提供、不存储、不分发任何音视频内容，播放源由你自行配置。
+
+> 本项目基于 [qfw66/xiugou-tv](https://github.com/qfw66/xiugou-tv) 二次开发，按 GPL-3.0 发布；上游作者的贡献与版权归其所有。
 
 <p align="center">
-  <img src="assets/icons/app_icon.png" width="128" alt="修狗TV 图标">
+  <img src="assets/icons/app_icon.png" width="128" alt="影视 图标">
 </p>
 
 <p align="center">
@@ -21,9 +23,9 @@
 
 ## 简介
 
-修狗TV 是一款运行在 Windows 10/11 x64 上的桌面影视客户端。导入你自己的影视配置后，就可以在同一套界面里浏览分类、搜索剧集、选集播放，并随时切换到电视直播。
+影视 是一款运行在 Windows 10/11 x64 上的桌面影视客户端。导入你自己的影视配置后，就可以在同一套界面里浏览分类、搜索剧集、选集播放，并随时切换到电视直播。
 
-播放内核基于 libmpv（media_kit），提供硬件解码、多轨切换、倍速与断点续播。解析层内置 JVM 运行时，可直接运行既有生态的 spider 插件，因此你现有的站点配置基本可以原样复用。
+播放内核基于 libmpv（media_kit），提供硬件解码、多轨切换、倍速与断点续播。解析层支持 JVM 运行时（按需下载），可直接运行既有生态的 spider 插件，因此你现有的站点配置基本可以原样复用。
 
 软件本身不提供任何内容源，播放内容来自你自行添加的配置。
 
@@ -43,7 +45,8 @@
 - 站点中的相对地址（api / ext / jar）自动还原，支持远程与本地文件。
 - 站点自检：逐个体检站点，给出分类数量与可用性结论。
 - 「添加配置源 → 导入本地文件…」可选择配置文件或猫源 ZIP。包内至少各有一个 JSON 和 JAR 即满足文件要求，支持自定义文件名和子目录。
-- 支持猫源 Node、Python、道长 T3 PHP 脚本与 T4 HTTP 接口，以及 XPTV、NowShowTime、drpy2 等订阅格式。Windows 包自带对应运行时。
+- 支持猫源 Node、Python、道长 T3 PHP 脚本与 T4 HTTP 接口，以及 XPTV、NowShowTime、drpy2 等订阅格式。Java / Node / Python / PHP 四类运行时都改为按需下载，用什么装什么。
+- 可在「设置 → 配置源管理 → 自定义站点」直接新建站源：选本地或填远程 JAR，自动扫描包内 Spider 类并生成 `csp_` 站源，不必手写配置 JSON。自建站点独立保存，切换订阅或重新加载配置都不会丢。
 - 影视源和直播源分别支持分类、备注与批量移动。支持网页验证的站点可用独立浏览器资料完成验证后重试。
 
 ### 点播
@@ -59,6 +62,7 @@
 ### 直播
 
 - 在「设置 → 直播源」导入 TXT、M3U、M3U8 或 JSON 频道表，同一路径再次导入可刷新频道。
+- 视频源（主配置）自带的 `lives` 会直接成为直播来源：默认把全部线路合并，也可在「设置 → 直播源 → 视频源里的直播线路」只选其中一条；播放页频道抽屉的「直播源」下拉同样能按线路秒切。
 - 频道按来源分组，支持分组浏览与频道搜索。
 - EPG 节目单：查看频道当前与后续节目。
 - 播放画面中部偏左（含中线）滚轮上滚上一台、下滚下一台，右侧仍调节音量。
@@ -67,10 +71,11 @@
 
 - libmpv 内核，支持 D3D11VA、D3D11VA（拷回模式）、DXVA2 硬件解码，并显示硬解状态。
 - 倍速菜单提供 0.5–3.0 倍速，同片切集、换线和刷新可保留手选倍率。可调音量与画面缩放，还可在画面左上角显示实际分辨率。
-- 点播弹幕可按片名、集数手动搜索匹配。
+- 点播弹幕可按片名、集数手动搜索匹配；服务地址在「设置 → 播放器与解码 → 字幕与弹幕」自行填写，不必重新打包；屏蔽类型、密度、字号、速度等详细样式只在播放页「弹幕设置」抽屉里调。
 - 视频轨、音轨、字幕轨切换，支持关闭字幕；音轨/字幕菜单按真实引擎选择更新。
 - mpv 文本字幕可按 75%、100%、125%、150%、200% 调整字号并恢复默认；位图字幕及 MDK / Media Foundation 不提供此字号能力。
 - mpv 可从系统文件选择器挂载 SRT、ASS、SSA、VTT，取消、坏文件及换片不会串用上一片字幕。
+- 在线字幕搜索：字幕菜单「搜索在线字幕」聚合 assrt（需自填 token）、自定义字幕 API 与 SubtitleCat（免 token），选中即下载并挂到当前集；下载字保留原始字节交给 libass，ASS 样式与 GBK 编码不会被转码破坏。
 - 片头 / 片尾跳过，按毫秒精确配置。
 - 自动换线与手动换线，失败提示统一呈现。
 - 键盘快捷键与鼠标操作并行。
@@ -82,7 +87,7 @@
 
 - 左侧导航 + 顶部搜索 + 站点分类横滚 + 海报网格的桌面布局。
 - 详情、选集、收藏、历史、直播频道与 EPG 以浮层呈现，不打断当前播放。
-- 支持深色 / 浅色 / 跟随系统三档主题，可自定义壁纸。
+- 支持深色 / 浅色 / 跟随系统三档主题，六种主题色（冷灰 / 雾蓝 / 抹茶绿 / 暖橙 / 薰衣草 / 莓红），可自定义壁纸。
 - 记忆窗口大小与位置，并限制最小窗口尺寸。
 - 主侧栏可收起并在重启后保持状态。系统开启减少动画时，首页停止自动轮播。
 
@@ -95,7 +100,16 @@
 
 ## 下载与升级
 
-适用于 Windows 10 / 11 x64，随包提供 Java、Node、Python、PHP 和媒体运行时。安装版与便携版从 [GitHub Releases](https://github.com/qfw66/xiugou-tv/releases/latest) 获取，摘要以该次发行附带的 SHA256SUMS 为准。
+适用于 Windows 10 / 11 x64，随包提供 Flutter 与媒体运行时。四类解析运行时不再内置，全部在「设置 → 运行时」按需下载，用到哪类源装哪个：
+
+| 组件 | 用途 | 体积 |
+|---|---|---|
+| JVM 运行时（Temurin JRE 21） | `.jar` / `.dex` 蜘蛛源 | 约 46 MB |
+| Node 运行时（22.22.2） | 猫源 JS 脚本 | 约 33 MB |
+| Python 运行时（3.13.9，含 requests / lxml / numpy 等） | `.py` 源脚本 | 约 36 MB |
+| PHP 运行时（8.3.37，含 curl / mbstring / openssl / sqlite3） | T3（PHP）源 | 约 33 MB |
+
+装好后优先使用应用自带的那份，不再依赖本机是否装过 Java / Python / Node / PHP；也可以随时删除。安装版与便携版从 [GitHub Releases](https://github.com/Diaojiangjun/yingshi-tv/releases/latest) 获取，摘要以该次发行附带的 SHA256SUMS 为准。
 
 安装版请先完全退出旧程序再运行安装向导；便携版解压到新的可写目录后运行 `xiugou_tv.exe`。升级前在旧版设置中导出备份，记下实际资料目录并退出；确认配置、历史、收藏和偏好正常前，保留旧目录与备份。
 
@@ -106,7 +120,7 @@
 ### 首页
 
 <p align="center">
-  <img src="assets/snapshot/home.png?v=1.0.1" alt="修狗TV 首页：左侧导航、顶部搜索与海报网格" width="900">
+  <img src="assets/snapshot/home.png?v=1.2.1" alt="影视 首页：左侧导航、顶部搜索与海报网格" width="900">
 </p>
 
 <p align="center">左侧导航 + 顶部搜索 + 站点分类横栏 + 海报网格；站点与分类都能一键切换。</p>
@@ -114,7 +128,7 @@
 ### 播放历史
 
 <p align="center">
-  <img src="assets/snapshot/history.png?v=1.0.1" alt="修狗TV 播放历史" width="900">
+  <img src="assets/snapshot/history.png?v=1.0.1" alt="影视 播放历史" width="900">
 </p>
 
 <p align="center">按时间倒序记录剧集与观看进度，点击即从上次位置续播；保留条数可配置（30–500，默认 150）。</p>
@@ -122,7 +136,7 @@
 ### 设置
 
 <p align="center">
-  <img src="assets/snapshot/settings.png?v=1.0.1" alt="修狗TV 设置" width="900">
+  <img src="assets/snapshot/settings.png?v=1.2.1" alt="影视 设置" width="900">
 </p>
 
 <p align="center">主题与壁纸、播放器、数据目录、站点自检与备份恢复集中在这里。</p>
@@ -130,10 +144,12 @@
 
 ## 从源码构建
 
-弹幕与共享跳过片段依赖维护者自部署的在线服务，直接用源码构建时这两项功能不会出现（其余功能不受影响）。
-需要的话请看 [开发者指北](DEVELOPER_GUIDE.md)，按说明部署服务并配置 `config/app.env`。普通用户直接下载 Releases 安装包即可，无需任何配置。
+弹幕与共享跳过片段依赖在线服务，服务地址可以在应用里补：弹幕走「设置 → 播放器与解码 → 字幕与弹幕」填地址与令牌（填了即时生效，留空回落内置值）；共享片段仍只认构建期 `config/app.env`。
+在线字幕不需要构建期配置：assrt token 与自定义字幕 API 都在同一个设置分组里填，不填时仍可用 SubtitleCat 免 token 源（该站点需可访问）。
+直接用源码构建、又没在应用里填地址时，弹幕与共享片段不会出现（其余功能不受影响）。
+需要内置默认值时请看 [开发者指北](DEVELOPER_GUIDE.md)，按说明部署服务并配置 `config/app.env`。普通用户直接下载 Releases 安装包即可，无需任何配置。
 
-从源码制作 Windows 完整包时，`companion/noderuntime/node.exe` 使用 Node.js 24.19.0 的 Windows x64 官方二进制，SHA-256 见 `companion/noderuntime/provenance.json`。PHP 可用 `scripts/setup_php_runtime.ps1` 准备。已有同版本便携包的开发者也可在校验 ZIP 后，将包内 `companion/dist/` 的 `noderuntime`、`phpruntime`、`pyruntime` 分别复制到源码的 `companion/`，将 `runtime/jre` 复制到源码的同名位置。
+从源码打包时默认**不需要**准备 `companion/pyruntime`、`companion/noderuntime/node.exe`、`companion/phpruntime`、`runtime/jre`——它们由应用按需下载，`scripts/build_windows.ps1` 不再要求这些目录，并会清掉上一轮残留。要做离线开箱版本时再准备，并加 `-BundleJre -BundleRuntimes`：Node 用 Node.js 22 的 Windows x64 官方二进制（SHA-256 见 `companion/noderuntime/provenance.json`），PHP 用 `scripts/setup_php_runtime.ps1`。Python wheel 地址写在 `lib/core/runtime/runtime_component.dart`，升级时用 `tools/collect_python_wheels.py` 重新采集；下载链路可用 `dart run scripts/runtime_smoke.dart <jvm|node|python|php>` 验证。
 
 ## 上游来源
 
@@ -142,6 +158,12 @@
 播放基于 [media_kit](https://github.com/media-kit/media-kit)（libmpv）；部分兼容能力借助 [unidbg](https://github.com/zhkl0228/unidbg) 与 [dex2jar](https://github.com/pxb1988/dex2jar) 实现。
 
 安装目录的 `licenses/THIRD_PARTY_LICENSES.md` 列出第三方组件的来源与许可。项目从 v1.1.0 起对新贡献采用 DCO 签名。感谢 @digiprospector 修复音轨和字幕的选中状态，并贡献聚合搜索站点选择。[PR #21](https://github.com/qfw66/xiugou-tv/pull/21) · [PR #25](https://github.com/qfw66/xiugou-tv/pull/25)
+
+## 免责声明
+
+本软件仅为本地播放器与信息聚合客户端，不内置任何影视源、解析接口或直播源；所有站点配置与订阅源均由用户自行提供，其内容与合法性由用户自行负责。请遵守所在地法律法规及内容服务条款，不得用于商业用途或任何违法用途。
+
+完整条款见应用内「设置 → 关于 → 用户协议与免责声明」（首次启动需同意）。
 
 ## 许可证
 

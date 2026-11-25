@@ -12,6 +12,7 @@ class _CinematicVodPage extends StatefulWidget {
     this.onSearchRecommendation,
     this.current,
     this.history,
+    this.sourceProbe,
     this.favorite,
     this.share,
     this.error,
@@ -26,6 +27,9 @@ class _CinematicVodPage extends StatefulWidget {
   final ValueChanged<String>? onSearchRecommendation;
   final CurrentEpisode? current;
   final EpisodeSelection? history;
+
+  /// 测速控制器注入点（测试用）；为 null 时自建。
+  final SourceProbeController? sourceProbe;
   final Widget? favorite, share;
   final String? error;
 
@@ -43,6 +47,17 @@ class _CinematicVodPageState extends State<_CinematicVodPage> {
   int _page = 0;
   bool _descending = false;
   bool _expanded = false;
+
+  /// 线路测速（只影响「默认选中 + 提示」，不改线路数据、不改起播）。
+  late final SourceProbeController _probe =
+      widget.sourceProbe ?? SourceProbeController();
+
+  /// 只 dispose 自己创建的控制器（外部注入的由调用方管）。
+  late final bool _ownsProbe = widget.sourceProbe == null;
+
+  /// 用户手动点过线路后，测速结果不再顶掉他的选择。
+  bool _userPicked = false;
+
   List<PlayFrom> get _sources => widget.detail.sources;
   List<VodEpisode> get _episodes =>
       _sources.isEmpty ? const [] : _sources[_source].episodes;
@@ -86,14 +101,30 @@ class _CinematicVodPageState extends State<_CinematicVodPage> {
         ? currentLine
         : (widget.history?.sourceIndex ?? math.max(0, firstPlayable));
     if (_sources.isNotEmpty) _page = (_resumeIndex(_source) ?? 0) ~/ _perPage;
+    unawaited(_startSourceProbe());
   }
 
   @override
   void dispose() {
+    if (_ownsProbe) _probe.dispose();
     _metadata.dispose();
     _pageScroll.dispose();
     _sourceScroll.dispose();
     super.dispose();
+  }
+
+  /// 测速完成后，仅在「用户还没自己点过、也没在播 / 没从历史进来」时切到最优线路。
+  Future<void> _startSourceProbe() async {
+    if (_sources.length < 2) return;
+    await _probe.start(_sources);
+    if (!mounted || _userPicked) return;
+    if (widget.current != null || widget.history != null) return;
+    final best = _probe.recommended;
+    if (best == null || best == _source || best >= _sources.length) return;
+    setState(() {
+      _source = best;
+      _page = 0;
+    });
   }
 
   void _play(int index) {
@@ -575,6 +606,7 @@ class _CinematicVodPageState extends State<_CinematicVodPage> {
     String range(int p) =>
         '${p * _perPage + 1}-${math.min(count, (p + 1) * _perPage)}';
     void selectSource(int i) => setState(() {
+      _userPicked = true;
       _source = i;
       final resume = _resumeIndex(i);
       _page = resume != null
@@ -609,22 +641,65 @@ class _CinematicVodPageState extends State<_CinematicVodPage> {
           ],
         ),
         if (_sources.length > 1)
-          SizedBox(
-            height: 48,
-            child: HorizontalScrollArea(
-              controller: _sourceScroll,
-              child: ListView.separated(
-                controller: _sourceScroll,
-                scrollDirection: Axis.horizontal,
-                itemCount: _sources.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, i) => Center(
-                  child: ChoiceChip(
-                    label: Text(_sources[i].name),
-                    selected: i == _source,
-                    onSelected: (_) => selectSource(i),
+          ListenableBuilder(
+            listenable: _probe,
+            builder: (context, _) => SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: HorizontalScrollArea(
+                      controller: _sourceScroll,
+                      child: ListView.separated(
+                        controller: _sourceScroll,
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _sources.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (_, i) {
+                          final status = _probe.scoreOf(i);
+                          final isRecommended = _probe.recommended == i;
+                          final failed = status != null && !status.usable;
+                          final chip = ChoiceChip(
+                            // 选中态本身有底色，avatar 留给「优选」标记更清晰。
+                            showCheckmark: false,
+                            avatar: isRecommended
+                                ? Icon(
+                                    Icons.bolt_rounded,
+                                    size: 16,
+                                    color: i == _source
+                                        ? null
+                                        : context.palette.accentInk,
+                                  )
+                                : null,
+                            label: Text(_sources[i].name),
+                            labelStyle: failed
+                                ? TextStyle(color: context.palette.textDim)
+                                : null,
+                            selected: i == _source,
+                            onSelected: (_) => selectSource(i),
+                          );
+                          final tooltip = _probe.tooltipFor(i);
+                          return Center(
+                            child: tooltip == null
+                                ? chip
+                                : Tooltip(
+                                    message: tooltip,
+                                    waitDuration:
+                                        const Duration(milliseconds: 400),
+                                    child: chip,
+                                  ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                ),
+                  _SourceProbeStatus(
+                    loading: _probe.loading,
+                    recommendedLabel: _probe.recommended == null
+                        ? null
+                        : _sources[_probe.recommended!].name,
+                  ),
+                ],
               ),
             ),
           ),

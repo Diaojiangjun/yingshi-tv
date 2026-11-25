@@ -3,6 +3,7 @@ import '../../theme/app_icon_assets.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../widgets/focus_ring.dart';
+import '../../../core/brand.dart';
 
 /// 桌面端主界面沉浸式左侧导航栏（Infuse × Netflix 风格融合）。
 ///
@@ -70,7 +71,7 @@ class DesktopSidebar extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '修狗TV',
+                  AppBrand.name,
                   style: TextStyle(
                     fontSize: AppType.caption,
                     fontWeight: FontWeight.bold,

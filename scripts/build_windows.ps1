@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    修狗TV Windows x64 Automated Build and Packaging Script.
+    影视 Windows x64 Automated Build and Packaging Script.
 .DESCRIPTION
     Compiles the Flutter Windows application in Release mode, collects all required
     runtime dependencies (including MPV and Flutter plugins), and packages the output
@@ -19,6 +19,14 @@
     允许门禁以 /CURRENTUSER 在临时目录测试；现有 HKLM 安装必须保持指纹不变，已有 HKCU 安装仍拒绝。
 .PARAMETER IncludeMdk
     包含 MDK 运行库：要求显式配置 MDK SDK，校验完整运行库与通知。
+.PARAMETER BundleJre
+    把 JRE 打进发布包（离线开箱可用）。默认关闭：JVM 运行时改由应用在
+    「设置 → 运行时」按需下载（约 46 MB），安装包因此小 40 MB 左右。
+    打开后校验 runtime/jre 完整性，并让它进入必需文件清单。
+.PARAMETER BundleRuntimes
+    把 Python / Node / PHP 三类解释器打进发布包。默认关闭：它们同样由
+    「设置 → 运行时」按需下载（合计约 100 MB），启动时用 -Dxiugou.{python,node,php}
+    指向 APPDATA 里的安装位置。打开后要求 companion/dist 下三者齐备。
 .PARAMETER BuildConfigFile
     客户端编译配置路径。测试包和正式包同样要求 TMDB、弹幕和共享片段均已配置。
 #>
@@ -31,6 +39,8 @@ param (
     [switch]$SkipSmoke = $false,
     [switch]$AllowMachineInstallCoexistence = $false,
     [Alias('LocalMdkPreview')][switch]$IncludeMdk = $false,
+    [switch]$BundleJre = $false,
+    [switch]$BundleRuntimes = $false,
     [string]$BuildConfigFile
 )
 
@@ -68,7 +78,7 @@ if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
 }
 
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  修狗TV Build & Packaging System" -ForegroundColor Cyan
+Write-Host "  影视 Build & Packaging System" -ForegroundColor Cyan
 Write-Host "  Target: Windows x64 | Version: $Version" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
@@ -223,10 +233,16 @@ if (-not (Test-Path -LiteralPath $CompanionScript -PathType Leaf)) {
     throw "Required Companion build script not found: $CompanionScript"
 }
 $EmbeddedJre = Join-Path $ProjectRoot "runtime/jre"
-foreach ($requiredRuntimeFile in @("bin/java.exe", "bin/server/jvm.dll")) {
-    if (-not (Test-Path -LiteralPath (Join-Path $EmbeddedJre $requiredRuntimeFile) -PathType Leaf)) {
-        throw "Required embedded JRE file not found: $EmbeddedJre/$requiredRuntimeFile"
+if ($BundleJre) {
+    foreach ($requiredRuntimeFile in @("bin/java.exe", "bin/server/jvm.dll")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $EmbeddedJre $requiredRuntimeFile) -PathType Leaf)) {
+            throw "Required embedded JRE file not found: $EmbeddedJre/$requiredRuntimeFile"
+        }
     }
+} else {
+    # 默认不内置：JRE 由应用按需下载到 %APPDATA%\XiugouTV\runtime\jre。
+    # 构建机没有 runtime/jre 也能出包，这正是「不打包」的意义。
+    Write-Host "  [*] JRE 不随包分发：首次使用 jar 源时由「设置 → 运行时」按需下载。" -ForegroundColor Cyan
 }
 
 Write-Host "  [*] Building companion-service.jar..." -ForegroundColor Cyan
@@ -282,38 +298,46 @@ New-Item -ItemType Directory -Path $TargetUnidbgDir -Force | Out-Null
 foreach ($lib in $CompanionUnidbgJars) {
     Copy-Item -LiteralPath $lib.FullName -Destination $TargetUnidbgDir -Force
 }
-# py 源运行时（companion/build.ps1 产出到 companion/dist）：PyRuntime 按 jar 同级的 dist/pyshell、
-# dist/pyruntime 查找；缺失时会回退到 PATH 上的 python —— 只有开发机有，发布包里必须自带。
-foreach ($pyDir in @("pyshell", "pyruntime")) {
-    $sourcePyDir = Join-Path $ProjectRoot "companion/dist/$pyDir"
-    if (Test-Path -LiteralPath $sourcePyDir -PathType Container) {
-        Copy-Item -LiteralPath $sourcePyDir -Destination $TargetCompanionDir -Recurse -Force
-    } else {
-        throw "Companion build did not produce companion/dist/$pyDir (py sources would break in the release package)."
-    }
+# py 源脚本宿主 pyshell 只有几百 KB，必须随包；解释器（pyruntime）改为应用内按需下载。
+# PyRuntime 的查找顺序是 -Dxiugou.python → jar 同级 pyruntime → PATH，所以不带也能跑，
+# 但只对装了 Python 的开发机成立。
+$PyShellDist = Join-Path $ProjectRoot "companion/dist/pyshell"
+if (-not (Test-Path -LiteralPath $PyShellDist -PathType Container)) {
+    throw "Companion build did not produce companion/dist/pyshell (py sources would break in the release package)."
 }
-# 猫源由独立 Node 进程执行；发布包不得依赖开发机 PATH 或上一轮残留文件。
-$NodeRuntimeDir = Join-Path $ProjectRoot "companion/dist/noderuntime"
-foreach ($requiredNodeFile in @("node.exe", "LICENSE")) {
-    $requiredNodePath = Join-Path $NodeRuntimeDir $requiredNodeFile
-    if (-not (Test-Path -LiteralPath $requiredNodePath -PathType Leaf) -or
-        (Get-Item -LiteralPath $requiredNodePath).Length -eq 0) {
-        throw "Companion build did not produce noderuntime/$requiredNodeFile (cat sources require the bundled Node runtime)."
+Copy-Item -LiteralPath $PyShellDist -Destination $TargetCompanionDir -Recurse -Force
+
+# 三类解释器默认都不随包（安装包小 ~100 MB），由「设置 → 运行时」按需下载到 APPDATA，
+# 启动时用 -Dxiugou.{python,node,php} 指过去。需要离线开箱版本时加 -BundleRuntimes。
+$OptionalRuntimes = @(
+    @{ Dir = 'pyruntime'; Probe = 'python.exe' },
+    @{ Dir = 'noderuntime'; Probe = 'node.exe' },
+    @{ Dir = 'phpruntime'; Probe = 'php.exe' }
+)
+if ($BundleRuntimes) {
+    foreach ($runtime in $OptionalRuntimes) {
+        $runtimeDir = Join-Path $ProjectRoot "companion/dist/$($runtime.Dir)"
+        $probePath = Join-Path $runtimeDir $runtime.Probe
+        if (-not (Test-Path -LiteralPath $probePath -PathType Leaf)) {
+            throw "Companion build did not produce $($runtime.Dir)/$($runtime.Probe). Run the matching setup script, or drop -BundleRuntimes."
+        }
+        Copy-Item -LiteralPath $runtimeDir -Destination $TargetCompanionDir -Recurse -Force
+        Write-Host "  [+] Bundled $($runtime.Dir) (offline runtime)." -ForegroundColor Green
     }
-}
-Copy-Item -LiteralPath $NodeRuntimeDir -Destination $TargetCompanionDir -Recurse -Force
-# PHP type:3 sources need their own interpreter; remote type:4 sources use HTTP.
-$PhpRuntimeDir = Join-Path $ProjectRoot 'companion/dist/phpruntime'
-foreach ($requiredPhpFile in @('php.exe', 'php8.dll', 'license.txt', 'readme-redist-bins.txt', 'cacert.pem', 'ext/php_curl.dll', 'ext/php_mbstring.dll', 'ext/php_openssl.dll', 'ext/php_sqlite3.dll')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $PhpRuntimeDir $requiredPhpFile) -PathType Leaf)) {
-        throw "PHP runtime missing: $requiredPhpFile. Run scripts/setup_php_runtime.ps1 first."
+} else {
+    # 上一轮留下的这些目录会让安装包悄悄涨回 100+ MB，必须主动清掉。
+    foreach ($runtime in $OptionalRuntimes) {
+        $staleDir = Join-Path $TargetCompanionDir $runtime.Dir
+        if (Test-Path -LiteralPath $staleDir) {
+            Remove-Item -LiteralPath $staleDir -Recurse -Force
+        }
     }
+    Write-Host "  [i] Python / Node / PHP 运行时未随包：首次使用对应源时由「设置 → 运行时」下载。" -ForegroundColor DarkGray
 }
-Copy-Item -LiteralPath $PhpRuntimeDir -Destination $TargetCompanionDir -Recurse -Force
 $BundledCompanionFiles = @(Get-ChildItem -LiteralPath $TargetCompanionDir -Recurse -File)
 Write-Host "  [+] Bundled companion-service.jar + $($CompanionLibJars.Count) runtime lib(s) + $($CompanionUnidbgJars.Count) guard-decrypt lib(s) ($($BundledCompanionFiles.Count) files total)." -ForegroundColor Green
 
-Write-Host "  [*] Bundling embedded minimal JRE..." -ForegroundColor Cyan
+Write-Host "  [*] Preparing runtime directory..." -ForegroundColor Cyan
 $TargetRuntimeDir = [System.IO.Path]::GetFullPath((Join-Path $BuildOutputDir "runtime"))
 $TargetJreDir = Join-Path $TargetRuntimeDir "jre"
 if (-not $TargetJreDir.StartsWith([System.IO.Path]::GetFullPath($BuildOutputDir) + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -322,10 +346,19 @@ if (-not $TargetJreDir.StartsWith([System.IO.Path]::GetFullPath($BuildOutputDir)
 if (Test-Path -LiteralPath $TargetJreDir) {
     Remove-Item -LiteralPath $TargetJreDir -Recurse -Force
 }
-# invariant: 父目录必须已存在，避免 Copy-Item 将 jre 重命名为 runtime。
-New-Item -ItemType Directory -Path $TargetRuntimeDir -Force | Out-Null
-Copy-Item -LiteralPath $EmbeddedJre -Destination $TargetRuntimeDir -Recurse -Force
-Write-Host "  [+] Bundled embedded JRE to release directory." -ForegroundColor Green
+if ($BundleJre) {
+    # invariant: 父目录必须已存在，避免 Copy-Item 将 jre 重命名为 runtime。
+    New-Item -ItemType Directory -Path $TargetRuntimeDir -Force | Out-Null
+    Copy-Item -LiteralPath $EmbeddedJre -Destination $TargetRuntimeDir -Recurse -Force
+    Write-Host "  [+] Bundled embedded JRE to release directory." -ForegroundColor Green
+} else {
+    # 上一轮遗留的 runtime/jre 必须清掉，否则会被当作本轮产物打包（体积悄悄涨回 40 MB）。
+    if (Test-Path -LiteralPath $TargetRuntimeDir) {
+        $remaining = @(Get-ChildItem -LiteralPath $TargetRuntimeDir -Force)
+        if ($remaining.Count -eq 0) { Remove-Item -LiteralPath $TargetRuntimeDir -Force }
+    }
+    Write-Host "  [+] JRE 按需下载：发布包不含 runtime/jre。" -ForegroundColor Green
+}
 
 # 3.3 VC++ 运行库应用本地部署（issue #2：用户机未装 vc_redist 时报缺 VCRUNTIME140_1.dll、打不开）。
 # xiugou_tv.exe 与各插件 DLL 以 /MD 链接 MSVCP140 / VCRUNTIME140 / VCRUNTIME140_1；Windows 先在 exe 目录
@@ -381,10 +414,10 @@ $FfmpegLicense = Join-Path $ProjectRoot 'licenses/FFmpeg-COPYING.LGPLv2.1'
 if (Test-Path -LiteralPath $FfmpegLicense) { Copy-Item -LiteralPath $FfmpegLicense -Destination $ReleaseLicenses -Force }
 $PackageStage = Join-Path $ProjectRoot ("build/packaging/" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $PackageStage -Force | Out-Null
-$ApplicationStage = New-StagedApplicationTree -SourceDir $BuildOutputDir -StageDir (Join-Path $PackageStage 'application') -IncludeMdk:$IncludeMdk
+$ApplicationStage = New-StagedApplicationTree -SourceDir $BuildOutputDir -StageDir (Join-Path $PackageStage 'application') -IncludeMdk:$IncludeMdk -IncludeJre:$BundleJre -IncludeRuntimes:$BundleRuntimes
 $StagedAppDir = $ApplicationStage.Root
 $InnoFileList = Join-Path $PackageStage 'application-files.iss'
-Write-PackageInnoFileList -StageDir $StagedAppDir -DestinationPath $InnoFileList -IncludeMdk:$IncludeMdk
+Write-PackageInnoFileList -StageDir $StagedAppDir -DestinationPath $InnoFileList -IncludeMdk:$IncludeMdk -IncludeJre:$BundleJre -IncludeRuntimes:$BundleRuntimes
 Write-Host "  [+] Clean application stage: $StagedAppDir ($($ApplicationStage.Files.Count) files; $($ApplicationStage.Excluded.Count) state/cache/log paths excluded)." -ForegroundColor Green
 $Artifacts = @()
 if (-not $SkipZip) {
@@ -482,6 +515,8 @@ if ($Artifacts.Count -gt 0) {
         if ($SkipZip) { $GateArgs += "-SkipZip" }
         if ($AllowMachineInstallCoexistence) { $GateArgs += '-AllowMachineInstallCoexistence' }
         if ($IncludeMdk) { $GateArgs += '-IncludeMdk' }
+        if (-not $BundleJre) { $GateArgs += '-JreOnDemand' }
+        if (-not $BundleRuntimes) { $GateArgs += '-RuntimesOnDemand' }
         if ($SkipInstaller) { $GateArgs += "-SkipInstaller" }
         & $PowerShellExe @GateArgs
         if ($LASTEXITCODE -ne 0) {

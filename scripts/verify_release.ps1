@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    修狗TV 发布产物冒烟门禁：任何一项 FAIL 即以退出码 1 结束，调用方据此中止发布。
+    影视 发布产物冒烟门禁：任何一项 FAIL 即以退出码 1 结束，调用方据此中止发布。
 
 .DESCRIPTION
     针对 v1.0.1 / v1.0.2 「安装包与便携包运行后打不开」两类事故设计：
@@ -43,6 +43,8 @@ param(
     [switch]$SkipInstaller,
     [switch]$AllowMachineInstallCoexistence,
     [Alias('LocalMdkPreview')][switch]$IncludeMdk,
+    [switch]$JreOnDemand,
+    [switch]$RuntimesOnDemand,
     [string]$BuildConfigFile
 )
 
@@ -198,7 +200,7 @@ function Get-NormalizedVersion([string]$Raw) {
 }
 
 # Required entries are shared with the staging seam, including bundled Python and licenses.
-function Get-RequiredEntries { Get-PackageRequiredEntries -IncludeMdk:$IncludeMdk }
+function Get-RequiredEntries { Get-PackageRequiredEntries -IncludeMdk:$IncludeMdk -IncludeJre:(-not $JreOnDemand) -IncludeRuntimes:(-not $RuntimesOnDemand) }
 
 function Test-PackageLayout([string]$Scope, [string]$Root, [switch]$Installed) {
     Invoke-Check $Scope '内置 TMDB、弹幕、共享片段配置' {
@@ -225,6 +227,14 @@ function Test-PackageLayout([string]$Scope, [string]$Root, [switch]$Installed) {
         if (-not (Test-Path -LiteralPath (Join-Path $Root "data/flutter_assets") -PathType Container)) { $missing += "data/flutter_assets/" }
         if ($missing.Count -gt 0) { throw "缺少 $($missing.Count) 项：$($missing -join ', ')" }
         "$(@(Get-RequiredEntries).Count + 2) 项齐全"
+    }
+
+    if ($RuntimesOnDemand) {
+        # 三类解释器由应用按需下载，包里本来就没有：不能判 FAIL，也不能假装验过。
+        Invoke-Check $Scope "Python / Node / PHP 按需下载（未随包）" {
+            "companion 下不随包三类解释器，由「设置 → 运行时」下载"
+        }
+        return $true
     }
 
     Invoke-Check $Scope "猫源 Node 运行时" {
@@ -294,6 +304,12 @@ function Test-PackageLayout([string]$Scope, [string]$Root, [switch]$Installed) {
 }
 
 function Test-BundledJre([string]$Scope, [string]$Root) {
+    if ($JreOnDemand) {
+        # JRE 由应用按需下载，发布包里本来就没有：这一项不该判 FAIL，
+        # 但也不能假装验证过——明确标注「未随包」。
+        Invoke-Check $Scope "JRE 按需下载（未随包）" { "runtime/jre 不随包，由设置 → 运行时下载" }
+        return
+    }
     Invoke-Check $Scope "内置 JRE 可运行" {
         $java = Join-Path $Root "runtime/jre/bin/java.exe"
         $previous = $ErrorActionPreference
@@ -466,7 +482,7 @@ $savedEnvironment = @{}
 $locationPushed = $false
 try {
     if (-not $StagedAppDir) {
-        $reference = New-StagedApplicationTree -SourceDir (Join-Path $ProjectRoot 'build/windows/x64/runner/Release') -StageDir (Join-Path $SmokeRoot 'reference') -IncludeMdk:$IncludeMdk
+        $reference = New-StagedApplicationTree -SourceDir (Join-Path $ProjectRoot 'build/windows/x64/runner/Release') -StageDir (Join-Path $SmokeRoot 'reference') -IncludeMdk:$IncludeMdk -IncludeJre:(-not $JreOnDemand) -IncludeRuntimes:(-not $RuntimesOnDemand)
         $StagedAppDir = $reference.Root
     }
     $cleanReference = Get-PackageSelection -SourceDir $StagedAppDir -RejectExcluded

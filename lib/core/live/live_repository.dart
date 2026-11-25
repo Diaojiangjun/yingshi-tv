@@ -80,6 +80,9 @@ class LiveRepository {
   LiveSourceHistory get sourceHistory => _sourceHistory;
   List<String> get sourceCategories => _sourceHistory.categoryNames;
   String? get sourceHistoryWarning => _sourceHistoryWarning;
+  /// 跟随主配置源时选中的 lives 序号（null = 全部线路合并）。
+  int? get mainLiveIndex => _sourceHistory.mainLiveIndex;
+
   /// 元数据保存通知，仅供管理界面刷新，不驱动频道或播放加载。
   Stream<void> get sourceHistoryChanges => _sourceHistoryChanges.stream;
 
@@ -258,7 +261,7 @@ class LiveRepository {
       active = refreshed.entry;
       refreshedChannels = refreshed.channels;
     }
-    final lives = active == null ? configured : _livesOf(active);
+    final lives = active == null ? _mainLives(configured) : _livesOf(active);
     final livesBase = active == null ? baseUri : Uri.tryParse(active.location);
     // 成功刷新直接使用已验证的频道，避免脚本再次执行并生成第二批代理地址。
     // 空列表不进 async 辅助方法：多一次 await 会让起播晚一个微任务（与改动前时序一致）。
@@ -350,6 +353,16 @@ class LiveRepository {
 
   static int _playableCount(Iterable<Live> channels) =>
       channels.where(_isPlayable).map((channel) => channel.key).toSet().length;
+
+  /// 跟随主配置源时按记住的线路挑一条；没选或序号越界（换了配置、线路变少）
+  /// 时回退「全部合并」，行为与改造前一致。
+  List<Live> _mainLives(List<Live> configured) {
+    final index = _sourceHistory.mainLiveIndex;
+    if (index == null || index < 0 || index >= configured.length) {
+      return configured;
+    }
+    return [configured[index]];
+  }
 
   /// 独立直播源对应的 lives：配置类型用快照，清单类型就是清单地址本身。
   List<Live> _livesOf(LiveSourceEntry entry) => entry.kind ==
@@ -530,6 +543,7 @@ class LiveRepository {
         active: history.active,
         entries: history.entries,
         categories: SourceCategories(history.categoryNames).create(name).names,
+        mainLiveIndex: history.mainLiveIndex,
       ), notify: false);
 
   /// 重命名直播分类：目录与条目归属一次提交，不触发播放通知。
@@ -540,6 +554,7 @@ class LiveRepository {
         return LiveSourceHistory(
           active: history.active,
           categories: categories.names,
+          mainLiveIndex: history.mainLiveIndex,
           entries: List.unmodifiable(history.entries.map((entry) =>
               entry.category == from ? entry.copyWith(category: value) : entry)),
         );
@@ -553,6 +568,7 @@ class LiveRepository {
         return LiveSourceHistory(
           active: history.active,
           categories: categories.names,
+          mainLiveIndex: history.mainLiveIndex,
           entries: List.unmodifiable(history.entries.map((entry) =>
               entry.category == value ? entry.copyWith(category: '') : entry)),
         );
@@ -569,6 +585,7 @@ class LiveRepository {
       return LiveSourceHistory(
         active: history.active,
         categories: SourceCategories(history.categoryNames).include([value]).names,
+        mainLiveIndex: history.mainLiveIndex,
         entries: List.unmodifiable(history.entries.map((entry) => ids.contains(entry.location)
             ? entry.copyWith(category: value) : entry)),
       );
@@ -585,6 +602,17 @@ class LiveRepository {
   /// 不再使用独立直播源（历史保留），直播回退到主配置源。
   Future<void> clearActiveSource() =>
       _commitSourceHistory((history) => history.deactivate());
+
+  /// 选择主配置里的第 [index] 条直播线路（null = 全部合并）。
+  ///
+  /// 只在「跟随主配置源」时有意义；独立直播源优先，不受影响。
+  /// 变化会经 [sourceChanges] 通知宿主重载频道。
+  Future<void> selectMainLive(int? index) async {
+    final value = index == null || index < 0 ? null : index;
+    await loadSourceHistory();
+    if (_sourceHistory.mainLiveIndex == value) return;
+    await _commitSourceHistory((history) => history.withMainLive(value));
+  }
 
   /// 拉取并识别独立直播源地址。`value` 为 [LiveSourceEntry]（可设为直播源）或
   /// [Live]（[allowSingle] 时只有一个频道 / 是播放流本身）。
@@ -749,7 +777,9 @@ class LiveRepository {
       } finally {
         if (await temp.exists()) await temp.delete();
       }
-      final changed = !_sameEntry(_sourceHistory.activeEntry, next.activeEntry);
+      // 只换「主配置的第几条线路」也算直播来源变化，需要重载频道。
+      final changed = !_sameEntry(_sourceHistory.activeEntry, next.activeEntry) ||
+          _sourceHistory.mainLiveIndex != next.mainLiveIndex;
       _sourceHistory = next;
       _sourceHistoryWarning = null;
       if (!_disposed) _sourceHistoryChanges.add(null);

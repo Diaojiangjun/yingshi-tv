@@ -1,6 +1,6 @@
-# 修狗TV 共享跳过片段服务（Cloudflare Worker + D1）
+# 影视 共享跳过片段服务（Cloudflare Worker + D1）
 
-修狗TV 播放页的「片段」功能会把用户标记的时间片段（片头 / 片尾 / 广告……）提交到这里，
+影视 播放页的「片段」功能会把用户标记的时间片段（片头 / 片尾 / 广告……）提交到这里，
 其他用户播放同一集时拉取结果，按动作「跳过 / 静音 / 精彩时刻」处理。
 
 - 客户端代码：`lib/core/segments/`、`lib/ui/desktop/player/segment_panel.dart`
@@ -135,7 +135,7 @@ npx wrangler deploy
 curl https://xiugou-segments.<你的子域>.workers.dev/v1/health
 ```
 
-部署完成后，在修狗TV 项目根目录的 `config/app.env`（不入库）里填上：
+部署完成后，在影视 项目根目录的 `config/app.env`（不入库）里填上：
 
 ```env
 XIUGOU_SEGMENTS_URL="https://xiugou-segments.<你的子域>.workers.dev"

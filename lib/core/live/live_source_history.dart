@@ -113,11 +113,30 @@ class LiveSourceHistory {
   final List<LiveSourceEntry> entries;
   final List<String> categories;
 
+  /// 跟随主配置源时只用第几条 lives（0 起）；null = 全部线路合并。
+  ///
+  /// 主配置常带多条直播线路（央视频道 / 虎牙 / 斗鱼…），合并后频道数以千计且
+  /// 无法只播其中一条。这里记住用户选的那条，越界时按「全部」处理。
+  final int? mainLiveIndex;
+
   /// 兼容旧记录里的分类；空目录项不会随最后一条源删除而消失。
   List<String> get categoryNames => SourceCategories(categories)
       .include(entries.map((entry) => entry.category)).names;
 
-  const LiveSourceHistory({this.active, this.entries = const [], this.categories = const []});
+  const LiveSourceHistory({
+    this.active,
+    this.entries = const [],
+    this.categories = const [],
+    this.mainLiveIndex,
+  });
+
+  /// 只改主配置线路选择，其它字段原样保留。
+  LiveSourceHistory withMainLive(int? index) => LiveSourceHistory(
+        active: active,
+        entries: entries,
+        categories: categories,
+        mainLiveIndex: index == null || index < 0 ? null : index,
+      );
 
   LiveSourceEntry? get activeEntry {
     if (active == null) return null;
@@ -131,6 +150,7 @@ class LiveSourceHistory {
   LiveSourceHistory activate(LiveSourceEntry entry) => LiveSourceHistory(
         active: entry.location,
         categories: categoryNames,
+        mainLiveIndex: mainLiveIndex,
         entries: List.unmodifiable([
           entry,
           ...entries.where((item) => item.location != entry.location),
@@ -141,16 +161,19 @@ class LiveSourceHistory {
   LiveSourceHistory remove(String location) => LiveSourceHistory(
         active: active == location ? null : active,
         categories: categoryNames,
+        mainLiveIndex: mainLiveIndex,
         entries: List.unmodifiable(
             entries.where((entry) => entry.location != location)),
       );
 
-  LiveSourceHistory deactivate() => LiveSourceHistory(entries: entries, categories: categoryNames);
+  LiveSourceHistory deactivate() =>
+      LiveSourceHistory(entries: entries, categories: categoryNames, mainLiveIndex: mainLiveIndex);
 
   /// 只更新已有记录（刷新配置快照 / 频道数），不改变当前项与顺序。
   LiveSourceHistory replace(LiveSourceEntry entry) => LiveSourceHistory(
         active: active,
         categories: categoryNames,
+        mainLiveIndex: mainLiveIndex,
         entries: List.unmodifiable(entries.map((item) =>
             item.location == entry.location ? entry : item)),
       );
@@ -171,12 +194,15 @@ class LiveSourceHistory {
       }
     }
     final active = json['active'];
+    final rawIndex = json['mainLiveIndex'];
     final history = LiveSourceHistory(
       active: active is String && active.trim().isNotEmpty
           ? active.trim()
           : null,
       entries: List.unmodifiable(entries),
       categories: SourceCategories.fromJson(json['categories']).names,
+      // 负数 / 非整数按「全部线路」处理，不因坏字段丢整份设置。
+      mainLiveIndex: rawIndex is int && rawIndex >= 0 ? rawIndex : null,
     );
     // 指向已不存在的记录时按「跟随主配置源」处理。
     return history.activeEntry == null && history.active != null
@@ -186,6 +212,7 @@ class LiveSourceHistory {
 
   Map<String, dynamic> toJson() => {
         'active': active,
+        if (mainLiveIndex != null) 'mainLiveIndex': mainLiveIndex,
         'categories': categoryNames,
         'entries': entries.map((entry) => entry.toJson()).toList(),
       };

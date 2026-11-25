@@ -114,13 +114,23 @@ String _deriveName(String? location, ConfigSourceKind? kind) {
 String _urlDisplayName(String location) {
   final parsed = Uri.tryParse(location);
   if (parsed == null || parsed.host.isEmpty) return _fileDisplayName(location);
-  var host = parsed.host;
+  var host = _decodeHost(parsed.host);
   if (host.startsWith('www.')) host = host.substring(4);
   final segments = parsed.pathSegments
       .where((segment) => segment.trim().isNotEmpty)
       .toList();
   final combined = segments.isEmpty ? host : '$host/${segments.last}';
   return _shorten(combined);
+}
+
+/// `Uri.host` 对非 ASCII 域名返回百分号编码（`www.%E9%A5%AD...`），
+/// 直接展示会变成一长串 `%E9`。这里还原成可读的域名。
+String _decodeHost(String host) {
+  try {
+    return Uri.decodeComponent(host);
+  } catch (_) {
+    return host;
+  }
 }
 
 String _fileDisplayName(String location) {

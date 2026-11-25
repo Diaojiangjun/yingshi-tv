@@ -7,6 +7,7 @@ import '../../../core/config/models/vod_config.dart';
 import '../../../core/danmaku/danmaku_controller.dart';
 import '../../../core/danmaku/danmaku_settings.dart';
 import '../../../core/danmaku/live_danmaku_models.dart';
+import '../../../core/api/line_probe_feed.dart';
 import '../../../core/player/decode_diagnostics.dart';
 import '../../../core/player/embedded_playback.dart';
 import '../../../core/player/models/player_settings.dart';
@@ -16,6 +17,7 @@ import '../../../core/player/mpv_player_engine.dart';
 import '../../../core/player/playback_intent.dart';
 import '../../../core/player/seek_recovery_controller.dart';
 import '../../../core/segments/segment_models.dart';
+import '../../../core/subtitle/subtitle_models.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../keyboard/player_shortcuts.dart';
@@ -41,6 +43,7 @@ import 'segment_panel.dart';
 import 'segment_runner.dart';
 import 'playback_source_nav.dart';
 import 'local_subtitle_picker.dart';
+import 'subtitle_search_dialog.dart';
 import 'subtitle_scale_menu.dart';
 
 export 'playback_source_nav.dart';
@@ -249,6 +252,13 @@ class PlayerSubtitleTracksNav {
   final Future<bool> Function(String path, {required int session})? onLoadLocal;
   final SubtitleFilePicker? filePicker;
 
+  /// 在线字幕检索条件（为空时不显示「搜索在线字幕」）。
+  final SubtitleQuery Function()? readOnlineQuery;
+
+  /// 把下载好的字幕挂到当前会话；返回是否成功。
+  final Future<bool> Function(SubtitleFile file, {required int session})?
+      onApplyOnline;
+
   const PlayerSubtitleTracksNav({
     required List<TrackInfo> Function() readTracks,
     required this.tracksStream,
@@ -260,6 +270,8 @@ class PlayerSubtitleTracksNav {
     this.onSetScale,
     this.onLoadLocal,
     this.filePicker,
+    this.readOnlineQuery,
+    this.onApplyOnline,
   }) : _readTracks = readTracks;
 }
 
@@ -293,6 +305,24 @@ class PlayerLineOption {
   });
 }
 
+/// 播放器面板「线路」行尾文案（纯函数，便于单测）。
+///
+/// 优先级是刻意的：**确定状态压过测速建议**。
+/// - 当前线路 → `当前线路`（不需要再提示它测得多快）
+/// - 本会话确认失败 → `已失败`（比「测速不通」更硬，测速只是采样）
+/// - 测速失败 → `测速不通`（中性措辞：403 防盗链带上 Referer 往往能播）
+/// - 有结论 → 短摘要（`1080p · 3.2 MB/s`；完整摘要含延迟，放 Tooltip）
+String? lineRowValueFor({
+  required bool current,
+  required bool unavailable,
+  LineProbeHint? hint,
+}) {
+  if (current) return '当前线路';
+  if (unavailable) return '已失败';
+  if (hint == null) return null;
+  return hint.failed ? '测速不通' : hint.short;
+}
+
 /// 播放器内线路视图模型（SET-12 重做；由宿主装配，组件保持哑视图）。
 ///
 /// 只有一条线路时宿主应传 null，面板不显示「线路」分组。
@@ -305,19 +335,30 @@ class PlayerLineNav {
   /// `index` 是 `session.sources` 的下标（不是 options 的下标）。
   final void Function(int index) onSelect;
 
+  /// 线路测速结果（可选）。异步到达，面板会订阅它只刷新线路区。
+  final LineProbeFeed? probe;
+
   const PlayerLineNav({
     required this.options,
     required this.busy,
     required this.onSelect,
+    this.probe,
   });
 }
 
 /// 从真实 mpv 引擎装配三个轨道视图模型（宿主使用；测试可用假引擎直接验证接线）。
+///
+/// [readOnlineQuery] 有值时字幕菜单才会出现「搜索在线字幕」——
+/// 直播 / 直链推送没有剧集信息，宿主传 null 即可，不需要额外开关。
 ({
   PlayerAudioTracksNav audio,
   PlayerSubtitleTracksNav subtitle,
   PlayerVideoTracksNav video,
-}) buildPlayerTrackNavs(MpvPlayerEngine engine, {SubtitleFilePicker? filePicker}) =>
+}) buildPlayerTrackNavs(
+  MpvPlayerEngine engine, {
+  SubtitleFilePicker? filePicker,
+  SubtitleQuery Function()? readOnlineQuery,
+}) =>
     (
       audio: PlayerAudioTracksNav(
         readTracks: () => engine.audioTracks,
@@ -335,6 +376,12 @@ class PlayerLineNav {
         onSetScale: engine.setSubtitleScale,
         onLoadLocal: engine.loadLocalSubtitle,
         filePicker: filePicker,
+        readOnlineQuery: readOnlineQuery,
+        onApplyOnline: readOnlineQuery == null
+            ? null
+            : (file, {required int session}) =>
+                engine.loadSubtitleBytes(file.bytes, file.fileName,
+                    session: session),
       ),
       video: PlayerVideoTracksNav(
         tracks: engine.videoTracks,
@@ -343,6 +390,37 @@ class PlayerLineNav {
         isDisabled: engine.isVideoDisabled,
       ),
     );
+
+/// 「一起看」（局域网同步观看）的入口视图模型。
+///
+/// 房主与观众共用同一个入口：面板里显示房间码 / 房主地址，动作由宿主负责。
+/// 组件保持哑视图——不持有 socket、不读房间状态。
+///
+/// 状态用取值函数 + [listenable] 暴露，而不是三个普通字段：房间状态每秒都在变
+/// （观众轮询），如果让整个播放器跟着重建，等于每秒重画一遍控制条。
+class PlayerPartyNav {
+  /// 已在房间里（房主或观众）。
+  final bool Function() isActive;
+
+  /// 本机是房主。
+  final bool Function() isHosting;
+
+  /// 行尾摘要，例如 `房主 · ABC234` / `跟随 客厅电脑`。
+  final String Function() statusText;
+
+  /// 房间状态变化时通知（只刷新入口按钮与面板那一行）。
+  final Listenable listenable;
+
+  final VoidCallback onOpen;
+
+  const PlayerPartyNav({
+    required this.isActive,
+    required this.isHosting,
+    required this.statusText,
+    required this.listenable,
+    required this.onOpen,
+  });
+}
 
 /// Windows 桌面端高清视频渲染与交互控制播放器组件
 class DesktopVideoPlayer extends StatefulWidget {
@@ -483,6 +561,10 @@ class DesktopVideoPlayer extends StatefulWidget {
 
   /// §44 共享片段；为空时不显示「片段」按钮与执行器（未配置服务 / 直播 / 推送）。
   final PlayerSegmentsNav? segmentsNav;
+
+  /// 「一起看」入口；为空时不显示（直播 / 推送 / 单集预览等不参与的场景）。
+  final PlayerPartyNav? partyNav;
+
   const DesktopVideoPlayer({
     super.key,
     required this.playerEngine,
@@ -531,6 +613,7 @@ class DesktopVideoPlayer extends StatefulWidget {
     this.danmakuNav,
     this.liveDanmakuNav,
     this.segmentsNav,
+    this.partyNav,
   });
 
   @override
@@ -581,6 +664,7 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   bool _channelWheelUp = false;
   VoidCallback? _refreshSettingsPanel;
   bool _loadingLocalSubtitle = false;
+  bool _loadingOnlineSubtitle = false;
 
   bool get _drawerOrPanelOpen =>
       _episodeDrawerOpen ||
@@ -1720,6 +1804,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                                           _buildSkipMarkerButtons(),
                                           if (widget.segmentsNav != null)
                                             _buildSegmentsButton(),
+                                          if (widget.partyNav != null)
+                                            _buildPartyButton(),
                                           if (_hasDanmaku)
                                             _buildDanmakuButton(),
                                           if (_hasDanmakuSearch)
@@ -2691,6 +2777,32 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     );
   }
 
+  /// 「一起看」入口：进行中换成实心图标 + 高亮色，一眼能看出房间还开着。
+  Widget _buildPartyButton() {
+    final nav = widget.partyNav;
+    if (nav == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: nav.listenable,
+      builder: (context, _) {
+        final active = nav.isActive();
+        final status = nav.statusText();
+        return _buildBottomControlTooltip(
+          message: active
+              ? '一起看（${status.isEmpty ? '进行中' : status}）'
+              : '一起看（局域网同看）',
+          child: _ControlButton(
+            icon: active ? Icons.groups_rounded : Icons.groups_outlined,
+            activeColor: active ? const Color(0xFF7DD3FC) : null,
+            onPressed: () {
+              _onUserActivity();
+              nav.onOpen();
+            },
+          ),
+        );
+      },
+    );
+  }
+
   /// 面板是否已打开：防止连点齿轮叠出多层对话框。
   bool _panelOpen = false;
 
@@ -2710,6 +2822,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   Future<void> _openSettingsPanel() async {
     if (_panelOpen) return;
     _decodeDiagnostics = _readDecodeDiagnostics();
+    // 用户要看线路列表了，这时才开始测速（不在进播放页就跑，省流量）。
+    widget.lineNav?.probe?.ensureStarted();
     var panelAlive = true;
     await _runSideDrawer(
       width: 340,
@@ -2757,10 +2871,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   Widget _buildSettingsPanel(BuildContext context, VoidCallback refreshPanel) {
     final imageRows = <Widget>[];
     final trackRows = <Widget>[];
-    final lineRows = <Widget>[];
     final qualityRows = <Widget>[];
     final playRows = <Widget>[];
     final skipRows = <Widget>[];
+    final partyRows = <Widget>[];
 
     // 画面：画面比例（单选，与设置中心同源）
     if (widget.onScaleChanged != null) {
@@ -2936,25 +3050,35 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       ));
     }
 
-    // 线路：手动换线（SET-12 重做）。当前线路勾选、已失败灰显，都不可点。
-    final lineNav = widget.lineNav;
-    if (lineNav != null && lineNav.options.length > 1) {
-      for (final option in lineNav.options) {
-        final enabled = !lineNav.busy && !option.current && !option.unavailable;
-        lineRows.add(_panelActionRow(
-          icon: option.current
-              ? Icons.check_circle_rounded
-              : Icons.swap_horiz_rounded,
-          label: option.name,
-          value: option.current ? '当前线路' : (option.unavailable ? '已失败' : null),
-          enabled: enabled,
-          onTap: () {
-            Navigator.of(context).pop();
-            lineNav.onSelect(option.index);
-          },
-        ));
-      }
+    // 一起看：局域网同步观看（房主 / 观众共用同一个入口）
+    final partyNav = widget.partyNav;
+    if (partyNav != null) {
+      partyRows.add(ListenableBuilder(
+        listenable: partyNav.listenable,
+        builder: (context, _) {
+          final active = partyNav.isActive();
+          final hosting = partyNav.isHosting();
+          final status = partyNav.statusText();
+          return _panelActionRow(
+            icon: active ? Icons.groups_rounded : Icons.groups_outlined,
+            label: hosting
+                ? '一起看 · 房主'
+                : active
+                    ? '一起看 · 观众'
+                    : '一起看',
+            value: active ? (status.isEmpty ? '进行中' : status) : '局域网同看',
+            onTap: () {
+              Navigator.of(context).pop();
+              partyNav.onOpen();
+            },
+          );
+        },
+      ));
     }
+
+    // 线路：手动换线（SET-12 重做）。当前线路勾选、已失败灰显，都不可点。
+    // 测速结果只做「行尾摘要 + 首选闪电」，不参与可点性判定。
+    final lineSection = _buildLineSection(context);
 
     final sections = <Widget>[
       if (widget.embeddedPlayback != null && widget.playerEngine.currentSpec != null)
@@ -2964,8 +3088,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       if (imageRows.isNotEmpty) ...[_panelSection('画面'), ...imageRows],
       if (trackRows.isNotEmpty) ...[_panelSection('轨道'), ...trackRows],
       if (qualityRows.isNotEmpty) ...[_panelSection(qualityNav!.label), ...qualityRows],
-      if (lineRows.isNotEmpty) ...[_panelSection('线路'), ...lineRows],
+      if (lineSection != null) lineSection,
       if (playRows.isNotEmpty) ...[_panelSection('播放'), ...playRows],
+      if (partyRows.isNotEmpty) ...[_panelSection('一起看'), ...partyRows],
       if (skipRows.isNotEmpty) ...[_panelSection('跳过'), ...skipRows],
     ];
 
@@ -2994,6 +3119,88 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: sections,
       ),
+    );
+  }
+
+  /// 面板「线路」分组：当前线路打勾、已失败置灰、首选线路带闪电。
+  ///
+  /// 测速结果异步到达，所以整块（含小标题里的「测速中」）包在
+  /// [ListenableBuilder] 里，只刷新这一段，不重建整个抽屉。
+  Widget? _buildLineSection(BuildContext context) {
+    final lineNav = widget.lineNav;
+    if (lineNav == null || lineNav.options.length <= 1) return null;
+
+    Widget buildRows() {
+      final probe = lineNav.probe;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panelSection(
+            probe != null && probe.loading ? '线路 · 测速中…' : '线路',
+          ),
+          for (final option in lineNav.options)
+            _buildLineRow(
+              context,
+              lineNav,
+              option,
+              probe?.hintFor(option.index),
+            ),
+        ],
+      );
+    }
+
+    final probe = lineNav.probe;
+    if (probe == null) return buildRows();
+    return ListenableBuilder(
+      listenable: probe,
+      builder: (_, __) => buildRows(),
+    );
+  }
+
+  /// 一条线路行。
+  ///
+  /// 行尾优先显示「当前线路 / 已失败」这类确定状态，其次才是测速摘要——
+  /// 测速只是建议，不能盖掉「这条已经确认播不出来」这种更硬的信息。
+  Widget _buildLineRow(
+    BuildContext context,
+    PlayerLineNav lineNav,
+    PlayerLineOption option,
+    LineProbeHint? hint,
+  ) {
+    final enabled = !lineNav.busy && !option.current && !option.unavailable;
+    final failed = option.unavailable;
+    final preferred = !failed && hint != null && hint.preferred;
+
+    final value = lineRowValueFor(
+      current: option.current,
+      unavailable: failed,
+      hint: hint,
+    );
+
+    final row = _panelActionRow(
+      icon: option.current
+          ? Icons.check_circle_rounded
+          : failed
+              ? Icons.block_rounded
+              : preferred
+                  ? Icons.bolt_rounded
+                  : Icons.swap_horiz_rounded,
+      label: option.name,
+      value: value,
+      enabled: enabled,
+      onTap: () {
+        Navigator.of(context).pop();
+        lineNav.onSelect(option.index);
+      },
+    );
+
+    final tooltip = hint?.tooltip;
+    if (tooltip == null || tooltip.isEmpty) return row;
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: row,
     );
   }
 
@@ -3234,69 +3441,79 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   Widget _buildSpeedSelector() {
     // 覆盖设置中心的默认倍速档位，并提供 2.5× 快捷选项。
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
+    // invariant: 提示与底栏其它入口同向——都向视频内（上方）展开。
+    // PopupMenuButton 自带的 tooltip 默认向下，贴着窗口底边会被裁掉半行。
+    final speedTooltip =
+        '播放倍速 (${_shortcutLabel(PlayerShortcutAction.rateUp)}加速 / '
+        '${_shortcutLabel(PlayerShortcutAction.rateDown)}减速 / '
+        '${_shortcutLabel(PlayerShortcutAction.rateReset)}重置)';
     return StreamBuilder<double>(
       stream: widget.playerEngine.rateStream,
       initialData: widget.playerEngine.rate,
       builder: (context, snapshot) {
         final currentRate = snapshot.data ?? 1.0;
-        return FocusOutline(
-          child: Theme(
-            // 底栏文本控件 hover 统一为浅色 12%（默认主题 hover 在深底上不可辨）。
-            data: Theme.of(context).copyWith(
-              hoverColor: _chromeInk.withValues(alpha: 0.12),
-            ),
-            child: PopupMenuButton<double>(
-              key: const ValueKey('player-speed-menu'),
-              tooltip: '播放倍速 (${_shortcutLabel(PlayerShortcutAction.rateUp)}加速 / '
-                  '${_shortcutLabel(PlayerShortcutAction.rateDown)}减速 / '
-                  '${_shortcutLabel(PlayerShortcutAction.rateReset)}重置)',
-              color: context.palette.raised,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.md)),
-              onOpened: () => _setSpeedMenuOpen(true),
-              onCanceled: () => _setSpeedMenuOpen(false),
-              onSelected: (rate) {
-                // 先恢复临时倍速，再提交选择；之后的 key-up 不得覆盖新值。
-                _holdGesture.cancel();
-                if (!_isLiveMode) widget.playerEngine.setRate(rate);
-                _setSpeedMenuOpen(false);
-              },
-              // 倍速入口：36 高统一点击盒，图标与文案共用同一条垂直中线
-              // （不再用上下 padding 凑高度，否则图标会比同行按钮高 7px）。
-              child: SizedBox(
-                height: _controlHitSize,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.speed_rounded, size: 18, color: _chromeInk),
-                      const SizedBox(width: 6),
-                      Text(
-                        '倍速 $currentRate×',
-                        style: const TextStyle(
-                            color: _chromeInk,
-                            fontSize: AppType.body,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ],
+        return _buildBottomControlTooltip(
+          message: speedTooltip,
+          child: FocusOutline(
+            child: Theme(
+              // 底栏文本控件 hover 统一为浅色 12%（默认主题 hover 在深底上不可辨）。
+              data: Theme.of(context).copyWith(
+                hoverColor: _chromeInk.withValues(alpha: 0.12),
+              ),
+              child: PopupMenuButton<double>(
+                key: const ValueKey('player-speed-menu'),
+                // 自带 tooltip 置空：外层已统一用底栏定位，避免两个浮层叠在一起。
+                tooltip: '',
+                color: context.palette.raised,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.md)),
+                onOpened: () => _setSpeedMenuOpen(true),
+                onCanceled: () => _setSpeedMenuOpen(false),
+                onSelected: (rate) {
+                  // 先恢复临时倍速，再提交选择；之后的 key-up 不得覆盖新值。
+                  _holdGesture.cancel();
+                  if (!_isLiveMode) widget.playerEngine.setRate(rate);
+                  _setSpeedMenuOpen(false);
+                },
+                // 倍速入口：36 高统一点击盒，图标与文案共用同一条垂直中线
+                // （不再用上下 padding 凑高度，否则图标会比同行按钮高 7px）。
+                child: SizedBox(
+                  height: _controlHitSize,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.speed_rounded,
+                            size: 18, color: _chromeInk),
+                        const SizedBox(width: 6),
+                        Text(
+                          '倍速 $currentRate×',
+                          style: const TextStyle(
+                              color: _chromeInk,
+                              fontSize: AppType.body,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                itemBuilder: (ctx) {
+                  // itemBuilder 先于 onOpened：勾选必须读取恢复后的实际倍速。
+                  _holdGesture.cancel();
+                  final selectedRate = widget.playerEngine.rate;
+                  return speeds
+                      .map((speed) => CheckedPopupMenuItem<double>(
+                            value: speed,
+                            height: 40,
+                            checked: (speed - selectedRate).abs() < 0.001,
+                            child: Text('$speed×',
+                                style: const TextStyle(fontSize: AppType.body)),
+                          ))
+                      .toList();
+                },
               ),
-              itemBuilder: (ctx) {
-                // itemBuilder 先于 onOpened：勾选必须读取恢复后的实际倍速。
-                _holdGesture.cancel();
-                final selectedRate = widget.playerEngine.rate;
-                return speeds
-                    .map((speed) => CheckedPopupMenuItem<double>(
-                          value: speed,
-                          height: 40,
-                          checked: (speed - selectedRate).abs() < 0.001,
-                          child: Text('$speed×',
-                              style: const TextStyle(fontSize: AppType.body)),
-                        ))
-                    .toList();
-              },
             ),
           ),
         );
@@ -3403,6 +3620,21 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               : () => handle(_loadLocalSubtitle(nav, session, current)),
           child: _menuIconRow(Icons.folder_open_rounded, loadLabel),
         ),
+      if (nav.readOnlineQuery != null && nav.onApplyOnline != null)
+        PopupMenuItem<String>(
+          key: const ValueKey('player-subtitle-search-online'),
+          height: 40,
+          enabled: session != null && !_loadingOnlineSubtitle,
+          onTap: session == null
+              ? null
+              : () => handle(_searchOnlineSubtitle(nav, session, current)),
+          child: _menuIconRow(
+            Icons.cloud_download_rounded,
+            session == null
+                ? '搜索在线字幕（等待媒体就绪）'
+                : (_loadingOnlineSubtitle ? '正在加载在线字幕…' : '搜索在线字幕…'),
+          ),
+        ),
       if (nav.onSetScale != null)
         ...subtitleScaleMenuItems(
           current: session != null && nav.canScale?.call() == true
@@ -3411,6 +3643,47 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           onSelected: (factor) => handle(_setSubtitleScale(nav, factor, current)),
         ),
     ];
+  }
+
+  /// 「搜索在线字幕」：检索 → 下载 → 写临时文件 → sub-add。
+  ///
+  /// 弹窗是独立路由，关闭后再回到播放器；这里只负责把选中的字幕挂上去，
+  /// 挂成功由弹窗自己关闭。
+  Future<void> _searchOnlineSubtitle(PlayerSubtitleTracksNav nav, int session,
+      bool Function() current) async {
+    final query = nav.readOnlineQuery?.call();
+    if (query == null || query.isEmpty) {
+      _osdController.show(Icons.info_outline_rounded, '当前没有可用于检索的片名');
+      return;
+    }
+    await showSubtitleSearchDialog(
+      context: context,
+      query: query,
+      onApply: (file) async {
+        if (!current()) return false;
+        _loadingOnlineSubtitle = true;
+        try {
+          final applied = await nav.onApplyOnline!(file, session: session);
+          if (applied && current()) {
+            _osdController.show(Icons.subtitles_rounded, '已加载在线字幕');
+          }
+          return applied;
+        } on UnsupportedError catch (error) {
+          if (current()) {
+            _osdController.show(
+                Icons.error_outline_rounded, error.message ?? '字幕加载失败');
+          }
+          return false;
+        } catch (_) {
+          if (current()) {
+            _osdController.show(Icons.error_outline_rounded, '字幕加载失败');
+          }
+          return false;
+        } finally {
+          _loadingOnlineSubtitle = false;
+        }
+      },
+    );
   }
 
   Future<void> _setSubtitleScale(
@@ -3802,12 +4075,16 @@ class _ControlButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool busy;
 
+  /// 高亮图标色（如「一起看」进行中）；为空时用控制条默认前景色。
+  final Color? activeColor;
+
   const _ControlButton({
     super.key,
     required this.icon,
     this.iconSize = 20,
     this.onPressed,
     this.busy = false,
+    this.activeColor,
   });
 
   @override
@@ -3834,8 +4111,9 @@ class _ControlButton extends StatelessWidget {
               : Icon(
                   icon,
                   size: iconSize,
-                  color:
-                      enabled ? _chromeInk : _chromeInk.withValues(alpha: 0.38),
+                  color: enabled
+                      ? (activeColor ?? _chromeInk)
+                      : _chromeInk.withValues(alpha: 0.38),
                 ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(

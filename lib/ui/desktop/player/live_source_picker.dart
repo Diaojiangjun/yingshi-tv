@@ -12,10 +12,18 @@ class LiveSourceOption {
     required this.name,
     required this.subtitle,
     this.current = false,
+    this.mainLiveIndex,
   });
 
   /// 独立直播源地址（`http(s)://` / `file://`）；null = 跟随主配置源。
   final String? location;
+
+  /// 跟随主配置源时指定的线路序号；null = 全部线路合并。
+  ///
+  /// 只有 [location] 为 null 时有意义：主配置常带多条 lives，合并后频道过多，
+  /// 这里让用户直接挑一条。
+  final int? mainLiveIndex;
+
   final String name;
   final String subtitle;
   final bool current;

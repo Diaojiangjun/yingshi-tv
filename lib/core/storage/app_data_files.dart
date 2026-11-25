@@ -23,6 +23,9 @@ enum AppDataCategory {
   appearance,
   /// 仅当前系统用户可解密，不随普通数据备份导出。
   credentials,
+  /// 法律文本的同意记录：不随备份迁移——换机或恢复数据后重新确认一次，
+  /// 比把「某人同意过」的旧记录搬到另一台机器上更稳妥。
+  legal,
 }
 
 class AppDataFile {
@@ -37,6 +40,8 @@ class AppDataFile {
 
 /// 应用数据目录中的持久化文件；新增文件须在此登记。
 const List<AppDataFile> appDataFiles = [
+  // 用户协议与免责声明的同意记录（版本号 + 时间），见 core/legal/agreement_store.dart
+  AppDataFile('agreement.json', AppDataCategory.legal),
   AppDataFile('appearance_preferences.json', AppDataCategory.appearance),
   AppDataFile('cached_vod_config.json', AppDataCategory.configSnapshot, sensitive: true),
   // 配置源目录 v1：entries + 独立 categories（含空分类）；兼容旧版数组。
@@ -47,6 +52,9 @@ const List<AppDataFile> appDataFiles = [
   AppDataFile('history.json', AppDataCategory.history),
   AppDataFile('history_preferences.json', AppDataCategory.preference),
   AppDataFile('home_site_preferences.json', AppDataCategory.preference),
+  // 自建站源（JAR 源等）：含本地路径与蜘蛛参数，按敏感处理；换机恢复要带上，
+  // 否则用户自己建的站点会全部消失。
+  AppDataFile('custom_sites.json', AppDataCategory.preference, sensitive: true),
   // 直链播放方式记忆（issue #9-1）：只存主机名 → live / vod，不含路径或令牌。
   AppDataFile('live_direct_modes.json', AppDataCategory.live),
   // §33 直播收藏：与点播收藏分开存（模型不同），但同属「收藏」这一类，
@@ -74,12 +82,14 @@ final Set<String> appDataFileNames =
     Set<String>.unmodifiable(appDataFiles.map((file) => file.name));
 
 /// 备份白名单：排除窗口状态（恢复其他机器的位置可能把窗口放到不可见区域）
-/// 、外观偏好（壁纸图片不在备份内）与仅本机可解密的连接凭据。
+/// 、外观偏好（壁纸图片不在备份内）、仅本机可解密的连接凭据，
+/// 以及协议同意记录（换机后重新确认）。
 List<AppDataFile> get backupAppDataFiles => appDataFiles
     .where((file) =>
         file.category != AppDataCategory.window &&
         file.category != AppDataCategory.appearance &&
-        file.category != AppDataCategory.credentials)
+        file.category != AppDataCategory.credentials &&
+        file.category != AppDataCategory.legal)
     .toList(growable: false);
 
 /// 备份白名单文件名集合。

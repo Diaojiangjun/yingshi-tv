@@ -51,7 +51,7 @@ $sep = [System.IO.Path]::PathSeparator
 
 # 两个模块，两个源码目录，同一个输出目录（产物仍是自包含单 jar）：
 #   android-bridge/  = 可复用的桥接内核（android.* shim / CatVod 契约 / 载荷加载 / RPC）
-#   companion/       = 修狗TV 桌面端的启动壳（Main + 打包 + 运行时依赖）
+#   companion/       = 影视 桌面端的启动壳（Main + 打包 + 运行时依赖）
 $bridgeDir = Join-Path (Split-Path -Parent $scriptDir) "android-bridge"
 $bridgeSrcDir = Join-Path $bridgeDir "src"
 if (!(Test-Path $bridgeSrcDir)) {

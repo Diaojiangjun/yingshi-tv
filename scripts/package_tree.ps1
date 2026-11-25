@@ -1,4 +1,4 @@
-# Shared, path-only selection for Windows release packaging. Dot-source this file.
+﻿# Shared, path-only selection for Windows release packaging. Dot-source this file.
 # Only the selected files are ever opened/copied; excluded directories are not traversed.
 
 function Assert-PackagePathIsNotLinked([string]$Path) {
@@ -18,28 +18,40 @@ function Get-MdkEntries {
     'mdk/mdk.dll', 'mdk/ffmpeg-9.dll', 'mdk/Xiugou-MDK-SDK-notice.txt'
 }
 
-function Get-PackageRequiredEntries([Alias('LocalMdkPreview')][switch]$IncludeMdk) {
-    @(
+function Get-PackageRequiredEntries([Alias('LocalMdkPreview')][switch]$IncludeMdk, [switch]$IncludeJre = $true, [switch]$IncludeRuntimes = $true) {
+    # JRE / Python / Node / PHP 默认仍在必需清单里（测试夹具与历史调用方依赖这一点）；
+    # 正式发布走「按需下载」时由调用方显式传 -IncludeJre:$false -IncludeRuntimes:$false，
+    # 此时对应目录既不要求存在，也不参与等价性比对。
+    $required = @(
         'xiugou_tv.exe', 'flutter_windows.dll', 'libmpv-2.dll',
         'libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll',
         'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll',
         'data/app.so', 'data/icudtl.dat',
         'data/flutter_assets/AssetManifest.bin', 'data/flutter_assets/FontManifest.json',
         'data/flutter_assets/fonts/MaterialIcons-Regular.otf', 'data/flutter_assets/NOTICES.Z',
-        'runtime/jre/bin/java.exe', 'runtime/jre/bin/server/jvm.dll', 'runtime/jre/lib/modules',
-        'runtime/jre/legal/java.base/LICENSE', 'runtime/jre/legal/java.base/COPYRIGHT',
-        'companion/dist/companion-service.jar', 'companion/dist/pyshell/runner.py',
-        'companion/dist/pyruntime/python.exe', 'companion/dist/pyruntime/LICENSE.txt',
-        'companion/dist/noderuntime/node.exe', 'companion/dist/noderuntime/LICENSE',
-        'companion/dist/phpruntime/php.exe', 'companion/dist/phpruntime/php8.dll',
-        'companion/dist/phpruntime/license.txt', 'companion/dist/phpruntime/readme-redist-bins.txt',
-        'companion/dist/phpruntime/cacert.pem', 'companion/dist/phpruntime/ext/php_curl.dll',
-        'companion/dist/phpruntime/ext/php_mbstring.dll', 'companion/dist/phpruntime/ext/php_openssl.dll',
-        'companion/dist/phpruntime/ext/php_sqlite3.dll', 'companion/dist/phpruntime/ext/php_sockets.dll',
-        'companion/dist/phpruntime/ext/php_pdo_sqlite.dll', 'companion/dist/phpruntime/ext/php_pdo_mysql.dll',
-        'companion/dist/phpruntime/ext/php_mysqli.dll'
+        'companion/dist/companion-service.jar', 'companion/dist/pyshell/runner.py'
     )
-    if ($IncludeMdk) { Get-MdkEntries }
+    if ($IncludeRuntimes) {
+        $required += @(
+            'companion/dist/pyruntime/python.exe', 'companion/dist/pyruntime/LICENSE.txt',
+            'companion/dist/noderuntime/node.exe', 'companion/dist/noderuntime/LICENSE',
+            'companion/dist/phpruntime/php.exe', 'companion/dist/phpruntime/php8.dll',
+            'companion/dist/phpruntime/license.txt', 'companion/dist/phpruntime/readme-redist-bins.txt',
+            'companion/dist/phpruntime/cacert.pem', 'companion/dist/phpruntime/ext/php_curl.dll',
+            'companion/dist/phpruntime/ext/php_mbstring.dll', 'companion/dist/phpruntime/ext/php_openssl.dll',
+            'companion/dist/phpruntime/ext/php_sqlite3.dll', 'companion/dist/phpruntime/ext/php_sockets.dll',
+            'companion/dist/phpruntime/ext/php_pdo_sqlite.dll', 'companion/dist/phpruntime/ext/php_pdo_mysql.dll',
+            'companion/dist/phpruntime/ext/php_mysqli.dll'
+        )
+    }
+    if ($IncludeJre) {
+        $required += @(
+            'runtime/jre/bin/java.exe', 'runtime/jre/bin/server/jvm.dll', 'runtime/jre/lib/modules',
+            'runtime/jre/legal/java.base/LICENSE', 'runtime/jre/legal/java.base/COPYRIGHT'
+        )
+    }
+    if ($IncludeMdk) { $required += Get-MdkEntries }
+    return $required
 }
 
 function Get-PackagePathDisposition([string]$RelativePath, [bool]$IsDirectory) {
@@ -113,11 +125,11 @@ function Get-PackageSelection {
     [pscustomobject]@{ Root = $root; Files = $files.ToArray(); Excluded = $excluded.ToArray() }
 }
 
-function Assert-PackageRuntimeFiles($Selection, [Alias('LocalMdkPreview')][switch]$IncludeMdk) {
+function Assert-PackageRuntimeFiles($Selection, [Alias('LocalMdkPreview')][switch]$IncludeMdk, [switch]$IncludeJre = $true, [switch]$IncludeRuntimes = $true) {
     $present = @{}
     foreach ($rel in $Selection.Files) { $present[$rel] = $true }
     $requireMdk = $IncludeMdk -or (Test-Path -LiteralPath (Join-Path $Selection.Root 'mdk') -PathType Container)
-    foreach ($rel in (Get-PackageRequiredEntries -IncludeMdk:$requireMdk)) {
+    foreach ($rel in (Get-PackageRequiredEntries -IncludeMdk:$requireMdk -IncludeJre:$IncludeJre -IncludeRuntimes:$IncludeRuntimes)) {
         if (-not $present.ContainsKey($rel)) { throw "Required package runtime missing: $rel" }
         if ((Get-Item -LiteralPath (Join-Path $Selection.Root $rel)).Length -eq 0) { throw "Required package runtime empty: $rel" }
     }
@@ -131,7 +143,9 @@ function New-StagedApplicationTree {
     param(
         [Parameter(Mandatory = $true)][string]$SourceDir,
         [Parameter(Mandatory = $true)][string]$StageDir,
-        [Alias('LocalMdkPreview')][switch]$IncludeMdk
+        [Alias('LocalMdkPreview')][switch]$IncludeMdk,
+        [switch]$IncludeJre = $true,
+        [switch]$IncludeRuntimes = $true
     )
     $source = [System.IO.Path]::GetFullPath($SourceDir).TrimEnd('\', '/')
     $stage = [System.IO.Path]::GetFullPath($StageDir).TrimEnd('\', '/')
@@ -142,7 +156,7 @@ function New-StagedApplicationTree {
     Assert-PackagePathIsNotLinked $stage
     if (Test-Path -LiteralPath $stage) { throw "Application stage must be new (no cleanup/overwrite): $stage" }
     $selection = Get-PackageSelection -SourceDir $source
-    Assert-PackageRuntimeFiles $selection -IncludeMdk:$IncludeMdk
+    Assert-PackageRuntimeFiles $selection -IncludeMdk:$IncludeMdk -IncludeJre:$IncludeJre -IncludeRuntimes:$IncludeRuntimes
     [void][System.IO.Directory]::CreateDirectory($stage)
     foreach ($rel in $selection.Files) {
         $destination = Join-Path $stage $rel
@@ -157,10 +171,12 @@ function Write-PackageInnoFileList {
     param(
         [Parameter(Mandatory = $true)][string]$StageDir,
         [Parameter(Mandatory = $true)][string]$DestinationPath,
-        [Alias('LocalMdkPreview')][switch]$IncludeMdk
+        [Alias('LocalMdkPreview')][switch]$IncludeMdk,
+        [switch]$IncludeJre = $true,
+        [switch]$IncludeRuntimes = $true
     )
     $selection = Get-PackageSelection -SourceDir $StageDir -RejectExcluded
-    Assert-PackageRuntimeFiles $selection -IncludeMdk:$IncludeMdk
+    Assert-PackageRuntimeFiles $selection -IncludeMdk:$IncludeMdk -IncludeJre:$IncludeJre -IncludeRuntimes:$IncludeRuntimes
     $destination = [System.IO.Path]::GetFullPath($DestinationPath)
     if ($destination.StartsWith($selection.Root + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Inno file list must be outside the application tree.' }
     if (Test-Path -LiteralPath $destination) { throw "Inno file list already exists: $destination" }
@@ -179,12 +195,14 @@ function Assert-PackageMatchesStage {
         [Parameter(Mandatory = $true)][string]$StageDir,
         [Parameter(Mandatory = $true)][string]$PackageDir,
         [switch]$Installed,
-        [Alias('LocalMdkPreview')][switch]$IncludeMdk
+        [Alias('LocalMdkPreview')][switch]$IncludeMdk,
+        [switch]$IncludeJre = $true,
+        [switch]$IncludeRuntimes = $true
     )
     $expected = Get-PackageSelection -SourceDir $StageDir -RejectExcluded
     $actual = Get-PackageSelection -SourceDir $PackageDir -RejectExcluded -Installed:$Installed
-    Assert-PackageRuntimeFiles $expected -IncludeMdk:$IncludeMdk
-    Assert-PackageRuntimeFiles $actual -IncludeMdk:$IncludeMdk
+    Assert-PackageRuntimeFiles $expected -IncludeMdk:$IncludeMdk -IncludeJre:$IncludeJre -IncludeRuntimes:$IncludeRuntimes
+    Assert-PackageRuntimeFiles $actual -IncludeMdk:$IncludeMdk -IncludeJre:$IncludeJre -IncludeRuntimes:$IncludeRuntimes
     $difference = @(Compare-Object -ReferenceObject $expected.Files -DifferenceObject $actual.Files)
     if ($difference.Count -gt 0) { throw "Package file set differs from stage: $(($difference | Select-Object -First 8 | ForEach-Object { $_.InputObject }) -join ', ')" }
     foreach ($rel in $expected.Files) {

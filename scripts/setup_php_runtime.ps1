@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 $target = Join-Path $project 'companion/phpruntime'
 if (Test-Path -LiteralPath $target) { throw "Runtime already exists: $target" }
-$archiveName = 'php-8.3.36-1-nts-Win32-vs16-x64.zip'
-$archiveHash = '1a097d52b7a68622cdc723073b61cc70caf79c941218ff65b2d8441dbc6b10d4'
+$archiveName = 'php-8.3.37-nts-Win32-vs16-x64.zip'
+$archiveHash = '38808a798485e1c0938dfcce7e942131415fc6c7834f83a5a85a4c4edb5539d6'
 $tempBase = if ($env:PI_SCRATCH_DIR) { $env:PI_SCRATCH_DIR } else { [IO.Path]::GetTempPath() }
 $stage = Join-Path $tempBase ('xiugou-php-setup-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($stage) | Out-Null

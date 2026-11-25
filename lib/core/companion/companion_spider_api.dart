@@ -12,6 +12,7 @@ import '../player/source_subtitle.dart';
 import 'companion_process_manager.dart';
 import 'companion_recovery.dart';
 import 'browser_verification_controller.dart';
+import 'jar_scan_result.dart';
 import 'site_self_check_report.dart';
 
 /// 通过本地 Java 伴随服务执行 CatVod Spider 的 API 适配层
@@ -107,6 +108,52 @@ class CompanionSpiderApi {
     } catch (_) {
       return false;
     }
+  }
+
+  /// 扫描 JAR 内可实例化的 Spider 子类。
+  ///
+  /// 与 [loadSpider] 共用伴随服务，所以扫的是「真正要运行的那份」：远程下载、加固壳
+  /// 解密、dex→JVM 转换都在服务端完成后才列类名。
+  Future<JarScanResult> scanJar(
+    String jar, {
+    Duration receiveTimeout = const Duration(minutes: 4),
+  }) async {
+    if (jar.trim().isEmpty) return const JarScanResult();
+    if (!await processManager.start()) {
+      throw StateError('站点服务启动失败：'
+          '${processManager.lastError.isEmpty ? '未知原因' : processManager.lastError}');
+    }
+    processManager.notifyActivity();
+    final serverBudgetMs =
+        (receiveTimeout - _initializationResponseMargin).inMilliseconds;
+    final res = await _dio.post<dynamic>(
+      '${processManager.baseUrl}/jar/scan',
+      data: {
+        'jar': jar.trim(),
+        'timeoutMs':
+            '${serverBudgetMs.clamp(1, _maxInitializationServerTimeout.inMilliseconds)}',
+        'rpcId': 'scan@${++_rpcSeq}',
+      },
+      options: Options(
+        receiveTimeout: receiveTimeout,
+        validateStatus: (status) => status != null && status < 600,
+      ),
+    );
+    if (res.statusCode == 404) {
+      throw StateError('伴随服务版本过旧，不支持扫描；请更新应用，或手填 csp_ 类名');
+    }
+    final data =
+        res.data is String ? jsonDecode(res.data as String) : res.data;
+    if (data is! Map) throw StateError('站点服务返回了无效内容');
+    if (data['code'] != 0) throw StateError('${data['error'] ?? '扫描失败'}');
+    final raw = data['classes'];
+    return JarScanResult(
+      classes: raw is List
+          ? raw.map((item) => item.toString()).toList(growable: false)
+          : const [],
+      stage: data['stage']?.toString(),
+      detail: data['detail']?.toString(),
+    );
   }
 
   /// 换配置后释放伴随服务里旧配置的 spider、类加载器、代理端口与密码服务子进程。

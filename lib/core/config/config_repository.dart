@@ -16,6 +16,7 @@ import 'config_network_error.dart';
 import 'models/desktop_window_config.dart';
 import 'models/builtin_sites.dart';
 import 'models/config_snapshot.dart';
+import 'models/custom_site.dart';
 import 'models/history_record.dart';
 import 'models/home_site_preference.dart';
 import 'models/vod_config.dart';
@@ -139,6 +140,13 @@ class ConfigRepository {
 
   /// 当前生效的点播配置（来自快照 / 缓存）
   VodConfig _currentVodConfig = VodConfig.empty();
+
+  /// 合并自建站源之前的原始配置：切换 / 编辑自建站源时以它为基底重新合并，
+  /// 避免反复 apply 把自建站点复制进原配置。
+  VodConfig _baseVodConfig = VodConfig.empty();
+
+  /// 用户自建站源（JAR 源等），独立于订阅配置落盘。
+  List<CustomSite> _customSites = [];
   DesktopWindowConfig _currentWindowConfig = const DesktopWindowConfig();
   Site? _selectedSite;
   ConfigSourceKind? _currentSourceKind;
@@ -272,6 +280,45 @@ class ConfigRepository {
 
   /// 当前生效的点播配置
   VodConfig get currentVodConfig => _currentVodConfig;
+
+  /// 用户自建站源（JAR 源等），按保存顺序返回。
+  List<CustomSite> get customSites => List.unmodifiable(_customSites);
+
+  /// 自建站源对应的站点（带 `xgc_` key，与配置站源同构）。
+  List<Site> get customSitesAsSites =>
+      List.unmodifiable(_customSites.map((site) => site.toSite()));
+
+  /// 新增或更新一个自建站源并立即生效。
+  ///
+  /// 保存成功后才替换内存列表：落盘失败（如数据恢复待重启）时界面保持原样，
+  /// 由调用方提示「本次修改未保存」。
+  Future<void> upsertCustomSite(CustomSite site) async {
+    if (_disposed) throw StateError('配置仓库已关闭');
+    final id = site.id.trim().isEmpty ? CustomSite.newId() : site.id.trim();
+    final saved = site.copyWith(id: id);
+    final next = List<CustomSite>.from(_customSites);
+    final index = next.indexWhere((item) => item.id == id);
+    if (index >= 0) {
+      next[index] = saved;
+    } else {
+      next.add(saved);
+    }
+    await _storage.saveCustomSites(next);
+    if (_disposed) return;
+    _customSites = next;
+    _applyVodConfig(_baseVodConfig);
+  }
+
+  /// 删除自建站源；它是当前站源时由 [_applyVodConfig] 重新挑选兜底站。
+  Future<void> removeCustomSite(String id) async {
+    if (_disposed) throw StateError('配置仓库已关闭');
+    final next = _customSites.where((item) => item.id != id).toList();
+    if (next.length == _customSites.length) return;
+    await _storage.saveCustomSites(next);
+    if (_disposed) return;
+    _customSites = next;
+    _applyVodConfig(_baseVodConfig);
+  }
 
   DesktopWindowConfig get currentWindowConfig => _currentWindowConfig;
   Site? get selectedSite => _selectedSite;
@@ -451,6 +498,9 @@ class ConfigRepository {
   /// 初始化：从 Windows 本地持久化中恢复窗口配置与缓存的影视配置
   Future<void> initialize() async {
     _credentials.replaceAll(await _storage.readConfigCredentials());
+    // 自建站源必须先于配置应用读入：_applyVodConfig 会把它们合并进站点列表，
+    // 否则首屏 / 首页站源列表里看不到自建站点。
+    _customSites = await _storage.readCustomSites();
     await reloadHomeSitePreferences();
     _currentWindowConfig = await _storage.readWindowConfig();
     _windowConfigController.add(_currentWindowConfig);
@@ -863,6 +913,35 @@ class ConfigRepository {
         : loadFromInput(location);
   }
 
+  /// 清除当前生效的配置，回到「尚未加载配置」。
+  ///
+  /// 只删缓存快照与「上次配置地址」：配置源历史、自建站源（`xgc_`）、播放历史、
+  /// 收藏与偏好都不受影响，用户仍可在历史里重新启用任意一条源。
+  Future<void> clearCurrentConfig() async {
+    if (_disposed) throw StateError('配置仓库已关闭');
+    // 先让进行中的加载作废，再等已进入写盘阶段的快照落定，最后才删——
+    // 顺序反过来会出现「删完又被上一次加载写回」。
+    _beginLoad();
+    await _snapshotSaveChain.catchError((_) {});
+    if (_disposed) throw StateError('配置仓库已关闭');
+    await _storage.deleteCurrentConfig();
+    _currentSnapshot = null;
+    _sourceRecoveryError = null;
+    _currentSourceKind = null;
+    _currentSourceLocation = null;
+    _currentWindowConfig = _currentWindowConfig.copyWith(
+      clearLastConfigUrl: true,
+      depotPath: const [],
+    );
+    _windowConfigController.add(_currentWindowConfig);
+    final next = _windowSaveChain
+        .then((_) => _storage.saveWindowConfig(_currentWindowConfig));
+    _windowSaveChain =
+        next.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    await next;
+    _applyVodConfig(VodConfig.empty());
+  }
+
   /// 导出当前配置到 [filePath]：优先写出缓存原文，缺失时写出规范化 JSON。
   Future<void> exportCurrentConfig(String filePath) async {
     final raw =
@@ -1184,8 +1263,10 @@ class ConfigRepository {
     final config = _parseConfig(snapshot.rawContent);
     final baseUrl = _snapshotBaseUrl(snapshot);
     final localExt = snapshot.sourceKind == ConfigSourceKind.file &&
-            snapshot.depotPath.isEmpty && snapshot.sourceLocation != null
-        ? await PgPackageResources.localExtensions(File(snapshot.sourceLocation!), config.sites)
+            snapshot.depotPath.isEmpty &&
+            snapshot.sourceLocation != null
+        ? await PgPackageResources.localExtensions(
+            File(snapshot.sourceLocation!), config.sites)
         : const <Site, String>{};
     return _absolutizeConfig(config, baseUrl, localExt: localExt);
   }
@@ -1558,11 +1639,40 @@ class ConfigRepository {
     await next;
   }
 
+  /// 把自建站源追加到配置站源之后。
+  ///
+  /// 导出过的配置里可能已含 `xgc_` 站点（用户拿导出的 JSON 重新导入），
+  /// 此时按 key 去重，配置里的那份优先，避免同一站点出现两遍。
+  VodConfig _mergeCustomSites(VodConfig config) {
+    if (_customSites.isEmpty) return config;
+    final existing = {for (final site in config.sites) site.key};
+    final extra = <Site>[
+      for (final site in _customSites)
+        if (!existing.contains(site.key)) site.toSite(),
+    ];
+    if (extra.isEmpty) return config;
+    return VodConfig(
+      spider: config.spider,
+      wallpaper: config.wallpaper,
+      warning: config.warning,
+      sites: [...config.sites, ...extra],
+      parses: config.parses,
+      lives: config.lives,
+      rules: config.rules,
+      flags: config.flags,
+      ads: config.ads,
+    );
+  }
+
   /// 应用用户配置 [config]。
   /// 首页站源偏好按配置身份保存。
   void _applyVodConfig(VodConfig config) {
     final previousIdentity = _configIdentity;
     final previousSite = _selectedSite;
+    // 入参恒为「不含自建站源」的原始配置；合并只在这里做一次，
+    // 编辑 / 删除自建站源时用 _baseVodConfig 重新合并即可，不会层层叠加。
+    _baseVodConfig = config;
+    config = _mergeCustomSites(config);
     _currentVodConfig = config;
     _configIdentity = HomeSitePreference.sourceIdentity(_currentSnapshot ??
         ConfigSnapshot(

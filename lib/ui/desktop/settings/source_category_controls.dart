@@ -189,6 +189,43 @@ class _CategoryRailRowState extends State<_CategoryRailRow> {
   bool _hover = false;
   bool _focus = false;
 
+  /// 右键菜单与行尾「…」共用同一组动作；系统行（全部 / 未分类）只给一句说明，
+  /// 免得用户以为这两行藏了删除入口。
+  Future<void> _showContextMenu(
+      BuildContext context, Offset globalPosition) async {
+    final name = widget.category;
+    final editable = name != null && name.isNotEmpty;
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    final selected = await showMenu<String>(
+      context: context,
+      color: context.palette.raised,
+      position: RelativeRect.fromRect(
+          globalPosition & Size.zero, Offset.zero & overlay.size),
+      items: editable
+          ? [
+              PopupMenuItem(
+                  value: 'rename',
+                  enabled: widget.onRename != null,
+                  child: const Text('重命名')),
+              PopupMenuItem(
+                  value: 'delete',
+                  enabled: widget.onDelete != null,
+                  child: const Text('删除分类')),
+            ]
+          : [
+              PopupMenuItem(
+                enabled: false,
+                child: Text(name == null
+                    ? '「全部」是系统视图，不能重命名或删除'
+                    : '「未分类」是系统视图，不能重命名或删除'),
+              ),
+            ],
+    );
+    if (selected == 'rename') widget.onRename?.call();
+    if (selected == 'delete') widget.onDelete?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = widget.category;
@@ -213,92 +250,100 @@ class _CategoryRailRowState extends State<_CategoryRailRow> {
           _moveToCategory(widget.controller, details.data.locations, name!)),
       builder: (context, candidates, rejected) => Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hover = true),
-          onExit: (_) => setState(() => _hover = false),
-          child: Focus(
-            canRequestFocus: false,
-            onFocusChange: (value) => setState(() => _focus = value),
-            child: Material(
-              color: candidates.isNotEmpty || widget.selected
-                  ? context.palette.selectionFill
-                  : Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-                side: BorderSide(
-                  color: candidates.isNotEmpty || _focus || widget.selected
-                      ? context.palette.selectionInk
-                      : Colors.transparent,
-                  width: candidates.isNotEmpty || widget.selected ? 3 : 1,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapDown: (details) =>
+              unawaited(_showContextMenu(context, details.globalPosition)),
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hover = true),
+            onExit: (_) => setState(() => _hover = false),
+            child: Focus(
+              canRequestFocus: false,
+              onFocusChange: (value) => setState(() => _focus = value),
+              child: Material(
+                color: candidates.isNotEmpty || widget.selected
+                    ? context.palette.selectionFill
+                    : Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.sm),
+                  side: BorderSide(
+                    color: candidates.isNotEmpty || _focus || widget.selected
+                        ? context.palette.selectionInk
+                        : Colors.transparent,
+                    width: candidates.isNotEmpty || widget.selected ? 3 : 1,
+                  ),
                 ),
-              ),
-              child: Row(children: [
-                Expanded(
-                    child: Tooltip(
-                  message: label,
-                  child: Semantics(
-                    selected: widget.selected,
-                    child: InkWell(
-                      key: ValueKey('source-category-rail:$keyName'),
-                      borderRadius: BorderRadius.circular(AppRadii.sm),
-                      onTap: widget.controller.busy ? null : widget.onSelected,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md, vertical: AppSpacing.md),
-                        child: Row(children: [
-                          SizedBox(
-                            width: 20,
-                            child: widget.selected
-                                ? Icon(Icons.check_rounded,
-                                    size: 16,
-                                    color: context.palette.selectionInk)
-                                : null,
-                          ),
-                          Expanded(
-                              child: Text(widget.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: AppType.label,
-                                      fontWeight: widget.selected
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
-                                      color: context.palette.textMain))),
-                          Text('（${widget.count}）',
-                              style: TextStyle(
-                                  fontSize: AppType.body,
-                                  color: context.palette.textBody)),
-                        ]),
+                child: Row(children: [
+                  Expanded(
+                      child: Tooltip(
+                    message: label,
+                    child: Semantics(
+                      selected: widget.selected,
+                      child: InkWell(
+                        key: ValueKey('source-category-rail:$keyName'),
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        onTap:
+                            widget.controller.busy ? null : widget.onSelected,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.md),
+                          child: Row(children: [
+                            SizedBox(
+                              width: 20,
+                              child: widget.selected
+                                  ? Icon(Icons.check_rounded,
+                                      size: 16,
+                                      color: context.palette.selectionInk)
+                                  : null,
+                            ),
+                            Expanded(
+                                child: Text(widget.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: AppType.label,
+                                        fontWeight: widget.selected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: context.palette.textMain))),
+                            Text('（${widget.count}）',
+                                style: TextStyle(
+                                    fontSize: AppType.body,
+                                    color: context.palette.textBody)),
+                          ]),
+                        ),
                       ),
                     ),
-                  ),
-                )),
-                if (editable)
-                  Opacity(
-                    opacity: _hover || _focus ? 1 : 0,
-                    child: PopupMenuButton<String>(
-                      key: ValueKey('source-category-menu:$name'),
-                      tooltip: '${widget.label}：分类操作',
-                      enabled: !widget.controller.busy,
-                      icon: Icon(Icons.more_horiz_rounded,
-                          color: context.palette.textBody),
-                      color: context.palette.raised,
-                      onSelected: (action) => action == 'rename'
-                          ? widget.onRename?.call()
-                          : widget.onDelete?.call(),
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                            value: 'rename',
-                            enabled: widget.onRename != null,
-                            child: const Text('重命名')),
-                        PopupMenuItem(
-                            value: 'delete',
-                            enabled: widget.onDelete != null,
-                            child: const Text('删除分类')),
-                      ],
+                  )),
+                  if (editable)
+                    Opacity(
+                      // 常显但弱化（0.45）：用户不必先悬停才知道分类可删除。
+                      opacity: _hover || _focus || widget.selected ? 1 : 0.45,
+                      child: PopupMenuButton<String>(
+                        key: ValueKey('source-category-menu:$name'),
+                        tooltip: '${widget.label}：重命名或删除分类',
+                        enabled: !widget.controller.busy,
+                        icon: Icon(Icons.more_horiz_rounded,
+                            color: context.palette.textBody),
+                        color: context.palette.raised,
+                        onSelected: (action) => action == 'rename'
+                            ? widget.onRename?.call()
+                            : widget.onDelete?.call(),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                              value: 'rename',
+                              enabled: widget.onRename != null,
+                              child: const Text('重命名')),
+                          PopupMenuItem(
+                              value: 'delete',
+                              enabled: widget.onDelete != null,
+                              child: const Text('删除分类')),
+                        ],
+                      ),
                     ),
-                  ),
-              ]),
+                ]),
+              ),
             ),
           ),
         ),

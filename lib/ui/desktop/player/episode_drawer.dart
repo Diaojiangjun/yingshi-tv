@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../../core/api/line_probe_feed.dart';
 import '../widgets/app_message.dart';
 import '../widgets/focus_ring.dart';
 import '../widgets/horizontal_scroll_area.dart';
@@ -77,6 +78,9 @@ class PlayerEpisodeListNav {
   /// 换线路回调：参数是 `PlaybackSession.sources` 的下标。
   final ValueChanged<int> onSelectLine;
 
+  /// 线路测速结果（可选）。异步到达，抽屉订阅它只刷新线路胶囊条。
+  final LineProbeFeed? probe;
+
   const PlayerEpisodeListNav({
     required this.episodes,
     required this.lines,
@@ -85,6 +89,7 @@ class PlayerEpisodeListNav {
     this.browsingPlayingLine = true,
     this.lineName,
     this.switching = false,
+    this.probe,
   });
 }
 
@@ -154,6 +159,10 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
     if (widget.open) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !widget.open) return;
+        // 用户打开抽屉要看线路了，这时才开始测速（不在进播放页就跑）。
+        // 必须放在 postFrame：ensureStarted 内部会 notifyListeners，
+        // 在 build / didUpdateWidget 期间通知会触发 markNeedsBuild 断言。
+        widget.nav?.probe?.ensureStarted();
         _scrollToCursor(animate: false);
         _focusNode.requestFocus();
       });
@@ -168,6 +177,8 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
       _cursor = _currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !widget.open) return;
+        // 同 initState：抽屉真正打开后才触发线路测速。
+        widget.nav?.probe?.ensureStarted();
         _scrollToCursor(animate: false);
         _focusNode.requestFocus();
       });
@@ -537,7 +548,19 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
   /// [HorizontalScrollArea]（与影片分类栏同一套口径）。
   Widget _buildLinePills(
       BuildContext context, PlayerEpisodeListNav nav, AppPalette palette) {
+    final probe = nav.probe;
+    if (probe == null) return _buildLinePillList(context, nav, palette);
+    return ListenableBuilder(
+      listenable: probe,
+      builder: (_, __) => _buildLinePillList(context, nav, palette),
+    );
+  }
+
+  /// 胶囊条本体（测速结果到达时只重建这一段，不动整条抽屉）。
+  Widget _buildLinePillList(
+      BuildContext context, PlayerEpisodeListNav nav, AppPalette palette) {
     final onAccent = Theme.of(context).colorScheme.onPrimary;
+    final probe = nav.probe;
     return SizedBox(
       height: 46,
       child: HorizontalScrollArea(
@@ -554,6 +577,7 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
             final line = nav.lines[index];
+            final hint = probe?.hintFor(line.index);
             final disabled = nav.switching || line.unavailable;
             final background = line.current
                 ? palette.accent
@@ -565,7 +589,7 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                 : line.browsing
                     ? palette.accentInk
                     : palette.playerText.withValues(alpha: 0.78);
-            return FocusRing(
+            final pill = FocusRing(
               key: ValueKey('episode-drawer-line-${line.index}'),
               onTap: disabled
                   ? null
@@ -620,11 +644,40 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                             ),
                           ),
                         ),
+                        // 测速标记：闪电 = 首选，问号 = 测不通。
+                        //
+                        // 用问号而不是红色感叹号：测速失败 ≠ 播不了（403 防盗链
+                        // 带上 Referer 往往能播），红色会让人直接放弃一条能用的线。
+                        // 当前线路已有播放三角，不再叠图标；「已失败」由整条胶囊
+                        // 置灰表达，也不需要再标。
+                        if (hint != null && !line.current && !line.unavailable) ...[
+                          const SizedBox(width: 3),
+                          Icon(
+                            hint.failed
+                                ? Icons.help_outline_rounded
+                                : Icons.bolt_rounded,
+                            // Key 只服务测试与调试：两种状态语义完全不同，
+                            // 靠图标形状在断言里区分容易和别处的三角图标混淆。
+                            key: ValueKey(
+                              'episode-drawer-probe-${line.index}-'
+                              '${hint.failed ? 'failed' : 'best'}',
+                            ),
+                            size: 11,
+                            color: foreground.withValues(alpha: 0.85),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
+            );
+            final tip = hint?.tooltip;
+            if (tip == null || tip.isEmpty) return pill;
+            return Tooltip(
+              message: tip,
+              waitDuration: const Duration(milliseconds: 500),
+              child: pill,
             );
           },
         ),

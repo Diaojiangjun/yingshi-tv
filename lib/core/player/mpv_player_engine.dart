@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'decode_diagnostics.dart';
 import 'embedded_playback.dart';
 import 'live_stream_tuning.dart';
@@ -1116,6 +1120,58 @@ class MpvPlayerEngine
       if (current()) await _refreshSubtitleTracks();
     }
     return loaded && current();
+  }
+
+  /// 在线字幕：把下载到的字节写成临时文件再挂给 mpv。
+  ///
+  /// 不复用 `assrt` 的 URL 直挂（`sub-add <url>`）：部分源需要 Referer /
+  /// 自定义 UA，且压缩包必须先解压挑条目。临时文件落在系统临时目录的
+  /// 固定子目录下，方便随进程退出被系统清理。
+  Future<bool> loadSubtitleBytes(
+    List<int> bytes,
+    String fileName, {
+    required int session,
+  }) async {
+    if (session != subtitleSession || bytes.isEmpty) return false;
+    late final File file;
+    try {
+      final temp = await getTemporaryDirectory();
+      final dir = Directory(p.join(temp.path, 'xiugou_subtitles'));
+      if (!await dir.exists()) await dir.create(recursive: true);
+      _pruneSubtitleCache(dir);
+      file = File(p.join(dir.path,
+          '${DateTime.now().microsecondsSinceEpoch}_${_safeSubtitleName(fileName)}'));
+      await file.writeAsBytes(bytes, flush: true);
+    } on FileSystemException {
+      throw UnsupportedError('无法写入字幕临时文件，请检查系统临时目录权限');
+    }
+    if (session != subtitleSession) return false;
+    return loadLocalSubtitle(file.path, session: session);
+  }
+
+  /// 只删本模块写过的旧文件；删除失败无所谓（系统会回收临时目录）。
+  static void _pruneSubtitleCache(Directory dir) {
+    try {
+      final cutoff = DateTime.now().subtract(const Duration(days: 1));
+      for (final entity in dir.listSync(followLinks: false)) {
+        if (entity is! File) continue;
+        try {
+          if (entity.statSync().modified.isBefore(cutoff)) entity.deleteSync();
+        } catch (_) {
+          // 单个文件删不掉不影响本次加载
+        }
+      }
+    } catch (_) {
+      // 目录不可读时跳过清理
+    }
+  }
+
+  /// 去掉路径分隔符等非法字符，保留扩展名（mpv 靠扩展名决定解析器）。
+  static String _safeSubtitleName(String name) {
+    final base = p.basename(name).replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_');
+    final trimmed = base.trim();
+    if (trimmed.isEmpty) return 'subtitle.srt';
+    return trimmed.length > 80 ? trimmed.substring(trimmed.length - 80) : trimmed;
   }
 
   @override
