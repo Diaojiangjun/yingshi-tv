@@ -66,7 +66,7 @@ class SegmentsApi {
   static HttpClient _defaultClient(String? Function() proxy) {
     return HttpClientFactory.createHttpClient(
       connectionTimeout: const Duration(seconds: 10),
-      userAgent: 'xiugou-tv',
+      userAgent: 'yingshi-tv',
       proxy: proxy,
     );
   }

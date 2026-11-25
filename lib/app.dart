@@ -5870,7 +5870,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
     // 格式化输出切换/加载站源的清晰调试信息
     // ignore: avoid_print
-    print('\n================ [xiugou-tv 站源调试] ================');
+    print('\n================ [yingshi-tv 站源调试] ================');
     // ignore: avoid_print
     print(
         '[站源信息]: ${site.name} (Key: ${site.key}, Type: ${site.type}, Api: ${site.api})');

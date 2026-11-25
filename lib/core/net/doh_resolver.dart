@@ -57,7 +57,7 @@ class DohResolver {
 
   /// 诊断日志：开发日志 + 「关于 → 错误日志」（仅内存，便于用户反馈时查看）
   static void _defaultLog(String message) {
-    developer.log(message, name: 'xiugou-tv::doh');
+    developer.log(message, name: 'yingshi-tv::doh');
     ErrorLog.instance.record('安全 DNS', message);
   }
 
@@ -215,7 +215,7 @@ class _HttpDohTransport {
   final Duration timeout;
   late final HttpClient _client = HttpClient()
     ..connectionTimeout = timeout
-    ..userAgent = 'xiugou-tv';
+    ..userAgent = 'yingshi-tv';
 
   /// DNS 报文上限 64 KB，超过即视为异常
   static const int _maxBytes = 65535;

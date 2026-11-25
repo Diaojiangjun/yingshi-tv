@@ -2,8 +2,6 @@
 
 一款面向 Windows 的本地影视播放器与信息聚合客户端：不提供、不存储、不分发任何音视频内容，播放源由你自行配置。
 
-> 本项目基于 [qfw66/xiugou-tv](https://github.com/qfw66/xiugou-tv) 二次开发，按 GPL-3.0 发布；上游作者的贡献与版权归其所有。
-
 <p align="center">
   <img src="assets/icons/app_icon.png" width="128" alt="影视 图标">
 </p>
@@ -157,7 +155,7 @@
 
 播放基于 [media_kit](https://github.com/media-kit/media-kit)（libmpv）；部分兼容能力借助 [unidbg](https://github.com/zhkl0228/unidbg) 与 [dex2jar](https://github.com/pxb1988/dex2jar) 实现。
 
-安装目录的 `licenses/THIRD_PARTY_LICENSES.md` 列出第三方组件的来源与许可。项目从 v1.1.0 起对新贡献采用 DCO 签名。感谢 @digiprospector 修复音轨和字幕的选中状态，并贡献聚合搜索站点选择。[PR #21](https://github.com/qfw66/xiugou-tv/pull/21) · [PR #25](https://github.com/qfw66/xiugou-tv/pull/25)
+安装目录的 `licenses/THIRD_PARTY_LICENSES.md` 列出第三方组件的来源与许可。项目从 v1.1.0 起对新贡献采用 DCO 签名。感谢 @digiprospector 修复音轨和字幕的选中状态，并贡献聚合搜索站点选择。
 
 ## 免责声明
 

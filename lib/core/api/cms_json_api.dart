@@ -22,7 +22,7 @@ class CmsJsonApi {
                 receiveTimeout: const Duration(seconds: 20),
                 headers: {
                   'User-Agent':
-                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 xiugou-tv/5.6.3',
+                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 yingshi-tv/1.2.0',
                   'Accept': 'application/json, text/xml, application/xml, text/html, */*',
                 },
               ),
@@ -30,7 +30,7 @@ class CmsJsonApi {
 
   /// 打印格式化调试日志到终端与控制台
   void _log(String tag, String message) {
-    developer.log(message, name: 'xiugou-tv::$tag');
+    developer.log(message, name: 'yingshi-tv::$tag');
     // ignore: avoid_print
     print('[$tag] $message');
   }
@@ -39,7 +39,7 @@ class CmsJsonApi {
   Map<String, dynamic> _buildHeaders(Site? site) {
     final headers = <String, dynamic>{
       'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 xiugou-tv/5.6.3',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 yingshi-tv/1.2.0',
       'Accept': 'application/json, text/xml, application/xml, text/html, */*',
     };
     if (site?.header != null) {

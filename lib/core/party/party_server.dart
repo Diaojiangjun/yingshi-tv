@@ -94,7 +94,7 @@ class PartyServer {
       switch (request.uri.path) {
         case '/ping':
           await _json(response, 200, {
-            'app': 'xiugou-tv',
+            'app': 'yingshi-tv',
             'api': apiVersion,
             'name': deviceName(),
             'party': room.open,

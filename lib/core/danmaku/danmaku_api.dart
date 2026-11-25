@@ -17,7 +17,7 @@ import 'danmaku_source.dart';
 ///   播放页没有弹幕按钮 / D 键、设置页没有「弹幕」分组、不发任何请求，其余功能照常；
 /// - `config/app.env` 已被 `.gitignore` 排除，**不要提交**；入库的只有空值模板 `config/app.env.example`。
 ///
-/// 服务是自部署的 LogVar Danmu API（https://github.com/qfw66/danmu_api），令牌放在路径第一段。
+/// 服务是自部署的 LogVar Danmu API（https://github.com/Diaojiangjun/danmu_api），令牌放在路径第一段。
 /// 注意：值会编进发布的 exe，只能防「拿仓库代码就能用」，挡不住拆包或抓包；防滥用靠服务端限流 / 换令牌。
 /// 构建期内置的主接口地址（不含用户自填值）：设置页据此区分「有内置服务」与「完全没配」。
 String get kBuiltinDanmakuApiBase => composeDanmakuApiBase(
@@ -127,7 +127,7 @@ class DanmakuApi {
   static HttpClient _defaultClient(String? Function() proxy) {
     return HttpClientFactory.createHttpClient(
       connectionTimeout: const Duration(seconds: 12),
-      userAgent: 'xiugou-tv',
+      userAgent: 'yingshi-tv',
       proxy: proxy,
     );
   }

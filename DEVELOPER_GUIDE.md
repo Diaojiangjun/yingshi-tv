@@ -4,7 +4,7 @@
 
 | 功能 | 依赖的服务 | 没配置时 |
 | --- | --- | --- |
-| 点播弹幕 | 自部署的 [LogVar Danmu API](https://github.com/qfw66/danmu_api) | 播放页没有弹幕按钮 / 弹幕设置 / `D` 键，设置页没有「弹幕」分组，不发任何请求 |
+| 点播弹幕 | 自部署的 [LogVar Danmu API](https://github.com/Diaojiangjun/danmu_api) | 播放页没有弹幕按钮 / 弹幕设置 / `D` 键，设置页没有「弹幕」分组，不发任何请求 |
 | 共享跳过片段 | 本仓库的 Cloudflare Worker：[`server/segments-worker/`](server/segments-worker/README.md) | 播放页没有「片段」按钮，时间轴上不显示片段色块 |
 
 这两项服务的地址与令牌**不在仓库里**。
@@ -34,7 +34,7 @@ XIUGOU_SEGMENTS_TOKEN="your-client-token"
 
 ## 2. 部署服务
 
-- **弹幕**：按 [LogVar Danmu API](https://github.com/qfw66/danmu_api) 的说明部署（Vercel / Cloudflare / Docker 均可），
+- **弹幕**：按 [LogVar Danmu API](https://github.com/Diaojiangjun/danmu_api) 的说明部署（Vercel / Cloudflare / Docker 均可），
   得到「根地址 + 令牌」。国内直连 `*.vercel.app` 常被干扰，建议绑定自己的域名。
 - **共享片段**：照 [`server/segments-worker/README.md`](server/segments-worker/README.md) 第四节，6 条命令完成
   D1 建库建表、设置密钥、部署 Worker；该文档也写了表结构、接口与校验规则。
@@ -48,5 +48,5 @@ XIUGOU_SEGMENTS_TOKEN="your-client-token"
 | 手动 `flutter build windows --release` | 必须自己加 `--dart-define-from-file=config/app.env`——release 包**只认编译期注入的值**，不读磁盘上的文件 |
 | `flutter test` | 不读配置，测试环境一律视为「未配置」，保证结果稳定 |
 
-启动日志里会打印 `[xiugou-tv] 弹幕服务：已配置 / 未配置`（不打印地址和令牌），可以据此确认配置是否生效。
+启动日志里会打印 `[yingshi-tv] 弹幕服务：已配置 / 未配置`（不打印地址和令牌），可以据此确认配置是否生效。
 读取逻辑在 `lib/core/config/app_env.dart`。
