@@ -12,7 +12,7 @@ class PlayerOption {
   const PlayerOption(this.value, this.label);
 }
 
-/// 播放器与解码首选项（持久化于 %APPDATA%/XiugouTV/player_settings.json）。
+/// 播放器与解码首选项（持久化于 %APPDATA%/YingshiTV/player_settings.json）。
 ///
 /// 所有字段在反序列化时做白名单 / 范围校验，非法或缺失值回落默认值，
 /// 保证旧版本或手工编辑的文件不会导致崩溃。

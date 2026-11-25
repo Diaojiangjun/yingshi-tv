@@ -6,7 +6,7 @@ import java.io.File;
  * companion android shim: android.os.Environment
  *
  * 手机端网盘系 spider（夸克 QuarkApi、Cloud 系等）用它取外部存储/缓存目录；
- * 桌面端映射到 ~/.xiugou_tv_companion/sdcard（外部存储）与 ~/.xiugou_tv_companion/data（/data），
+ * 桌面端映射到 ~/.yingshi_tv_companion/sdcard（外部存储）与 ~/.yingshi_tv_companion/data（/data），
  * 保证可读写且跨会话稳定；只有下载缓存目录仍放系统临时目录。
  *
  * 触发场景：dongli-spider.jar 的 Wogg.init → QuarkApi.getCache → NoClassDefFoundError.
@@ -30,7 +30,7 @@ public class Environment {
     public static final String DIRECTORY_DOCUMENTS = "Documents";
 
     private static File storageRoot() {
-        File root = new File(new File(System.getProperty("user.home", "."), ".xiugou_tv_companion"), "sdcard");
+        File root = new File(new File(System.getProperty("user.home", "."), ".yingshi_tv_companion"), "sdcard");
         if (!root.exists()) root.mkdirs();
         return root;
     }
@@ -62,13 +62,13 @@ public class Environment {
      * 改为站源服务目录下的 data/（持久，「重置所有设置」会清掉）。
      */
     public static File getDataDirectory() {
-        File dir = new File(new File(System.getProperty("user.home", "."), ".xiugou_tv_companion"), "data");
+        File dir = new File(new File(System.getProperty("user.home", "."), ".yingshi_tv_companion"), "data");
         if (!dir.exists()) dir.mkdirs();
         return dir;
     }
 
     public static File getDownloadCacheDirectory() {
-        File dir = new File(System.getProperty("java.io.tmpdir"), "xiugou_tv_download_cache");
+        File dir = new File(System.getProperty("java.io.tmpdir"), "yingshi_tv_download_cache");
         if (!dir.exists()) dir.mkdirs();
         return dir;
     }

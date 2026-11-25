@@ -53,8 +53,8 @@ def decode_tags(data):
 class AuthorGameStreamTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.stream_module = author_module("game_live_stream.py", "XIUGOU_AUTHOR_GAME_STREAM")
-        cls.yy_module = author_module("game_live_yy.py", "XIUGOU_AUTHOR_GAME_YY")
+        cls.stream_module = author_module("game_live_stream.py", "YINGSHI_AUTHOR_GAME_STREAM")
+        cls.yy_module = author_module("game_live_yy.py", "YINGSHI_AUTHOR_GAME_YY")
 
     def setUp(self):
         self.net = RuntimeNet()

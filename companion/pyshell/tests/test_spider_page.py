@@ -18,10 +18,10 @@ class SpiderPageTest(unittest.TestCase):
         self.spider = Spider.__new__(Spider)
 
     def _original(self):
-        path = Path(os.environ.get("XIUGOU_AUTHOR_GAME") or
+        path = Path(os.environ.get("YINGSHI_AUTHOR_GAME") or
                     r"E:\code\tvbox_1102\live-python\vod\game_live.py")
         if not path.is_file():
-            self.skipTest("original game source missing; set XIUGOU_AUTHOR_GAME")
+            self.skipTest("original game source missing; set YINGSHI_AUTHOR_GAME")
         spec = importlib.util.spec_from_file_location("author_game_page_fixture", path)
         author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(author)

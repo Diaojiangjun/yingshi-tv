@@ -36,7 +36,7 @@ function Write-Fixture([string]$Root, [string]$RelativePath, [string]$Content = 
 # Explicit fixture inventory: retain native assets, arbitrary plugin DLLs, runtime
 # configuration, CA certificates, bytecode-only modules, and third-party legal files.
 $runtimeFiles = @(
-    'xiugou_tv.exe', 'flutter_windows.dll', 'libmpv-2.dll', 'libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll',
+    'yingshi_tv.exe', 'flutter_windows.dll', 'libmpv-2.dll', 'libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll',
     'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'new_feature_plugin.dll', 'dartjni.dll', 'native_assets.json',
     'data/app.so', 'data/icudtl.dat', 'data/flutter_assets/AssetManifest.bin', 'data/flutter_assets/FontManifest.json',
     'data/flutter_assets/NOTICES.Z', 'data/flutter_assets/fonts/MaterialIcons-Regular.otf',
@@ -63,8 +63,8 @@ $runtimeFiles = @(
 foreach ($rel in $runtimeFiles) { Write-Fixture $source $rel }
 $generatedFiles = @(
     'user_data/desktop_window.json', 'user_data/webdav_connections.bin', 'user_data/private/never-copy.env',
-    'logs/companion.log', 'cache/download.jar', '.xiugou_tv_companion/jars/private.jar',
-    'hs_err_pid123.log', 'replay_pid123.log', 'xiugou_tv.exe.dmp', 'companion/dist/companion.log',
+    'logs/companion.log', 'cache/download.jar', '.yingshi_tv_companion/jars/private.jar',
+    'hs_err_pid123.log', 'replay_pid123.log', 'yingshi_tv.exe.dmp', 'companion/dist/companion.log',
     'companion/dist/phpruntime/php_errors.log', 'companion/dist/pyshell/base/__pycache__/spider.cpython-314.pyc',
     'companion/dist/pyruntime/Lib/site-packages/pkg/__pycache__/cache.cpython-314.pyc',
     'companion/dist/pyshell/.pytest_cache/private-token', 'zlib.dll'
@@ -190,7 +190,7 @@ foreach ($hive in @('CurrentUser', 'LocalMachine')) {
     foreach ($view in @('Registry32', 'Registry64')) {
         foreach ($key in @('{E88D6F21-6A2F-4E8C-B8FB-5A86FA8F0C42}_is1', '{E88D6F21-6A2F-4E8C-B8FB-5A86FA8F0C42}}_is1')) {
             $registration = [pscustomobject]@{ Hive=$hive; View=$view; Key=$key; InstallLocation='C:\real-install'; UninstallString='"C:\real-install\unins000.exe"' }
-            Assert-Throws { Assert-NoReleaseInstallConflict @($registration) } 'Existing XiugouTV installation'
+            Assert-Throws { Assert-NoReleaseInstallConflict @($registration) } 'Existing YingshiTV installation'
             Assert-Throws { Assert-ReleaseTestInstallOwner @($registration) $ownedRoot } 'refusing uninstall'
         }
     }
@@ -208,7 +208,7 @@ Assert-NoReleaseInstallConflict @($machine) -AllowMachineInstall
 $owned.UninstallString = '"' + (Join-Path $ownedRoot 'unins000.exe') + '"'
 Assert-ReleaseTestInstallOwner @($machine, $owned) $ownedRoot @($machine)
 Assert-True $true 'Current-user test install has separate ownership.'
-Assert-Throws { Assert-NoReleaseInstallConflict @($machine, $owned) -AllowMachineInstall } 'Existing XiugouTV installation'
+Assert-Throws { Assert-NoReleaseInstallConflict @($machine, $owned) -AllowMachineInstall } 'Existing YingshiTV installation'
 Assert-Throws { Assert-ReleaseMachineInstallPreserved @($machine) @($machine) 'C:\real-install\child' } 'overlap'
 Assert-Throws { Assert-ReleaseMachineInstallPreserved @($machine) @($machine) 'C:\' } 'overlap'
 Assert-Throws { Assert-ReleaseMachineInstallPreserved @() @($machine) } 'registration changed'
@@ -216,7 +216,7 @@ $changedMachine = [pscustomobject]@{Hive='LocalMachine';View='Registry64';Key='m
 Assert-Throws { Assert-ReleaseTestInstallOwner @($changedMachine, $owned) $ownedRoot @($machine) } 'registration changed'
 Assert-Throws { Assert-ReleaseTestInstallOwner @($machine) $ownedRoot @($machine) } 'no registration'
 $unfingerprinted = [pscustomobject]@{Hive='LocalMachine';View='Registry64';Key='machine';InstallLocation='C:\real-install';UninstallString='"C:\real-install\unins000.exe"';Fingerprint=''}
-Assert-Throws { Assert-NoReleaseInstallConflict @($unfingerprinted) -AllowMachineInstall } 'Existing XiugouTV installation'
+Assert-Throws { Assert-NoReleaseInstallConflict @($unfingerprinted) -AllowMachineInstall } 'Existing YingshiTV installation'
 
 # Reject physical aliases before installer launch, not only during package reads.
 $installAlias = Join-Path $testRoot 'install-alias'
@@ -231,21 +231,21 @@ try {
 
 # Exercise a real disposable key; fingerprints must use stored REG_EXPAND_SZ
 # bytes, independent of the isolated environment. Never touch uninstall keys.
-$fixtureKeyName = 'Software\XiugouTV-Packaging-Test-' + [Guid]::NewGuid().ToString('N')
+$fixtureKeyName = 'Software\YingshiTV-Packaging-Test-' + [Guid]::NewGuid().ToString('N')
 $fixtureKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($fixtureKeyName)
-$savedFixtureEnv = $env:XIUGOU_PACKAGING_FIXTURE
+$savedFixtureEnv = $env:YINGSHI_PACKAGING_FIXTURE
 try {
-    $env:XIUGOU_PACKAGING_FIXTURE = 'before'
-    $fixtureKey.SetValue('expanded', '%XIUGOU_PACKAGING_FIXTURE%\path', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    $env:YINGSHI_PACKAGING_FIXTURE = 'before'
+    $fixtureKey.SetValue('expanded', '%YINGSHI_PACKAGING_FIXTURE%\path', [Microsoft.Win32.RegistryValueKind]::ExpandString)
     $fingerprintBefore = Get-ReleaseRegistryFingerprint $fixtureKey
-    $env:XIUGOU_PACKAGING_FIXTURE = 'after'
+    $env:YINGSHI_PACKAGING_FIXTURE = 'after'
     Assert-True ((Get-ReleaseRegistryFingerprint $fixtureKey) -eq $fingerprintBefore) 'Expanded environment changed raw registry fingerprint.'
     $fixtureKey.SetValue('expanded', 'after\path', [Microsoft.Win32.RegistryValueKind]::ExpandString)
     Assert-True ((Get-ReleaseRegistryFingerprint $fixtureKey) -ne $fingerprintBefore) 'Different raw values with equal expansion compare equal.'
 } finally {
     $fixtureKey.Dispose()
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($fixtureKeyName)
-    $env:XIUGOU_PACKAGING_FIXTURE = $savedFixtureEnv
+    $env:YINGSHI_PACKAGING_FIXTURE = $savedFixtureEnv
 }
 
 $environment = New-ReleaseTestEnvironment (Join-Path $smoke 'environment')
@@ -260,7 +260,7 @@ try {
     Assert-True ($LASTEXITCODE -eq 0) 'Absolute PowerShell invocation failed under isolated PATH.'
 } finally { $env:PATH = $savedPath }
 
-$mdkFiles = @('mdk/mdk.dll','mdk/ffmpeg-9.dll','mdk/Xiugou-MDK-SDK-notice.txt')
+$mdkFiles = @('mdk/mdk.dll','mdk/ffmpeg-9.dll','mdk/Yingshi-MDK-SDK-notice.txt')
 Assert-Throws { New-StagedApplicationTree $source (Join-Path $testRoot 'no-sdk') -IncludeMdk } 'Required package runtime missing: mdk/'
 foreach ($rel in $mdkFiles) { Write-Fixture $source $rel }
 $mdkStage = New-StagedApplicationTree $source (Join-Path $testRoot 'mdk-default')
@@ -277,16 +277,16 @@ Assert-Throws { New-StagedApplicationTree $source (Join-Path $testRoot 'unlisted
 
 $configFile = Join-Path $testRoot 'app.env'
 $aotFixture = Join-Path $testRoot 'app.so'
-$configRows = @('XIUGOU_TMDB_API_KEY=0123456789abcdef0123456789abcdef','XIUGOU_DANMAKU_URL="https://fixture.invalid/d"','XIUGOU_DANMAKU_TOKEN="dm#test"','XIUGOU_SEGMENTS_URL=https://fixture.invalid/s','XIUGOU_SEGMENTS_TOKEN=sg_test')
+$configRows = @('YINGSHI_TMDB_API_KEY=0123456789abcdef0123456789abcdef','YINGSHI_DANMAKU_URL="https://fixture.invalid/d"','YINGSHI_DANMAKU_TOKEN="dm#test"','YINGSHI_SEGMENTS_URL=https://fixture.invalid/s','YINGSHI_SEGMENTS_TOKEN=sg_test')
 foreach ($row in $configRows) {
     [IO.File]::WriteAllLines($configFile, @($configRows -ne $row) + ($row.Split('=')[0] + '=""'))
     Assert-Throws { Get-PackageClientConfig $configFile } $row.Split('=')[0]
 }
 [IO.File]::WriteAllLines($configFile, $configRows)
 $config = Get-PackageClientConfig $configFile
-Assert-True ($config.Count -eq 5 -and $config.XIUGOU_DANMAKU_TOKEN -ceq 'dm#test') 'Wrong client config.'
+Assert-True ($config.Count -eq 5 -and $config.YINGSHI_DANMAKU_TOKEN -ceq 'dm#test') 'Wrong client config.'
 [IO.File]::WriteAllText($aotFixture, ($config.Values -ne 'sg_test' -join ';'))
-Assert-Throws { Assert-PackageClientConfig $config $aotFixture } 'XIUGOU_SEGMENTS_TOKEN'
+Assert-Throws { Assert-PackageClientConfig $config $aotFixture } 'YINGSHI_SEGMENTS_TOKEN'
 [IO.File]::AppendAllText($aotFixture, 'sg_test')
 Assert-PackageClientConfig $config $aotFixture
 

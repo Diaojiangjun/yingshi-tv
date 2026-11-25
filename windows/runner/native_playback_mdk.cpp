@@ -1,6 +1,6 @@
 #include "native_playback_backend.h"
 
-#ifdef XIUGOU_MDK_PREVIEW
+#ifdef YINGSHI_MDK_PREVIEW
 #include "native_playback_mdk_surface.h"
 #include <mdk/c/MediaInfo.h>
 #include <mdk/c/Player.h>

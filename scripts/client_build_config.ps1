@@ -1,6 +1,6 @@
 function Get-PackageClientConfig([string]$Path) {
-    $keys = @('XIUGOU_TMDB_API_KEY', 'XIUGOU_DANMAKU_URL', 'XIUGOU_DANMAKU_TOKEN', 'XIUGOU_SEGMENTS_URL', 'XIUGOU_SEGMENTS_TOKEN')
-    $optionalKeys = @('XIUGOU_DANMAKU_SECONDARY_URL')
+    $keys = @('YINGSHI_TMDB_API_KEY', 'YINGSHI_DANMAKU_URL', 'YINGSHI_DANMAKU_TOKEN', 'YINGSHI_SEGMENTS_URL', 'YINGSHI_SEGMENTS_TOKEN')
+    $optionalKeys = @('YINGSHI_DANMAKU_SECONDARY_URL')
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Missing client build configuration file.' }
     $values = @{}
     foreach ($line in [IO.File]::ReadAllLines($Path)) {
@@ -15,7 +15,7 @@ function Get-PackageClientConfig([string]$Path) {
     foreach ($key in $keys) {
         if ([string]::IsNullOrWhiteSpace($values[$key])) { throw "Missing client configuration: $key" }
     }
-    if ($values.XIUGOU_TMDB_API_KEY -notmatch '^[0-9a-f]{32}$') { throw 'Invalid client configuration: XIUGOU_TMDB_API_KEY' }
+    if ($values.YINGSHI_TMDB_API_KEY -notmatch '^[0-9a-f]{32}$') { throw 'Invalid client configuration: YINGSHI_TMDB_API_KEY' }
     foreach ($key in $optionalKeys) {
         if ([string]::IsNullOrWhiteSpace($values[$key])) { $values.Remove($key) }
     }

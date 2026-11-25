@@ -20,7 +20,7 @@ const output = process.stdout.write.bind(process.stdout);
 const stringify = JSON.stringify.bind(JSON);
 const parse = JSON.parse.bind(JSON);
 const exit = process.exit.bind(process);
-const frame = value => output('XIUGOU_CAT ' + stringify(value) + '\n');
+const frame = value => output('YINGSHI_CAT ' + stringify(value) + '\n');
 const limit = 8 * 1024 * 1024;
 let plugin, control, stopping = false, booted = false;
 let servicePort = 0;
@@ -39,7 +39,7 @@ http.request = function (...args) {
   const address = control?.address();
   if (requestId && address && request.path === '/msg' &&
       request.getHeader('host') === '127.0.0.1:' + address.port) {
-    request.setHeader('X-Xiugou-Request', requestId);
+    request.setHeader('X-Yingshi-Request', requestId);
   }
   return request;
 };
@@ -216,7 +216,7 @@ async function boot(input) {
         if (length > limit) throw new Error('Message exceeds limit');
         chunks.push(chunk);
       }
-      const requestId = request.headers['x-xiugou-request'];
+      const requestId = request.headers['x-yingshi-request'];
       const result = await requestContext.run(
         typeof requestId === 'string' && /^[a-f0-9-]{36}$/.test(requestId) ? requestId : '',
         () => callback(parse(Buffer.concat(chunks).toString('utf8'))));
@@ -248,7 +248,7 @@ async function boot(input) {
         });
         response.once('close', () => { pendingRequests.delete(pending); finished(); });
       }
-      const requestId = request.headers['x-xiugou-request'];
+      const requestId = request.headers['x-yingshi-request'];
       requestContext.run(typeof requestId === 'string' && /^[a-f0-9-]{36}$/.test(requestId) ? requestId : '',
         () => handler(request, response));
     });

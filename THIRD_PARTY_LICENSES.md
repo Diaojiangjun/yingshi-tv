@@ -74,7 +74,7 @@
 
 ### 2.1 v1.2.0 可选原生播放器的分发边界
 
-- MDK SDK 0.40.1 的授权依据：上游通知原文「Free for opensource softwares, non-commercial softwares, flutter, QtAV donors and contributors.」，原文随包保留在 `mdk/Xiugou-MDK-SDK-notice.txt`。本项目以 GPL-3.0 开源发布，按该条款使用；本清单不把 SDK 重新声明为 GPL-3.0。
+- MDK SDK 0.40.1 的授权依据：上游通知原文「Free for opensource softwares, non-commercial softwares, flutter, QtAV donors and contributors.」，原文随包保留在 `mdk/Yingshi-MDK-SDK-notice.txt`。本项目以 GPL-3.0 开源发布，按该条款使用；本清单不把 SDK 重新声明为 GPL-3.0。
 - `ffmpeg-9.dll` 报告 LGPL version 2.1 or later，构建标识 `git-2026-10-25-464fc8c-avbuild`。**书面提供**：对应源码为 FFmpeg 提交 `464fc8c2ed53`（<https://github.com/FFmpeg/FFmpeg/tree/464fc8c2ed53>），Windows 构建脚本见 <https://github.com/wang-bin/avbuild>；自本版发布起三年内，向持有本发行版者提供上述源码副本（含所用构建配置），索取方式见仓库 Issue。许可全文随包在 `licenses/FFmpeg-COPYING.LGPLv2.1`。
 - MDK 以独立 DLL 动态加载 `ffmpeg-9.dll`，用户可用兼容构建直接替换该 DLL，无需重新链接本程序，满足 LGPL 的可替换要求。
 - MDK 的 FFmpeg 与默认 mpv 的 FFmpeg 是不同构建，不互相推断许可；各自保留上游通知与许可文件。PGS 独立预览内核未替换本版标准 mpv。

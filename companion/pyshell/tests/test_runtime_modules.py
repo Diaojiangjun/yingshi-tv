@@ -20,7 +20,7 @@ sys.path.insert(0, str(SHELL))
 from base.spider import Spider  # noqa: E402
 
 
-AUTHOR = Path(os.environ.get("XIUGOU_AUTHOR_GAME") or
+AUTHOR = Path(os.environ.get("YINGSHI_AUTHOR_GAME") or
               r"E:\code\tvbox_1102\live-python\vod\game_live.py")
 HELPERS = ("game_live_protocol", "game_live_stream", "game_live_yy")
 
@@ -82,7 +82,7 @@ class ModuleFixtureTest(unittest.TestCase):
         cls.thread.join(timeout=2)
 
     def setUp(self):
-        directory = tempfile.TemporaryDirectory(prefix="xiugou-modules-")
+        directory = tempfile.TemporaryDirectory(prefix="yingshi-modules-")
         self.addCleanup(directory.cleanup)
         self.directory = Path(directory.name)
         self.server.responses = {}
@@ -91,12 +91,12 @@ class ModuleFixtureTest(unittest.TestCase):
         self.server.release = threading.Event()
         self.addCleanup(self.server.release.set)
         environment = patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_API": str(self.directory / "entry.py"),
-            "XIUGOU_SCRIPT_BASE": "", "XIUGOU_SCRIPT_SITE_KEY": "site-one",
-            "XIUGOU_CACHE_DIR": "", "NO_PROXY": "127.0.0.1,localhost",
+            "YINGSHI_SCRIPT_API": str(self.directory / "entry.py"),
+            "YINGSHI_SCRIPT_BASE": "", "YINGSHI_SCRIPT_SITE_KEY": "site-one",
+            "YINGSHI_CACHE_DIR": "", "NO_PROXY": "127.0.0.1,localhost",
         })
         environment.start()
-        os.environ.pop("XIUGOU_SCRIPT_ENTRY", None)
+        os.environ.pop("YINGSHI_SCRIPT_ENTRY", None)
         self.addCleanup(environment.stop)
 
     def _write(self, name, text):
@@ -107,7 +107,7 @@ class ModuleFixtureTest(unittest.TestCase):
 
     def _original(self):
         if not AUTHOR.is_file():
-            self.skipTest("original game source missing; set XIUGOU_AUTHOR_GAME")
+            self.skipTest("original game source missing; set YINGSHI_AUTHOR_GAME")
         spec = importlib.util.spec_from_file_location("author_game_modules_fixture", AUTHOR)
         author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(author)
@@ -127,7 +127,7 @@ class ModuleFixtureTest(unittest.TestCase):
     def test_unchanged_original_helpers_load_from_windows_path_and_file_uri(self):
         author = self._original()
         for api in (str(AUTHOR), AUTHOR.as_uri()):
-            with self.subTest(api=api), patch.dict(os.environ, {"XIUGOU_SCRIPT_API": api}):
+            with self.subTest(api=api), patch.dict(os.environ, {"YINGSHI_SCRIPT_API": api}):
                 self._assert_original_helpers(author.Spider())
 
     def test_original_http_helpers_keep_parent_origin_instead_of_cached_entry(self):
@@ -136,8 +136,8 @@ class ModuleFixtureTest(unittest.TestCase):
             self.server.responses["/scripts/vod/" + name + ".py"] = (
                 200, {}, AUTHOR.with_name(name + ".py").read_bytes())
         with patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_API": "./vod/game_live.py",
-            "XIUGOU_SCRIPT_BASE": self.origin + "/scripts/",
+            "YINGSHI_SCRIPT_API": "./vod/game_live.py",
+            "YINGSHI_SCRIPT_BASE": self.origin + "/scripts/",
         }):
             spider = author.Spider()
             self._assert_original_helpers(spider)
@@ -148,7 +148,7 @@ class ModuleFixtureTest(unittest.TestCase):
         self._write("vod/helper.py", "answer = 42\n")
         for base in (str(self.directory), self.directory.as_uri() + "/"):
             with self.subTest(base=base), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_API": "./vod/entry.py", "XIUGOU_SCRIPT_BASE": base,
+                "YINGSHI_SCRIPT_API": "./vod/entry.py", "YINGSHI_SCRIPT_BASE": base,
             }):
                 self.assertEqual(_DeclaredSpider(["helper"]).loadModule("helper").answer, 42)
 
@@ -157,15 +157,15 @@ class ModuleFixtureTest(unittest.TestCase):
         original_api = "vod/entry.py"
         original_base = (self.directory / "vod").as_uri() + "/"
         with patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_API": original_api,
-            "XIUGOU_SCRIPT_BASE": original_base,
-            "XIUGOU_SCRIPT_ENTRY": (self.directory / "vod/entry.py").as_uri(),
+            "YINGSHI_SCRIPT_API": original_api,
+            "YINGSHI_SCRIPT_BASE": original_base,
+            "YINGSHI_SCRIPT_ENTRY": (self.directory / "vod/entry.py").as_uri(),
         }):
             helper = _DeclaredSpider(["helper"]).loadModule("helper")
             self.assertEqual(helper.answer, 42)
             self.assertEqual(helper.__file__, (self.directory / "vod/helper.py").as_uri())
-            self.assertEqual(os.environ["XIUGOU_SCRIPT_API"], original_api)
-            self.assertEqual(os.environ["XIUGOU_SCRIPT_BASE"], original_base)
+            self.assertEqual(os.environ["YINGSHI_SCRIPT_API"], original_api)
+            self.assertEqual(os.environ["YINGSHI_SCRIPT_BASE"], original_base)
 
     def test_effective_http_entry_loads_original_helpers_from_normalized_origin(self):
         author = self._original()
@@ -182,21 +182,21 @@ class ModuleFixtureTest(unittest.TestCase):
                 self.server.responses[path] = (200, {}, AUTHOR.with_name(name + ".py").read_bytes())
                 expected.append(path)
             with self.subTest(api=original), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_API": original,
-                "XIUGOU_SCRIPT_BASE": original.rsplit("/", 1)[0] + "/",
-                "XIUGOU_SCRIPT_ENTRY": effective,
+                "YINGSHI_SCRIPT_API": original,
+                "YINGSHI_SCRIPT_BASE": original.rsplit("/", 1)[0] + "/",
+                "YINGSHI_SCRIPT_ENTRY": effective,
             }):
                 spider = author.Spider()
                 self._assert_original_helpers(spider)
                 self.assertEqual(spider.protocol.__file__, parent + "/game_live_protocol.py")
-                self.assertEqual(os.environ["XIUGOU_SCRIPT_API"], original)
+                self.assertEqual(os.environ["YINGSHI_SCRIPT_API"], original)
             self.assertEqual(self.server.requests, expected)
 
     def test_invalid_explicit_entry_never_falls_back_to_original_source(self):
         self._write("helper.py", "answer = 42\n")
         for entry in ("", "vod/entry.py", "//remote/entry.py", "file://remote/entry.py",
                       "https://user:secret@example.test/entry.py", "http://localhost/a.py#bad"):
-            with self.subTest(entry=entry), patch.dict(os.environ, {"XIUGOU_SCRIPT_ENTRY": entry}), \
+            with self.subTest(entry=entry), patch.dict(os.environ, {"YINGSHI_SCRIPT_ENTRY": entry}), \
                     self.assertRaises(ValueError):
                 _DeclaredSpider(["helper"]).loadModule("helper")
         self.assertEqual(self.server.requests, [])
@@ -221,14 +221,14 @@ class ModuleFixtureTest(unittest.TestCase):
         generations = [one]
         for site, entry in (("site-one", "entry.py"), ("site-two", "entry.py"), ("site-one", "other.py")):
             with patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_SITE_KEY": site,
-                "XIUGOU_SCRIPT_API": str(self.directory / entry),
+                "YINGSHI_SCRIPT_SITE_KEY": site,
+                "YINGSHI_SCRIPT_API": str(self.directory / entry),
             }):
                 helper = _DeclaredSpider(["helper"]).loadModule("helper")
                 self.assertEqual(helper.values, [])
                 generations.append(helper)
         self.assertEqual(len({helper.__name__ for helper in generations}), 4)
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": "", "XIUGOU_SCRIPT_SITE_KEY": "changed"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": "", "YINGSHI_SCRIPT_SITE_KEY": "changed"}):
             self.assertIs(first.loadModule("helper"), one)
         self.assertEqual(one.values, ["only-first"])
 
@@ -263,13 +263,13 @@ class ModuleFixtureTest(unittest.TestCase):
                                 ("http://user:secret@127.0.0.1/entry.py", "", "site"),
                                 (str(self.directory / "entry.py"), "", "")):
             with self.subTest(api=api, base=base, site=site), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_API": api, "XIUGOU_SCRIPT_BASE": base, "XIUGOU_SCRIPT_SITE_KEY": site,
+                "YINGSHI_SCRIPT_API": api, "YINGSHI_SCRIPT_BASE": base, "YINGSHI_SCRIPT_SITE_KEY": site,
             }), self.assertRaises((ValueError, RuntimeError)) as caught:
                 _DeclaredSpider(["os"]).loadModule("os")
             self.assertNotIn("secret", str(caught.exception))
 
     def test_http_missing_source_and_syntax_fail_cleanly_without_caching_partial_module(self):
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": self.origin + "/entry.py"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": self.origin + "/entry.py"}):
             spider = _DeclaredSpider(["helper"])
             with self.assertRaisesRegex(ImportError, "source"):
                 spider.loadModule("helper")
@@ -280,7 +280,7 @@ class ModuleFixtureTest(unittest.TestCase):
             self.assertEqual(spider.loadModule("helper").answer, 42)
 
     def test_truncated_http_source_is_rejected_even_when_prefix_compiles(self):
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": self.origin + "/entry.py"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": self.origin + "/entry.py"}):
             spider = _DeclaredSpider(["helper"])
             self.server.responses["/helper.py"] = (200, {"Content-Length": "100"}, b"answer = 42\n")
             with self.assertRaises(ImportError):
@@ -290,7 +290,7 @@ class ModuleFixtureTest(unittest.TestCase):
 
     def test_http_root_relative_declared_helper_keeps_http_origin(self):
         self.server.responses["/shared/helper.py"] = (200, {}, b"answer = 42\n")
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": self.origin + "/vod/entry.py"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": self.origin + "/vod/entry.py"}):
             loaded = _DeclaredSpider({"helper": "/shared/helper.py"}).loadModule("helper")
         self.assertEqual(loaded.answer, 42)
         self.assertEqual(self.server.requests, ["/shared/helper.py"])
@@ -303,7 +303,7 @@ class ModuleFixtureTest(unittest.TestCase):
         self.assertNotIn("helper", sys.modules)
         with self.assertRaises(ValueError):
             _DeclaredSpider(["helper" + str(index) for index in range(33)]).loadModule("helper0")
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": self.origin + "/entry.py"}), patch.object(
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": self.origin + "/entry.py"}), patch.object(
                 modules, "MAX_SOURCE_BYTES", 64):
             for headers in ({}, {"Content-Length": "invalid"}, {"Content-Length": "-1"}):
                 self.server.responses["/helper.py"] = (200, headers, b"answer = 42\n" + b" " * 65)
@@ -311,7 +311,7 @@ class ModuleFixtureTest(unittest.TestCase):
                     _DeclaredSpider(["helper"]).loadModule("helper")
 
     def test_redirects_and_compressed_http_sources_are_rejected(self):
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": self.origin + "/entry.py"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": self.origin + "/entry.py"}):
             self.server.responses["/helper.py"] = (302, {"Location": self.origin + "/redirect.py"}, b"")
             with self.assertRaises(ImportError):
                 _DeclaredSpider(["helper"]).loadModule("helper")
@@ -375,7 +375,7 @@ class ModuleFixtureTest(unittest.TestCase):
             started = time.monotonic()
             try:
                 with self.subTest(name=name), patch.dict(os.environ, {
-                    "XIUGOU_SCRIPT_API": self.origin + "/entry.py",
+                    "YINGSHI_SCRIPT_API": self.origin + "/entry.py",
                 }), patch.object(modules, "LOAD_TIMEOUT_SECONDS", 0.2), self.assertRaises(TimeoutError):
                     spider.loadModule(name)
                 self.assertLess(time.monotonic() - started, 0.9)

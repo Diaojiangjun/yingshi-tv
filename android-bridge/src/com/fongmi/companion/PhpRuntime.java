@@ -21,7 +21,7 @@ final class PhpRuntime implements AutoCloseable {
     PhpRuntime(Path script) { this.script = script; }
 
     Object call(String method, Map<String, Object> env, Object... args) throws Exception {
-        long timeout = Math.max(1, Math.min(90_000, Long.getLong("xiugou.php.timeoutMs", 40_000)));
+        long timeout = Math.max(1, Math.min(90_000, Long.getLong("yingshi.php.timeoutMs", 40_000)));
         if (!SLOTS.tryAcquire(timeout, TimeUnit.MILLISECONDS)) throw new IOException("PHP 调用繁忙，请稍后重试");
         Process child = null;
         Future<byte[]> pending = null;
@@ -29,7 +29,7 @@ final class PhpRuntime implements AutoCloseable {
             byte[] input = JsonCodec.stringify(Map.of("file", script.toString(), "method", method,
                     "env", env, "args", Arrays.asList(args))).getBytes(StandardCharsets.UTF_8);
             if (input.length > MAX_INPUT) throw new IOException("PHP 调用参数超过 4 MiB");
-            List<String> command = command(script.getParent().resolve(".xiugou-bridge.php"));
+            List<String> command = command(script.getParent().resolve(".yingshi-bridge.php"));
             ProcessBuilder builder = new ProcessBuilder(command).directory(script.getParent().toFile());
             builder.redirectError(ProcessBuilder.Redirect.DISCARD);
             builder.environment().remove("PHPRC");
@@ -78,7 +78,7 @@ final class PhpRuntime implements AutoCloseable {
     }
 
     static List<String> command(Path bridge) {
-        String override = System.getProperty("xiugou.php", "").trim();
+        String override = System.getProperty("yingshi.php", "").trim();
         File executable = override.isEmpty() ? bundledBinary() : new File(override);
         String binary = executable == null ? "php" : executable.getAbsolutePath();
         List<String> command = new ArrayList<>(List.of(binary));

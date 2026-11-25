@@ -32,7 +32,7 @@ class Spider:
         if kind == "mime": return [200, "text/plain\\r\\nX-Evil: yes", ""]
         if kind == "header": return [200, "text/plain", "", {"X-Canary": "secret-canary\\r\\nBad: yes"}]
         if kind == "fifth": return [200, "text/plain", "YWJj", {}, True]
-        if kind == "marker": return {"__xiugou_proxy__": 1, "bodyBase64": "fake"}
+        if kind == "marker": return {"__yingshi_proxy__": 1, "bodyBase64": "fake"}
         raise ValueError("upstream secret-canary")
     def action(self, name):
         return [302, "text/plain", "", {"Location": "normal-data"}]
@@ -43,7 +43,7 @@ class Spider:
 
 class ProxyProtocolTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="xiugou-proxy-protocol-")
+        self.temp = tempfile.TemporaryDirectory(prefix="yingshi-proxy-protocol-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.script = self.root / "source.py"
@@ -77,7 +77,7 @@ class ProxyProtocolTest(unittest.TestCase):
     def test_text_three_items_and_redirect_keep_exact_contract(self):
         value = self.proxy("text")["value"]
         self.assertEqual(type(value), dict)
-        self.assertEqual(value["__xiugou_proxy__"], 1)
+        self.assertEqual(value["__yingshi_proxy__"], 1)
         self.assertEqual(value["status"], 200)
         self.assertEqual(value["mime"], "application/json")
         self.assertEqual(value["headers"], {})

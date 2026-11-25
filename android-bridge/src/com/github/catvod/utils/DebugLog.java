@@ -12,13 +12,13 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>开关：
  * <pre>
- *   -Dxiugou.debug=true              总开关（也可用环境变量 XIUGOU_DEBUG=1）
- *   -Dxiugou.debug.http=false        单独关闭 HTTP 明细
- *   -Dxiugou.debug.rpc=false         单独关闭 RPC 明细
- *   -Dxiugou.debug.full=true         不截断响应体（默认每段最多 4000 字符）
- *   -Dxiugou.debug.max=8000          自定义截断长度
- *   -Dxiugou.debug.secrets=true      Cookie/Authorization 原样输出（默认打码成 ***）
- *   -Dxiugou.debug.ranges=true       带 Range 的分段下载逐条打印（默认按主机每 5 秒汇总一行）
+ *   -Dyingshi.debug=true              总开关（也可用环境变量 YINGSHI_DEBUG=1）
+ *   -Dyingshi.debug.http=false        单独关闭 HTTP 明细
+ *   -Dyingshi.debug.rpc=false         单独关闭 RPC 明细
+ *   -Dyingshi.debug.full=true         不截断响应体（默认每段最多 4000 字符）
+ *   -Dyingshi.debug.max=8000          自定义截断长度
+ *   -Dyingshi.debug.secrets=true      Cookie/Authorization 原样输出（默认打码成 ***）
+ *   -Dyingshi.debug.ranges=true       带 Range 的分段下载逐条打印（默认按主机每 5 秒汇总一行）
  * </pre>
  *
  * <p>输出统一带 {@code [DBG]} 前缀，方便在控制台过滤：
@@ -34,18 +34,18 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class DebugLog {
 
-    private static final boolean MASTER = bool("xiugou.debug", envBool("XIUGOU_DEBUG"));
-    private static final boolean HTTP = MASTER && bool("xiugou.debug.http", true);
-    private static final boolean RPC = MASTER && bool("xiugou.debug.rpc", true);
-    private static final boolean FULL = MASTER && bool("xiugou.debug.full", false);
+    private static final boolean MASTER = bool("yingshi.debug", envBool("YINGSHI_DEBUG"));
+    private static final boolean HTTP = MASTER && bool("yingshi.debug.http", true);
+    private static final boolean RPC = MASTER && bool("yingshi.debug.rpc", true);
+    private static final boolean FULL = MASTER && bool("yingshi.debug.full", false);
     // 默认打码：调试日志会被整段复制、贴进 issue / 聊天，网盘 Cookie 一贴出去就等于交出账号。
-    private static final boolean SECRETS = MASTER && bool("xiugou.debug.secrets", false);
+    private static final boolean SECRETS = MASTER && bool("yingshi.debug.secrets", false);
     // 网盘播放走载荷的多线程分段代理，每 64 KB 一个带 Range 的请求，一秒几十上百个；
     // 逐条打印会刷屏，还会让 Flutter 端的 debugPrint（每秒约 12 KB 限流）越积越多、
     // 播完很久还在往外吐。默认只按主机定时汇总，出错的那一条照旧立即打印。
-    private static final boolean RANGES = MASTER && bool("xiugou.debug.ranges", false);
+    private static final boolean RANGES = MASTER && bool("yingshi.debug.ranges", false);
     private static final long BULK_WINDOW_MS = 5000;
-    private static final int MAX = MASTER ? intProp("xiugou.debug.max", 4000) : 0;
+    private static final int MAX = MASTER ? intProp("yingshi.debug.max", 4000) : 0;
     private static final AtomicLong SEQ = new AtomicLong();
     /** 正在进行的分段请求：id → 主机。响应 / 出错时取走。 */
     private static final Map<Long, String> BULK_INFLIGHT = new ConcurrentHashMap<>();

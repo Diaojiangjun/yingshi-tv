@@ -87,11 +87,11 @@
 
 ## 三、接口
 
-所有请求带请求头 `X-Xiugou-Token: <CLIENT_TOKEN>`（`/v1/health` 除外）。
+所有请求带请求头 `X-Yingshi-Token: <CLIENT_TOKEN>`（`/v1/health` 除外）。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/v1/segments?key=<ep_key>` | 该集结果。可带 `X-Xiugou-Client: <client_id>`，返回里的 `submitted` 会列出这个客户端已提交过的分类 |
+| GET | `/v1/segments?key=<ep_key>` | 该集结果。可带 `X-Yingshi-Client: <client_id>`，返回里的 `submitted` 会列出这个客户端已提交过的分类 |
 | POST | `/v1/segments` | 提交一条，JSON：`{key, clientId, category, action, startMs, endMs, durationMs, title?, episode?}` |
 | POST | `/v1/feedback` | 反馈，JSON：`{key, clientId, category, verdict: "up" \| "down", startMs, endMs, durationMs}`；返回 `{ok, hidden}`，`hidden: true` 表示这一段已被撤下 |
 | GET | `/v1/health` | 健康检查 |
@@ -119,27 +119,27 @@ npm install
 npx wrangler login
 
 # 2. 创建 D1 数据库，把输出里的 database_id 填进 wrangler.toml
-npx wrangler d1 create xiugou-segments
+npx wrangler d1 create yingshi-segments
 
 # 3. 建表
-npx wrangler d1 execute xiugou-segments --remote --file=schema.sql
+npx wrangler d1 execute yingshi-segments --remote --file=schema.sql
 
 # 4. 设置两个密钥（命令执行后按提示粘贴值；不会写进任何文件）
 npx wrangler secret put CLIENT_TOKEN   # 客户端令牌：自己生成一串随机字符，例如 openssl rand -hex 24
 npx wrangler secret put IP_SALT        # IP 哈希的盐：另一串随机字符
 
-# 5. 部署，记下输出的地址（https://xiugou-segments.<你的子域>.workers.dev）
+# 5. 部署，记下输出的地址（https://yingshi-segments.<你的子域>.workers.dev）
 npx wrangler deploy
 
 # 6. 验证
-curl https://xiugou-segments.<你的子域>.workers.dev/v1/health
+curl https://yingshi-segments.<你的子域>.workers.dev/v1/health
 ```
 
 部署完成后，在影视 项目根目录的 `config/app.env`（不入库）里填上：
 
 ```env
-XIUGOU_SEGMENTS_URL="https://xiugou-segments.<你的子域>.workers.dev"
-XIUGOU_SEGMENTS_TOKEN="<第 4 步设置的 CLIENT_TOKEN>"
+YINGSHI_SEGMENTS_URL="https://yingshi-segments.<你的子域>.workers.dev"
+YINGSHI_SEGMENTS_TOKEN="<第 4 步设置的 CLIENT_TOKEN>"
 ```
 
 重新 `flutter run` 或打包即可在播放页看到「片段」按钮。也可以在 Cloudflare 后台给 Worker 绑定自定义域名。
@@ -151,7 +151,7 @@ XIUGOU_SEGMENTS_TOKEN="<第 4 步设置的 CLIENT_TOKEN>"
 旧库没有 `hidden` 列和 `feedback` 表，执行一次迁移脚本再部署新代码（脚本只加不删，已有提交保留）：
 
 ```bash
-npx wrangler d1 execute xiugou-segments --remote --file=migrations/0002_feedback.sql
+npx wrangler d1 execute yingshi-segments --remote --file=migrations/0002_feedback.sql
 npx wrangler deploy
 ```
 
@@ -167,11 +167,11 @@ npm test     # 用 Node 内置 sqlite 模拟 D1，跑校验向量、合并逻辑
 
 ```bash
 # 看某一集的全部提交
-npx wrangler d1 execute xiugou-segments --remote --command "SELECT * FROM submission WHERE ep_key='…'"
+npx wrangler d1 execute yingshi-segments --remote --command "SELECT * FROM submission WHERE ep_key='…'"
 # 看某一集的反馈
-npx wrangler d1 execute xiugou-segments --remote --command "SELECT * FROM feedback WHERE ep_key='…'"
+npx wrangler d1 execute yingshi-segments --remote --command "SELECT * FROM feedback WHERE ep_key='…'"
 # 撤下某个客户端的全部提交（恶意刷数据时）
-npx wrangler d1 execute xiugou-segments --remote --command "UPDATE submission SET hidden=1 WHERE client_id='…'"
+npx wrangler d1 execute yingshi-segments --remote --command "UPDATE submission SET hidden=1 WHERE client_id='…'"
 # 恢复被误撤下的片段
-npx wrangler d1 execute xiugou-segments --remote --command "UPDATE submission SET hidden=0 WHERE id=…"
+npx wrangler d1 execute yingshi-segments --remote --command "UPDATE submission SET hidden=0 WHERE id=…"
 ```

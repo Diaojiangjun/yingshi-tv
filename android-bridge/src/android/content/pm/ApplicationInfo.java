@@ -40,7 +40,7 @@ public class ApplicationInfo extends PackageItemInfo {
         packageName = "com.fongmi.android.tv";
         name = packageName;
         String home = System.getProperty("user.home", ".");
-        dataDir = home + "/.xiugou_tv_companion";
+        dataDir = home + "/.yingshi_tv_companion";
         nativeLibraryDir = dataDir + "/lib";
         sourceDir = dataDir;
         publicSourceDir = dataDir;

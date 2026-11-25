@@ -80,7 +80,7 @@ class FileWebDavProfileStore implements WebDavProfileStore {
     Future<Directory> Function()? directory,
     MethodChannel? channel,
   }) : _directory = directory ?? WindowsConfigStorage().getStorageDirectory,
-       _channel = channel ?? const MethodChannel('xiugou/webdav_secrets');
+       _channel = channel ?? const MethodChannel('yingshi/webdav_secrets');
 
   @override
   Future<List<WebDavProfile>> read() async {

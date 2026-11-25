@@ -7,7 +7,7 @@
 
 #include <memory>
 
-// "xiugou/webdav_secrets": protect/unprotect take and return Uint8List.
+// "yingshi/webdav_secrets": protect/unprotect take and return Uint8List.
 // Invalid arguments use bad_args; DPAPI failures use protect_failed or
 // unprotect_failed with generic messages and no error details.
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>

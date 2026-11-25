@@ -37,7 +37,7 @@ public final class JavaProxyHandler implements HttpHandler {
             if(exchange.getRequestURI().getRawQuery()!=null && exchange.getRequestURI().getRawQuery().length()>256*1024) { error(exchange,414); return; }
             call=new ProxyCall(binding,exchange); if(!binding.own(call)) { error(exchange,404); return; }
             ProxyCall owned=call;
-            long timeout=Math.max(1,Math.min(30_000,Long.getLong("xiugou.java.proxyTimeoutMs",30_000)));
+            long timeout=Math.max(1,Math.min(30_000,Long.getLong("yingshi.java.proxyTimeoutMs",30_000)));
             timer=TIMER.schedule(owned::close,timeout,TimeUnit.MILLISECONDS);
             String declared=exchange.getRequestHeaders().getFirst("Content-Length");
             if(declared!=null && Long.parseLong(declared)>BODY_LIMIT) { error(exchange,413); return; }
@@ -209,7 +209,7 @@ public final class JavaProxyHandler implements HttpHandler {
     private static final class StreamDeadline implements AutoCloseable {
         private final ProxyCall call;
         private final Thread owner=Thread.currentThread();
-        private final long timeout=Math.max(1,Math.min(30_000,Long.getLong("xiugou.java.streamIdleTimeoutMs",30_000)));
+        private final long timeout=Math.max(1,Math.min(30_000,Long.getLong("yingshi.java.streamIdleTimeoutMs",30_000)));
         private final ScheduledFuture<?> timer;
         private long started;
         private boolean closed,expired;

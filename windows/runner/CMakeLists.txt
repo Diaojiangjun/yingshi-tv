@@ -49,7 +49,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE mfuuid uuid ole32 oleaut32
   propsys d3d11 urlmon shlwapi)
 include(native_playback_mdk.cmake)
 # Adds native_playback_mdk.cpp even when building without the optional SDK.
-xiugou_add_mdk(${BINARY_NAME})
+yingshi_add_mdk(${BINARY_NAME})
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

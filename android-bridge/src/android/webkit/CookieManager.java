@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * <p>载荷（如王二小 {@code Wexyingchao}）在拉起网页前会把网盘 / 站点 Cookie 写进 CookieManager，
  * 之后也可能用 {@link #getCookie(String)} 读回。Android 上 CookieManager 是持久的，这里同样落盘：
- * 按「主机」存进 SharedPreferences {@code webview_cookies}（即 {@code ~/.xiugou_tv_companion/prefs}），
+ * 按「主机」存进 SharedPreferences {@code webview_cookies}（即 {@code ~/.yingshi_tv_companion/prefs}），
  * 跨重启保留，「重置所有设置」随 prefs 目录一起清掉。
  *
  * <p>只做按主机的名值存取，不实现路径 / 过期 / Secure 等细则；桌面 WebView 本身不发请求。

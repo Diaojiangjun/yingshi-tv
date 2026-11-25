@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
  */
 final class PyProcessPool {
 
-    static final int MAX = Math.max(1, Integer.getInteger("xiugou.py.maxProcesses", 8));
+    static final int MAX = Math.max(1, Integer.getInteger("yingshi.py.maxProcesses", 8));
 
     /** 访问顺序的 LinkedHashMap：迭代从最久未用开始。 */
     private static final LinkedHashMap<PySpider, Boolean> LIVE = new LinkedHashMap<>(16, 0.75f, true);

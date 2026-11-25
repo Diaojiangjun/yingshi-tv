@@ -7,7 +7,7 @@ if (Test-Path -LiteralPath $target) { throw "Runtime already exists: $target" }
 $archiveName = 'php-8.3.37-nts-Win32-vs16-x64.zip'
 $archiveHash = '38808a798485e1c0938dfcce7e942131415fc6c7834f83a5a85a4c4edb5539d6'
 $tempBase = if ($env:PI_SCRATCH_DIR) { $env:PI_SCRATCH_DIR } else { [IO.Path]::GetTempPath() }
-$stage = Join-Path $tempBase ('xiugou-php-setup-' + [Guid]::NewGuid().ToString('N'))
+$stage = Join-Path $tempBase ('yingshi-php-setup-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 try {
     if (-not $ArchivePath) {

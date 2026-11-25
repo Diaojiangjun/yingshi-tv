@@ -261,7 +261,7 @@ public final class GuardCryptoService {
      * </ul>
      */
     public static String mode() {
-        String value = System.getProperty("xiugou.guard.crypto", "auto");
+        String value = System.getProperty("yingshi.guard.crypto", "auto");
         return value == null ? "auto" : value.trim().toLowerCase(Locale.ROOT);
     }
 

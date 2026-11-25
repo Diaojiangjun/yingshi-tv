@@ -52,7 +52,7 @@ public final class DrpyHost {
             new ScriptHttpTransport(HttpClient.Redirect.NORMAL, TRUST_ALL);
     private static final ScriptHttpTransport NO_FOLLOW =
             new ScriptHttpTransport(HttpClient.Redirect.NEVER, TRUST_ALL);
-    private static final boolean DEBUG = Boolean.getBoolean("xiugou.drpy.debug");
+    private static final boolean DEBUG = Boolean.getBoolean("yingshi.drpy.debug");
     private static final Object LOCAL_LOCK = new Object();
 
     private final String tag;

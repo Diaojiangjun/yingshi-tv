@@ -37,7 +37,7 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   auto* engine = flutter_controller_->engine();
   native_playback_ = std::make_unique<native_playback::PlaybackChannel>(
-      engine->messenger(), engine->GetRegistrarForPlugin("XiugouNativePlayback"), GetHandle());
+      engine->messenger(), engine->GetRegistrarForPlugin("YingshiNativePlayback"), GetHandle());
   process_job_channel_ =
       RegisterProcessJobChannel(flutter_controller_->engine()->messenger());
   webdav_secrets_channel_ =

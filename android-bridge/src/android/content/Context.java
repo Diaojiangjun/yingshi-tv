@@ -126,7 +126,7 @@ public class Context {
 
     private static java.io.File prefsDir() {
         java.io.File dir = new java.io.File(
-                new java.io.File(System.getProperty("user.home", "."), ".xiugou_tv_companion"), "prefs");
+                new java.io.File(System.getProperty("user.home", "."), ".yingshi_tv_companion"), "prefs");
         if (!dir.exists()) dir.mkdirs();
         return dir;
     }
@@ -167,15 +167,15 @@ public class Context {
 
     /** 与 files 同级的 no_backup 目录（Android 上不参与云备份；桌面端只是普通持久目录）。 */
     public java.io.File getNoBackupFilesDir() {
-        return persistentDir("no_backup", "xiugou_tv_no_backup");
+        return persistentDir("no_backup", "yingshi_tv_no_backup");
     }
 
     public java.io.File getCacheDir() {
-        return persistentDir("cache", "xiugou_tv_cache");
+        return persistentDir("cache", "yingshi_tv_cache");
     }
 
     public java.io.File getFilesDir() {
-        return persistentDir("files", "xiugou_tv_files");
+        return persistentDir("files", "yingshi_tv_files");
     }
 
     /** Android 私有命名目录与 files 同根持久保存，目录名不得变成路径。 */
@@ -206,12 +206,12 @@ public class Context {
     }
 
     /**
-     * files / cache 放在 {@code user.home/.xiugou_tv_companion} 下：载荷把网盘 cookie、配置中心设置存在这里，
+     * files / cache 放在 {@code user.home/.yingshi_tv_companion} 下：载荷把网盘 cookie、配置中心设置存在这里，
      * 放系统临时目录会被清理，用户就得反复扫码登录。旧版本用的临时目录在首次访问时整体复制过来（不删除原目录）。
      */
     private static java.io.File persistentDir(String name, String legacyTempName) {
         java.io.File dir = new java.io.File(
-                new java.io.File(System.getProperty("user.home", "."), ".xiugou_tv_companion"), name);
+                new java.io.File(System.getProperty("user.home", "."), ".yingshi_tv_companion"), name);
         if (!dir.exists()) {
             java.io.File legacy = new java.io.File(System.getProperty("java.io.tmpdir"), legacyTempName);
             if (legacy.isDirectory()) copyTree(legacy.toPath(), dir.toPath());

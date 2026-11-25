@@ -21,7 +21,7 @@ public final class UnwrapMain {
         }
         try {
             if (args.length >= 4 && !JarIndex.isEmpty(args[3])) {
-                System.setProperty("xiugou.hardshell.profiles", args[3]);
+                System.setProperty("yingshi.hardshell.profiles", args[3]);
             }
             ShellProfile profile = ShellRegistry.byId(args[2]);
             if (profile == null) {

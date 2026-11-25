@@ -47,6 +47,9 @@ class AboutUpdateSection extends StatelessWidget {
         state.phase == UpdatePhase.idle;
     final upToDate = result?.status == UpdateCheckStatus.upToDate &&
         state.phase == UpdatePhase.idle;
+    // 仓库还没发过 Release 也算「check 失败」，但那是正常状态，不该用告警色吓人。
+    final noRelease =
+        failed && (result?.failure?.contains('未找到发布信息') ?? false);
 
     final (String? status, Color statusColor) = checking
         ? ('检查中…', palette.textSub)
@@ -60,7 +63,10 @@ class AboutUpdateSection extends StatelessWidget {
             : hasUpdate
                 ? ('有新版本 ${result?.manifest?.tag ?? ''}', palette.accentInk)
                 : failed
-                    ? ('检查失败，点击重试', palette.warning)
+                    ? (
+                        noRelease ? '暂无发布版本' : '检查失败，点击重试',
+                        noRelease ? palette.textSub : palette.warning
+                      )
                     : upToDate
                         ? ('已是最新', palette.textSub)
                         : (null, palette.textSub);

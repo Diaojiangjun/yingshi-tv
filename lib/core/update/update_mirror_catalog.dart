@@ -87,7 +87,7 @@ class _CatalogCache {
 class UpdateMirrorCatalog {
   static const maxResponseBytes = 64 * 1024;
   static const builtInEndpoint =
-      String.fromEnvironment('XIUGOU_UPDATE_MIRRORS_URL');
+      String.fromEnvironment('YINGSHI_UPDATE_MIRRORS_URL');
   final Dio _dio;
   final Future<Directory> Function() _directory;
   final DateTime Function() _now;

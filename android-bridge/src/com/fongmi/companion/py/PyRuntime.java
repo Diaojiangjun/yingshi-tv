@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <h3>解释器与脚本目录的定位顺序</h3>
  * <pre>
- *   python：-Dxiugou.python=... → dist/pyruntime/{python.exe,python3,python} → PATH 上的 python
+ *   python：-Dyingshi.python=... → dist/pyruntime/{python.exe,python3,python} → PATH 上的 python
  *   pyshell：dist/pyshell → 开发回退到仓库内 companion/pyshell
  * </pre>
  *
@@ -139,36 +139,36 @@ public final class PyRuntime implements AutoCloseable {
         env.put("PYTHONIOENCODING", "utf-8");
         env.put("PYTHONUTF8", "1");
         env.put("PYTHONDONTWRITEBYTECODE", "1");
-        env.put("XIUGOU_SCRIPT_SITE_KEY", siteKey == null ? "" : siteKey);
-        env.put("XIUGOU_SCRIPT_API", originalApi == null ? "" : originalApi);
-        env.put("XIUGOU_SCRIPT_BASE", sourceBase(originalApi));
-        env.put("XIUGOU_SCRIPT_ENTRY", scriptEntry(originalApi, scriptFile));
-        env.put("XIUGOU_SCRIPT_PROXY_BASE", scriptProxyBase == null ? "" : scriptProxyBase);
-        env.put("XIUGOU_SCRIPT_DANMAKU_BASE", danmakuBase == null ? "" : danmakuBase);
+        env.put("YINGSHI_SCRIPT_SITE_KEY", siteKey == null ? "" : siteKey);
+        env.put("YINGSHI_SCRIPT_API", originalApi == null ? "" : originalApi);
+        env.put("YINGSHI_SCRIPT_BASE", sourceBase(originalApi));
+        env.put("YINGSHI_SCRIPT_ENTRY", scriptEntry(originalApi, scriptFile));
+        env.put("YINGSHI_SCRIPT_PROXY_BASE", scriptProxyBase == null ? "" : scriptProxyBase);
+        env.put("YINGSHI_SCRIPT_DANMAKU_BASE", danmakuBase == null ? "" : danmakuBase);
         boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-        env.put("XIUGOU_JAVA_BIN", new File(System.getProperty("java.home"),
+        env.put("YINGSHI_JAVA_BIN", new File(System.getProperty("java.home"),
                 windows ? "bin/java.exe" : "bin/java").getAbsolutePath());
         List<String> classpath = new ArrayList<>();
         for (String entry : System.getProperty("java.class.path", "").split(java.util.regex.Pattern.quote(File.pathSeparator))) {
             classpath.add(new File(entry).getAbsolutePath());
         }
-        env.put("XIUGOU_JAVA_CLASSPATH", String.join(File.pathSeparator, classpath));
+        env.put("YINGSHI_JAVA_CLASSPATH", String.join(File.pathSeparator, classpath));
         File home = new File(System.getProperty("user.home", ""));
         if (home.isAbsolute()) {
-            env.put("XIUGOU_CACHE_DIR", new File(home, ".xiugou_tv_companion/py-cache").getAbsolutePath());
-            env.put("XIUGOU_LOCAL_DIR", new File(home, ".xiugou_tv_companion/py-local").getAbsolutePath());
-            env.put("XIUGOU_NET_CACHE_DIR", new File(home, ".xiugou_tv_companion/py-net-cache").getAbsolutePath());
+            env.put("YINGSHI_CACHE_DIR", new File(home, ".yingshi_tv_companion/py-cache").getAbsolutePath());
+            env.put("YINGSHI_LOCAL_DIR", new File(home, ".yingshi_tv_companion/py-local").getAbsolutePath());
+            env.put("YINGSHI_NET_CACHE_DIR", new File(home, ".yingshi_tv_companion/py-net-cache").getAbsolutePath());
         } else {
-            env.remove("XIUGOU_CACHE_DIR");
-            env.remove("XIUGOU_LOCAL_DIR");
-            env.remove("XIUGOU_NET_CACHE_DIR");
+            env.remove("YINGSHI_CACHE_DIR");
+            env.remove("YINGSHI_LOCAL_DIR");
+            env.remove("YINGSHI_NET_CACHE_DIR");
         }
         String cacheId = scriptFile.getCanonicalPath();
         if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
             cacheId = cacheId.toLowerCase(Locale.ROOT);
         }
-        String proxy = System.getProperty("xiugou.proxy.base", "");
-        if (!proxy.isEmpty()) env.put("XIUGOU_PROXY_BASE", proxy);
+        String proxy = System.getProperty("yingshi.proxy.base", "");
+        if (!proxy.isEmpty()) env.put("YINGSHI_PROXY_BASE", proxy);
 
         PyRuntime rt = new PyRuntime(pb.start());
         rt.protocolLock.lock();
@@ -200,7 +200,7 @@ public final class PyRuntime implements AutoCloseable {
 
     /** 解释器：显式指定 → 随包分发的便携运行时 → PATH。 */
     private static String pythonBinary() {
-        String override = System.getProperty("xiugou.python");
+        String override = System.getProperty("yingshi.python");
         if (override != null && !override.trim().isEmpty()) return override.trim();
 
         File runtime = new File(distDir(), "pyruntime");
@@ -326,7 +326,7 @@ public final class PyRuntime implements AutoCloseable {
     }
 
     byte[] readStream(String handle, int size) throws java.io.IOException {
-        long timeout = Math.max(1L, Math.min(30_000L, Long.getLong("xiugou.py.streamReadTimeoutMs", 30_000L)));
+        long timeout = Math.max(1L, Math.min(30_000L, Long.getLong("yingshi.py.streamReadTimeoutMs", 30_000L)));
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
         boolean locked = false;
         try {

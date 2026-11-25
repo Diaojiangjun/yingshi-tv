@@ -57,7 +57,7 @@ class DesktopWindowManager with WindowListener {
   /// 退出时先 Restore，窗口会经过 2~3 个中间尺寸，表现为闪屏与画面跳动。
   /// 全屏状态以 [isFullScreenNotifier] 为准（插件的 isFullScreen 不再反映真实状态）。
   static const MethodChannel fullScreenChannel =
-      MethodChannel('xiugou/window_fullscreen');
+      MethodChannel('yingshi/window_fullscreen');
 
   DesktopWindowManager(
       {required ConfigRepository configRepository,
@@ -321,7 +321,7 @@ class DesktopWindowManager with WindowListener {
     }
     try {
       await beforeClose?.call().timeout(beforeCloseTimeout, onTimeout: () {
-        debugPrint('[xiugou-tv] 退出钩子超过 ${beforeCloseTimeout.inSeconds}s 未完成，继续关闭窗口');
+        debugPrint('[yingshi-tv] 退出钩子超过 ${beforeCloseTimeout.inSeconds}s 未完成，继续关闭窗口');
       });
       await _flushPersistWindowGeometry();
       await windowManager.destroy();
@@ -365,7 +365,7 @@ class DesktopWindowManager with WindowListener {
   @override
   void onWindowClose() {
     unawaited(close().catchError((Object error, StackTrace stack) {
-      debugPrint('[xiugou-tv] close failed; window kept open: $error\n$stack');
+      debugPrint('[yingshi-tv] close failed; window kept open: $error\n$stack');
     }));
   }
 

@@ -434,7 +434,7 @@ final epgRepositoryProvider = Provider<EpgRepository>((ref) {
   return repository;
 });
 
-/// 存储与缓存盘点 / 清理（SET-09）。默认使用真实 %APPDATA%/XiugouTV。
+/// 存储与缓存盘点 / 清理（SET-09）。默认使用真实 %APPDATA%/YingshiTV。
 final cacheMaintenanceProvider =
     Provider<CacheMaintenance>((ref) => CacheMaintenance());
 
@@ -4239,8 +4239,8 @@ class BrowserVerificationHost extends ConsumerWidget {
   }
 }
 
-class XiugouTvApp extends ConsumerWidget {
-  const XiugouTvApp({super.key});
+class YingshiTvApp extends ConsumerWidget {
+  const YingshiTvApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

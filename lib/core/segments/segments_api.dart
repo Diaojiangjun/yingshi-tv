@@ -11,7 +11,7 @@ import 'segment_models.dart';
 /// 用户无需配置也看不到；其他开发者不配置即不启用（播放页不出现「片段」按钮）。
 /// 服务端代码与部署说明：`server/segments-worker/README.md`。
 String get kSegmentsApiBase {
-  var base = AppEnv.get('XIUGOU_SEGMENTS_URL').trim();
+  var base = AppEnv.get('YINGSHI_SEGMENTS_URL').trim();
   while (base.endsWith('/')) {
     base = base.substring(0, base.length - 1);
   }
@@ -54,7 +54,7 @@ class SegmentsResponse {
 class SegmentsApi {
   SegmentsApi({String? base, String? token, HttpClient? client, String? Function()? proxy})
       : _base = base ?? kSegmentsApiBase,
-        _token = token ?? AppEnv.get('XIUGOU_SEGMENTS_TOKEN'),
+        _token = token ?? AppEnv.get('YINGSHI_SEGMENTS_TOKEN'),
         _client = client ?? _defaultClient(proxy ?? DanmakuApi.systemProxy);
 
   final String _base;
@@ -112,8 +112,8 @@ class SegmentsApi {
     try {
       request = await _client.openUrl(method, uri).timeout(timeout);
       request.headers
-        ..set('x-xiugou-token', _token)
-        ..set('x-xiugou-client', clientId)
+        ..set('x-yingshi-token', _token)
+        ..set('x-yingshi-client', clientId)
         ..set(HttpHeaders.acceptHeader, 'application/json');
       if (json != null) {
         request.headers.contentType = ContentType.json;

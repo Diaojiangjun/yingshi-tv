@@ -4,7 +4,7 @@ part of 'settings_page.dart';
 ///
 /// 背景：JRE 之前由 `build_windows.ps1` 打进发布包（minimal JRE ~40 MB），
 /// 但只有 `csp_` / dex 蜘蛛源才需要它——绝大多数用户的安装包为此多背了 40 MB。
-/// 现在组件下载到 `%APPDATA%/XiugouTV/runtime/<组件>`，与
+/// 现在组件下载到 `%APPDATA%/YingshiTV/runtime/<组件>`，与
 /// `CompanionProcessManager.javaCandidates` 的 AppData 候选项一致，
 /// 装完即被伴随服务识别，不需要额外写配置。
 class RuntimeSettingsPanel extends StatelessWidget {

@@ -31,7 +31,7 @@ public final class CatNodeRuntime implements AutoCloseable {
     private static volatile long epoch;
     static long epoch() { return epoch; }
     private static final int MAX_SOURCES = 4;
-    private static final String READY_PREFIX = "XIUGOU_CAT ";
+    private static final String READY_PREFIX = "YINGSHI_CAT ";
     private final File root;
     private final Source source;
     private final CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -308,7 +308,7 @@ public final class CatNodeRuntime implements AutoCloseable {
                 .toURL().openConnection(Proxy.NO_PROXY);
         connection.setConnectTimeout(3000); connection.setReadTimeout(destination == controlPort ? 1500 : 45_000);
         connection.setInstanceFollowRedirects(false);
-        if (requestId != null) connection.setRequestProperty("X-Xiugou-Request", requestId);
+        if (requestId != null) connection.setRequestProperty("X-Yingshi-Request", requestId);
         try {
             if (body != null) {
                 byte[] bytes = JsonCodec.stringify(body).getBytes(StandardCharsets.UTF_8);
@@ -383,7 +383,7 @@ public final class CatNodeRuntime implements AutoCloseable {
     }
 
     private static String nodeExecutable() throws Exception {
-        String explicit = System.getProperty("xiugou.node", "");
+        String explicit = System.getProperty("yingshi.node", "");
         if (!explicit.isBlank()) return explicit;
         File own = new File(CatNodeRuntime.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         String name = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? "node.exe" : "node";

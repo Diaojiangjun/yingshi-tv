@@ -7,7 +7,7 @@
 
 #include <memory>
 
-// Method channel "xiugou/process_job".
+// Method channel "yingshi/process_job".
 //
 // adopt(pid) puts a child process (and every process it spawns afterwards)
 // into a Job Object created with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. The job

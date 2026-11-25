@@ -291,7 +291,7 @@ public final class FishNativeService {
             File state = new File(new File(System.getProperty("java.io.tmpdir", "."), "fish-native"), instance);
             java.nio.file.Files.createDirectories(state.toPath());
             command.add(state.getAbsolutePath());
-            File log = new File(new File(System.getProperty("user.home", "."), ".xiugou_tv_companion"),
+            File log = new File(new File(System.getProperty("user.home", "."), ".yingshi_tv_companion"),
                     "fish-native-" + identity.substring(0, 16) + "-" + instance + ".log");
             java.nio.file.Files.createDirectories(log.getParentFile().toPath());
             ProcessBuilder builder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.to(log));

@@ -361,7 +361,7 @@ struct PlaybackChannel::State {
 PlaybackChannel::PlaybackChannel(flutter::BinaryMessenger* messenger, FlutterDesktopPluginRegistrarRef registrar,
                                  HWND runner)
     : state_(std::make_shared<State>(registrar, runner)),
-      channel_(messenger, "xiugou/native_playback", &flutter::StandardMethodCodec::GetInstance()) {
+      channel_(messenger, "yingshi/native_playback", &flutter::StandardMethodCodec::GetInstance()) {
   channel_.SetMethodCallHandler([weak = std::weak_ptr<State>(state_)](const auto& call, Result result) {
     if (const auto state = weak.lock()) state->Handle(call, std::move(result));
     else result->Error("cancelled");

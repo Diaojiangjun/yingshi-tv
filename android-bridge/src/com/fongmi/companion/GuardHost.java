@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   calcResult(int[]) -> int[]
  * 手机端由壳的 native 实现（libftyguard.so RegisterNatives 注册到壳 DexNative）。
  * 桌面端没有该 so，这里提供 Java 实现：
- *   - decrypt: 优先查"离线解密映射表"（~/.xiugou_tv_companion/guard-ext-map.txt，
+ *   - decrypt: 优先查"离线解密映射表"（~/.yingshi_tv_companion/guard-ext-map.txt，
  *     由 unidbg 加载 libftyguard.so 对 official.json 中各站点 ext 密文离线解密生成；
  *     见 test/repro/unidbg-work-fty/_ext_map_backup.txt），未命中返回原值；
  *   - native_ting_md5: 标准 MD5 十六进制（小写）；
@@ -69,7 +69,7 @@ public class GuardHost {
     private static void loadExtMap() {
         try {
             java.io.File f = new java.io.File(
-                    new java.io.File(System.getProperty("user.home", "."), ".xiugou_tv_companion"),
+                    new java.io.File(System.getProperty("user.home", "."), ".yingshi_tv_companion"),
                     "guard-ext-map.txt");
             if (!f.isFile()) {
                 return;
@@ -100,7 +100,7 @@ public class GuardHost {
             return null;
         }
         String mapped = EXT_MAP.get(s);
-        // -Dxiugou.guard.crypto=service 时优先问壳，用来核对「so 结果 vs 离线表」是否一致。
+        // -Dyingshi.guard.crypto=service 时优先问壳，用来核对「so 结果 vs 离线表」是否一致。
         if ("service".equals(GuardCryptoService.mode())) {
             String viaShell = GuardCryptoService.decrypt(s);
             if (viaShell != null) {

@@ -60,7 +60,7 @@ abstract class SettingsStorage {
   Future<void> saveNetworkPreferences(NetworkPreferences preferences);
 
   /// 缺省实现：写入用户数据目录（便携版 `<exe>/user_data`，安装目录不可写时回退
-  /// `%APPDATA%/XiugouTV`，路径解析见 `DataDirectoryManager`）
+  /// `%APPDATA%/YingshiTV`，路径解析见 `DataDirectoryManager`）
   factory SettingsStorage.windows({Future<Directory> Function()? directory}) = FileSettingsStorage;
 }
 

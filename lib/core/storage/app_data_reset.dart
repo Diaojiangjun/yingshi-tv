@@ -33,7 +33,7 @@ abstract final class AppDataReset {
     await marker.parent.create(recursive: true);
     await marker.writeAsString(
       jsonEncode({
-        'format': 'xiugou-tv-reset',
+        'format': 'yingshi-tv-reset',
         'version': 1,
         'active': activeDirectory ?? DataDirectoryManager.currentPath,
       }),
@@ -111,9 +111,9 @@ abstract final class AppDataReset {
   ];
 
   /// 旧版本放在系统临时目录的同名目录：`Context.persistentDir` 在新目录缺失时会整体复制回来，
-  /// 不删就会把刚清掉的登录态又迁回去；`xiugou_tv_data` / `xiugou_tv_download_cache` 是 `Environment` 的临时映射。
+  /// 不删就会把刚清掉的登录态又迁回去；`yingshi_tv_data` / `yingshi_tv_download_cache` 是 `Environment` 的临时映射。
   static const List<String> legacyTempDirs = [
-    'xiugou_tv_files', 'xiugou_tv_cache', 'xiugou_tv_no_backup', 'xiugou_tv_data', 'xiugou_tv_download_cache',
+    'yingshi_tv_files', 'yingshi_tv_cache', 'yingshi_tv_no_backup', 'yingshi_tv_data', 'yingshi_tv_download_cache',
   ];
 
   static String? _defaultCompanionHome() {

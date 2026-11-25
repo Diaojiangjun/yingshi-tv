@@ -124,7 +124,7 @@ try {
 
 # 调试日志：给 okhttp3 的 Builder.build() 入口注入 HttpLogHook.install(this)。
 # 发布包自带 jlink 裁剪 JRE（没有 java.instrument），-javaagent 起不来，所以改成构建期改写；
-# 运行期只有 -Dxiugou.debug=true 时才真正加拦截器，关闭时是一次空调用。
+# 运行期只有 -Dyingshi.debug=true 时才真正加拦截器，关闭时是一次空调用。
 $okhttpBuilder = Join-Path $outDir 'okhttp3\OkHttpClient$Builder.class'
 if (Test-Path -LiteralPath $okhttpBuilder) {
     & java -cp "$outDir$sep$classpath" com.fongmi.companion.agent.PatchOkHttp $okhttpBuilder

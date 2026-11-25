@@ -34,7 +34,7 @@ public final class PyProxyResponse implements AutoCloseable {
 
     static PyProxyResponse decode(String json, PyRuntime owner, Runnable release) {
         Map<String, Object> value = JsonCodec.parseObject(json);
-        Object marker = value.get("__xiugou_proxy__");
+        Object marker = value.get("__yingshi_proxy__");
         Object status = value.get("status");
         if (!(marker instanceof Long) || ((Long) marker) != 1L && ((Long) marker) != 2L
                 || !(status instanceof Long) || (Long) status < 200L || (Long) status > 599L) {

@@ -30,23 +30,23 @@ Future<void> main() async {
     await loadAppVersionLabel();
     // §43：可选服务是否可用（只打印是否配置，不打印地址 / 令牌）。
     // 用户还可以在「设置 → 播放器与解码 → 弹幕 → 弹幕服务」里自填，所以这里只反映内置态。
-    debugPrint('[xiugou-tv] 弹幕服务（构建期内置）：${kBuiltinDanmakuApiBase.isNotEmpty ? '已配置' : '未配置'}');
+    debugPrint('[yingshi-tv] 弹幕服务（构建期内置）：${kBuiltinDanmakuApiBase.isNotEmpty ? '已配置' : '未配置'}');
 
     // 先解析数据目录并执行待定迁移，再创建任何存储（避免运行中双目录写入）。
     // 便携版默认目录是 exe 旁的 user_data，重置标记也放在默认目录，所以必须先解析。
     try {
       await DataDirectoryManager.initialize();
     } catch (error) {
-      debugPrint('[xiugou-tv] data directory init failed: $error');
+      debugPrint('[yingshi-tv] data directory init failed: $error');
     }
 
     // 关于页「重置所有设置」：上次会话安排的全部清空，在创建任何存储之前执行
     try {
       if (await AppDataReset.applyPendingAtStartup()) {
-        debugPrint('[xiugou-tv] 已按上次的「重置所有设置」清空数据目录');
+        debugPrint('[yingshi-tv] 已按上次的「重置所有设置」清空数据目录');
       }
     } catch (error) {
-      debugPrint('[xiugou-tv] reset failed: $error');
+      debugPrint('[yingshi-tv] reset failed: $error');
     }
 
     // 关于页「错误日志」：本次运行期间的未捕获异常、框架错误、播放器报错，只放内存（关闭即清空）
@@ -73,7 +73,7 @@ Future<void> main() async {
     try {
       agreementAccepted = await agreementStore.isAccepted();
     } catch (error) {
-      debugPrint('[xiugou-tv] 读取协议同意状态失败: $error');
+      debugPrint('[yingshi-tv] 读取协议同意状态失败: $error');
     }
 
     // SET-05：播放历史保留上限从设置同步一次（trim: false——启动不静默裁剪，见方案 §2.2）
@@ -155,13 +155,13 @@ Future<void> main() async {
           agreementStoreProvider.overrideWithValue(agreementStore),
           agreementInitialProvider.overrideWithValue(agreementAccepted),
         ],
-        child: const XiugouTvApp(),
+        child: const YingshiTvApp(),
       ),
     );
 
     unawaited(playerEngine.initialize());
   }, (error, stack) {
-    debugPrint('[xiugou-tv] startup error: $error\n$stack');
+    debugPrint('[yingshi-tv] startup error: $error\n$stack');
     ErrorLog.instance.record('未捕获异常', error, stack);
   });
 }

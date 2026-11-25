@@ -56,7 +56,7 @@ class UpdateClient {
               receiveTimeout: const Duration(seconds: 20),
               headers: const {
                 'Accept': 'application/vnd.github+json',
-                'User-Agent': 'xiugou-tv',
+                'User-Agent': 'yingshi-tv',
               },
             ));
 

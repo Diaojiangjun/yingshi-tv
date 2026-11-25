@@ -22,7 +22,7 @@ from base.spider import Spider  # noqa: E402
 
 class RuntimeLocalTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="xiugou-local-test-")
+        self.temp = tempfile.TemporaryDirectory(prefix="yingshi-local-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.directory = self.root / "local"
@@ -30,10 +30,10 @@ class RuntimeLocalTest(unittest.TestCase):
         self.env.update({
             "PYTHONIOENCODING": "utf-8",
             "PYTHONDONTWRITEBYTECODE": "1",
-            "XIUGOU_LOCAL_DIR": str(self.directory),
-            "XIUGOU_SCRIPT_SITE_KEY": "synthetic-ysp",
-            "XIUGOU_CACHE_DIR": str(self.root / "legacy-cache"),
-            "XIUGOU_SCRIPT_ID": "synthetic-legacy-script",
+            "YINGSHI_LOCAL_DIR": str(self.directory),
+            "YINGSHI_SCRIPT_SITE_KEY": "synthetic-ysp",
+            "YINGSHI_CACHE_DIR": str(self.root / "legacy-cache"),
+            "YINGSHI_SCRIPT_ID": "synthetic-legacy-script",
         })
         self.environment = patch.dict(os.environ, self.env, clear=True)
         self.environment.start()
@@ -71,18 +71,18 @@ class RuntimeLocalTest(unittest.TestCase):
             ("get", ["tv-device:v1"]),
             ("set", ["tv-device:v1", identity]),
             ("get", ["tv-device:v1"]),
-        ], PYTHONHASHSEED="1", XIUGOU_SCRIPT_ID="original-script")
+        ], PYTHONHASHSEED="1", YINGSHI_SCRIPT_ID="original-script")
         self.assertEqual(results, [None, None, identity])
         self.assertEqual(self.run_local([
             ("get", ["tv-device:v1"]),
-        ], PYTHONHASHSEED="2", XIUGOU_SCRIPT_ID="relocated-script"), [identity])
+        ], PYTHONHASHSEED="2", YINGSHI_SCRIPT_ID="relocated-script"), [identity])
 
     def test_site_key_isolates_persistence_in_same_directory(self):
         self.run_local([("set", ["tv-device:v1", "site-a"])])
         results = self.run_local([
             ("get", ["tv-device:v1", "missing"]),
             ("set", ["tv-device:v1", "site-b"]),
-        ], XIUGOU_SCRIPT_SITE_KEY="../other/site")
+        ], YINGSHI_SCRIPT_SITE_KEY="../other/site")
         self.assertEqual(results, ["missing", None])
         self.assertEqual(self.run_local([("get", ["tv-device:v1"])]), ["site-a"])
         self.assertEqual(len(list(self.directory.glob("*.json"))), 2)
@@ -158,9 +158,9 @@ class RuntimeLocalTest(unittest.TestCase):
             with self.subTest(directory=directory, site_key=site_key):
                 with patch.dict(os.environ, {}, clear=True):
                     if directory is not None:
-                        os.environ["XIUGOU_LOCAL_DIR"] = directory
+                        os.environ["YINGSHI_LOCAL_DIR"] = directory
                     if site_key is not None:
-                        os.environ["XIUGOU_SCRIPT_SITE_KEY"] = site_key
+                        os.environ["YINGSHI_SCRIPT_SITE_KEY"] = site_key
                     owner = Spider()
                     with self.assertRaises(RuntimeError):
                         owner.local.get("missing")
@@ -168,8 +168,8 @@ class RuntimeLocalTest(unittest.TestCase):
 
     def test_storage_ignores_old_cache_and_retains_exact_site_identity(self):
         cache = self.root / "cache"
-        with patch.dict(os.environ, {"XIUGOU_CACHE_DIR": str(cache),
-                                     "XIUGOU_SCRIPT_ID": "old-script"}):
+        with patch.dict(os.environ, {"YINGSHI_CACHE_DIR": str(cache),
+                                     "YINGSHI_SCRIPT_ID": "old-script"}):
             owner = Spider()
             owner.setCache("preferences", "legacy-value")
             self.assertIsNone(owner.local.get("preferences"))
@@ -178,7 +178,7 @@ class RuntimeLocalTest(unittest.TestCase):
             self.assertEqual(owner.getCache("preferences"), "legacy-update")
             self.assertEqual(owner.local.get("preferences"), "local-value")
         self.assertTrue(cache.is_dir())
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": "synthetic-ysp "}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": "synthetic-ysp "}):
             other = Spider().local
             self.assertIsNone(other.get("preferences"))
             other.set("preferences", "other-site")
@@ -188,7 +188,7 @@ class RuntimeLocalTest(unittest.TestCase):
     def test_same_site_instances_observe_updates_and_delete_without_lost_keys(self):
         first = Spider().local
         alias = self.directory / ".." / self.directory.name
-        with patch.dict(os.environ, {"XIUGOU_LOCAL_DIR": str(alias)}):
+        with patch.dict(os.environ, {"YINGSHI_LOCAL_DIR": str(alias)}):
             second = Spider().local
         self.assertIsNone(first.get("a"))
         self.assertIsNone(second.get("b"))

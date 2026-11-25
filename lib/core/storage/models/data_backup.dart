@@ -52,7 +52,7 @@ class DataBackupEntry {
 /// 只存文件原文，不二次 JSON 编码对象；这样能原样保留未知字段与格式，
 /// 避免「备份再恢复」造成语义漂移。
 class DataBackup {
-  static const String format = 'xiugou-tv-backup';
+  static const String format = 'yingshi-tv-backup';
   static const int version = 1;
 
   final DateTime createdAt;

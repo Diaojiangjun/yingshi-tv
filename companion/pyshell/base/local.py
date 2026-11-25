@@ -17,8 +17,8 @@ class RuntimeLocal:
     MAX_FILE_BYTES = 1024 * 1024
 
     def __init__(self):
-        directory = os.environ.get("XIUGOU_LOCAL_DIR", "")
-        site_key = os.environ.get("XIUGOU_SCRIPT_SITE_KEY", "")
+        directory = os.environ.get("YINGSHI_LOCAL_DIR", "")
+        site_key = os.environ.get("YINGSHI_SCRIPT_SITE_KEY", "")
         if not directory or not os.path.isabs(directory) or not site_key.strip():
             raise RuntimeError("Local requires an absolute directory and a site key")
         self._directory = os.path.normcase(os.path.realpath(directory))

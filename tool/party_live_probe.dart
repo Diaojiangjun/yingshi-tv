@@ -10,9 +10,9 @@
 //   2. 连续轮询，确认 positionMs 随房主播放推进；
 //   3. 用真实快照喂 decidePartyFollow，确认落后 / 超前都会给出 seek。
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xiugou_tv/core/party/party_server.dart';
-import 'package:xiugou_tv/core/party/party_sync.dart';
-import 'package:xiugou_tv/core/party/watch_party_service.dart';
+import 'package:yingshi_tv/core/party/party_server.dart';
+import 'package:yingshi_tv/core/party/party_sync.dart';
+import 'package:yingshi_tv/core/party/watch_party_service.dart';
 
 const _base = String.fromEnvironment(
   'PARTY_BASE',

@@ -103,8 +103,8 @@ class RuntimeJS:
         _validate_json(globals_)
         payload = _encode_request({"source": source, "globals": globals_, "timeout": timeout})
         deadline = started + timeout / 1000.0
-        java = os.environ.get("XIUGOU_JAVA_BIN", "")
-        classpath = os.environ.get("XIUGOU_JAVA_CLASSPATH", "")
+        java = os.environ.get("YINGSHI_JAVA_BIN", "")
+        classpath = os.environ.get("YINGSHI_JAVA_CLASSPATH", "")
         if not os.path.isabs(java) or not classpath or any(
                 not os.path.isabs(entry) for entry in classpath.split(os.pathsep)):
             raise RuntimeError("JavaScript requires the host's absolute Java executable and classpath")

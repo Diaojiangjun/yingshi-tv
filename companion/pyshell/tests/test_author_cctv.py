@@ -45,10 +45,10 @@ class _CctvHandler(BaseHTTPRequestHandler):
 class AuthorCctvTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        source = Path(os.environ.get("XIUGOU_AUTHOR_CCTV") or DEFAULT_AUTHOR)
+        source = Path(os.environ.get("YINGSHI_AUTHOR_CCTV") or DEFAULT_AUTHOR)
         if not source.is_file():
-            raise unittest.SkipTest("author CCTV source missing; set XIUGOU_AUTHOR_CCTV")
-        spec = importlib.util.spec_from_file_location("xiugou_author_cctv_fixture", source)
+            raise unittest.SkipTest("author CCTV source missing; set YINGSHI_AUTHOR_CCTV")
+        spec = importlib.util.spec_from_file_location("yingshi_author_cctv_fixture", source)
         cls.author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.author)
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), _CctvHandler)
@@ -72,10 +72,10 @@ class AuthorCctvTest(unittest.TestCase):
         endpoints.start()
         self.addCleanup(endpoints.stop)
         environment = patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=fixture%2Btoken",
-            "XIUGOU_SCRIPT_SITE_KEY": "author-cctv",
-            "XIUGOU_PROXY_BASE": "legacy-prefix",
-            "XIUGOU_CACHE_DIR": "",
+            "YINGSHI_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=fixture%2Btoken",
+            "YINGSHI_SCRIPT_SITE_KEY": "author-cctv",
+            "YINGSHI_PROXY_BASE": "legacy-prefix",
+            "YINGSHI_CACHE_DIR": "",
             "NO_PROXY": "127.0.0.1,localhost",
         })
         environment.start()

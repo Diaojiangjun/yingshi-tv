@@ -9,7 +9,7 @@
 #include <memory>
 #include <optional>
 
-// 方法通道 "xiugou/window_fullscreen"（§52 全屏切换抽动）。
+// 方法通道 "yingshi/window_fullscreen"（§52 全屏切换抽动）。
 //
 // 取代 window_manager 0.3.9 的 setFullScreen：插件进入全屏前先发
 // SC_MAXIMIZE（窗口先动画到「最大化 + 任务栏可见」的中间尺寸，再跳到整屏），

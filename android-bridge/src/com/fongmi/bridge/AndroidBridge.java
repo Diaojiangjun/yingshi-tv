@@ -141,7 +141,7 @@ public final class AndroidBridge {
         candidates.add(new File("companion/libs/" + jarName));
         candidates.add(new File("libs/" + jarName));
         candidates.add(new File(new File(
-                System.getProperty("user.home", "."), ".xiugou_tv_companion/libs"), jarName));
+                System.getProperty("user.home", "."), ".yingshi_tv_companion/libs"), jarName));
 
         for (File f : candidates) {
             try {

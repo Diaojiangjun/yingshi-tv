@@ -133,7 +133,7 @@ class TmdbRepository {
             ),
             proxy: DanmakuApi.systemProxy,
           ),
-      _defaultKey = defaultKey ?? (() => AppEnv.get('XIUGOU_TMDB_API_KEY'));
+      _defaultKey = defaultKey ?? (() => AppEnv.get('YINGSHI_TMDB_API_KEY'));
 
   final Dio _client;
   final String Function() _defaultKey;

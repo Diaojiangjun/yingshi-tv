@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 class ProcessJob {
   const ProcessJob._();
 
-  static const MethodChannel _channel = MethodChannel('xiugou/process_job');
+  static const MethodChannel _channel = MethodChannel('yingshi/process_job');
 
   /// 收养成功返回 true；非 Windows、原生侧未注册（如测试环境）或调用失败返回 false。
   static Future<bool> adopt(int pid) async {

@@ -27,9 +27,9 @@ class TtlCache:
     def __init__(self):
         self._memory = {}
         self._lock = threading.RLock()
-        root = os.environ.get("XIUGOU_NET_CACHE_DIR", "")
-        site = os.environ.get("XIUGOU_SCRIPT_SITE_KEY", "")
-        api = os.environ.get("XIUGOU_SCRIPT_API", "")
+        root = os.environ.get("YINGSHI_NET_CACHE_DIR", "")
+        site = os.environ.get("YINGSHI_SCRIPT_SITE_KEY", "")
+        api = os.environ.get("YINGSHI_SCRIPT_API", "")
         self._root = Path(root) if root and Path(root).is_absolute() and site.strip() and api.strip() else None
         self._name = hashlib.sha256(_encode([site, api])).hexdigest() + ".json"
 

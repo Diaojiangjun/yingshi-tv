@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    XiugouTV - Minimal Embedded JRE Generator via jlink
+    YingshiTV - Minimal Embedded JRE Generator via jlink
 .DESCRIPTION
     Creates a lightweight, portable JRE runtime (approx. 30-40MB) tailored for
-    the XiugouTV Companion Service.
+    the YingshiTV Companion Service.
     仅在 build_windows.ps1 -BundleJre（离线内置）时需要运行；默认发布走
     「设置 → 运行时」按需下载 Temurin JRE 21，不生成也不打包 runtime/jre。
 .PARAMETER OutputDir
-    Destination folder for the minimal JRE (Default: xiugou-tv/runtime/jre).
+    Destination folder for the minimal JRE (Default: yingshi-tv/runtime/jre).
 #>
 
 param (
@@ -23,7 +23,7 @@ if ($OutputDir -eq "") {
 }
 
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  XiugouTV - Minimal JRE Generator" -ForegroundColor Cyan
+Write-Host "  YingshiTV - Minimal JRE Generator" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 # 1. Locate jlink in JDK

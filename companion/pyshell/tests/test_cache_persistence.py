@@ -27,12 +27,12 @@ class Spider(BaseSpider):
 
 class CachePersistenceTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="xiugou-py-cache-test-")
+        self.temp = tempfile.TemporaryDirectory(prefix="yingshi-py-cache-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.home = self.root / "home"
         self.home.mkdir()
-        self.cache = self.home / ".xiugou_tv_companion" / "py-cache"
+        self.cache = self.home / ".yingshi_tv_companion" / "py-cache"
         self.script = self.root / "scripts" / "source.py"
         self.script.parent.mkdir()
         self.script.write_text(textwrap.dedent(SCRIPT), encoding="utf-8")
@@ -42,9 +42,9 @@ class CachePersistenceTest(unittest.TestCase):
             "USERPROFILE": str(self.home),
             "PYTHONIOENCODING": "utf-8",
             "PYTHONDONTWRITEBYTECODE": "1",
-            "XIUGOU_CACHE_DIR": str(self.cache),
+            "YINGSHI_CACHE_DIR": str(self.cache),
         })
-        self.env.pop("XIUGOU_SCRIPT_ID", None)
+        self.env.pop("YINGSHI_SCRIPT_ID", None)
 
     def run_script(self, calls, script=None, identity=None, hash_seed="random"):
         script = script or self.script
@@ -298,9 +298,9 @@ class CachePersistenceTest(unittest.TestCase):
         for directory in (None, "relative-cache"):
             with self.subTest(directory=directory):
                 if directory is None:
-                    self.env.pop("XIUGOU_CACHE_DIR", None)
+                    self.env.pop("YINGSHI_CACHE_DIR", None)
                 else:
-                    self.env["XIUGOU_CACHE_DIR"] = directory
+                    self.env["YINGSHI_CACHE_DIR"] = directory
                 values, _ = self.run_script([("write", ["account", "memory"]),
                                              ("read", ["account"])])
                 self.assertEqual(values, ["memory", "memory"])

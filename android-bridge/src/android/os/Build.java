@@ -26,7 +26,7 @@ public class Build {
 
     public static final String MANUFACTURER = "fongmi";
     public static final String BRAND = "fongmi";
-    public static final String MODEL = "xiugou-tv";
+    public static final String MODEL = "yingshi-tv";
     public static final String DEVICE = "desktop";
     public static final String PRODUCT = "fongmi_desktop";
     public static final String HARDWARE = "desktop";

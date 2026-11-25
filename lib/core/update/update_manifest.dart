@@ -67,7 +67,7 @@ class UpdateManifest {
 
   /// 挑选安装版资产：优先精确命名，其次任意 `*-setup.exe`（容忍发布时命名微调）。
   UpdateAsset? installerFor(String version) {
-    final exact = 'xiugou-tv-windows-x64-v$version-setup.exe'.toLowerCase();
+    final exact = 'yingshi-tv-windows-x64-v$version-setup.exe'.toLowerCase();
     for (final asset in assets) {
       if (asset.name.toLowerCase() == exact) return asset;
     }

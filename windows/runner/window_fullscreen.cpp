@@ -54,7 +54,7 @@ RegisterWindowFullscreenChannel(flutter::BinaryMessenger* messenger,
                                 WindowFullscreen* fullscreen) {
   auto channel =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          messenger, "xiugou/window_fullscreen",
+          messenger, "yingshi/window_fullscreen",
           &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(
       [fullscreen](

@@ -28,7 +28,7 @@ SNAPSHOT = "https://fixture.yangshipin.cn/snapshot"
 
 
 def load_author(source):
-    spec = importlib.util.spec_from_file_location("xiugou_author_yangshipin_fixture", source)
+    spec = importlib.util.spec_from_file_location("yingshi_author_yangshipin_fixture", source)
     author = importlib.util.module_from_spec(spec)
     with patch.object(sys, "dont_write_bytecode", True):
         spec.loader.exec_module(author)
@@ -126,10 +126,10 @@ class YspFixture:
         self.origin = "http://127.0.0.1:" + str(self.server.server_port)
         self.stack.enter_context(route_to_local(self.origin))
         self.stack.enter_context(patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=ysp%2Bfixture",
-            "XIUGOU_SCRIPT_SITE_KEY": "author-yangshipin",
-            "XIUGOU_LOCAL_DIR": self.local_dir,
-            "XIUGOU_CACHE_DIR": "",
+            "YINGSHI_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=ysp%2Bfixture",
+            "YINGSHI_SCRIPT_SITE_KEY": "author-yangshipin",
+            "YINGSHI_LOCAL_DIR": self.local_dir,
+            "YINGSHI_CACHE_DIR": "",
         }))
         return self
 

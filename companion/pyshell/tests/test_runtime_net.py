@@ -242,7 +242,7 @@ class RuntimeNetHttpTest(unittest.TestCase):
             net.req(self.origin + "/echo")
 
     def test_legacy_fetch_post_and_cache_remain_available(self):
-        with patch.dict(os.environ, {"XIUGOU_CACHE_DIR": "", "XIUGOU_PROXY_BASE": "legacy-prefix"}):
+        with patch.dict(os.environ, {"YINGSHI_CACHE_DIR": "", "YINGSHI_PROXY_BASE": "legacy-prefix"}):
             spider = Spider()
         response = spider.fetch(self.origin + "/echo", timeout=1)
         self.assertTrue(response.ok)
@@ -438,9 +438,9 @@ class ScriptProxyUrlTest(unittest.TestCase):
     def setUp(self):
         self.spider = _CctvShapeSpider()
         env = patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_PROXY_BASE": "http://127.0.0.1:12345/script-proxy?token=opaque%2B%25&route=a%2Bb&empty=",
-            "XIUGOU_SCRIPT_SITE_KEY": "央视 +&=",
-            "XIUGOU_PROXY_BASE": "legacy-prefix",
+            "YINGSHI_SCRIPT_PROXY_BASE": "http://127.0.0.1:12345/script-proxy?token=opaque%2B%25&route=a%2Bb&empty=",
+            "YINGSHI_SCRIPT_SITE_KEY": "央视 +&=",
+            "YINGSHI_PROXY_BASE": "legacy-prefix",
         })
         env.start()
         self.addCleanup(env.stop)
@@ -463,7 +463,7 @@ class ScriptProxyUrlTest(unittest.TestCase):
         for key in ("do", "siteKey", "token", "route", "empty"):
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, "host routing"):
                 self.spider.proxyUrl({key: "replacement"})
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_PROXY_BASE":
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_PROXY_BASE":
                                      "http://127.0.0.1:12345/script-proxy?do=wrong&siteKey=wrong&token=kept"}):
             query = parse_qs(urlsplit(self.spider.proxyUrl()).query)
         self.assertEqual(query, {"do": ["py"], "siteKey": ["央视 +&="], "token": ["kept"]})
@@ -471,7 +471,7 @@ class ScriptProxyUrlTest(unittest.TestCase):
     def test_none_and_empty_params_are_equal_and_old_proxy_api_stays_independent(self):
         self.assertEqual(self.spider.proxyUrl(), self.spider.proxyUrl({}))
         self.assertEqual(self.spider.proxyUrl(None, local=True), self.spider.proxyUrl())
-        with patch.dict(os.environ, {"XIUGOU_CACHE_DIR": ""}):
+        with patch.dict(os.environ, {"YINGSHI_CACHE_DIR": ""}):
             legacy = Spider()
         self.assertEqual(legacy.getProxyUrl(), "legacy-prefix")
         self.assertEqual(legacy.getProxyUrl(False), "legacy-prefix")
@@ -492,11 +492,11 @@ class ScriptProxyUrlTest(unittest.TestCase):
         for base in ("", "relative/script-proxy", "file:///private", "http://user:secret@127.0.0.1/",
                      "http://127.0.0.1:0/", "http://127.0.0.1:99999/", "http://[invalid/",
                      "http://127.0.0.1/\n?token=secret", "http://127.0.0.1/#token=secret"):
-            with self.subTest(base=base), patch.dict(os.environ, {"XIUGOU_SCRIPT_PROXY_BASE": base}):
+            with self.subTest(base=base), patch.dict(os.environ, {"YINGSHI_SCRIPT_PROXY_BASE": base}):
                 with self.assertRaises(RuntimeError) as caught:
                     self.spider.proxyUrl()
                 self.assertNotIn("secret", str(caught.exception))
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": " "}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": " "}):
             with self.assertRaisesRegex(RuntimeError, "not configured"):
                 self.spider.proxyUrl()
 

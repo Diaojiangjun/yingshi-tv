@@ -58,7 +58,7 @@ final class BrowserVerificationSession implements AutoCloseable {
             if (!host.matches("[a-zA-Z0-9_.:\\[\\]-]+")) throw new IOException("Invalid verification proxy host");
             proxyArgument = "--proxy-server=http://" + host + ":" + address.getPort();
         }
-        Path profile = Files.createTempDirectory("xiugou-verification-").toRealPath();
+        Path profile = Files.createTempDirectory("yingshi-verification-").toRealPath();
         List<String> command = new ArrayList<>(List.of(executable.toString(), "--user-data-dir=" + profile, "--remote-debugging-port=0",
                 "--no-first-run", "--no-default-browser-check", "--app=" + page.toASCIIString()));
         if (proxyArgument != null) command.add(proxyArgument);
@@ -72,7 +72,7 @@ final class BrowserVerificationSession implements AutoCloseable {
 
     private static Path executable() throws IOException {
         List<String> roots = new ArrayList<>();
-        String override = System.getProperty("xiugou.browser.executable", "");
+        String override = System.getProperty("yingshi.browser.executable", "");
         if (!override.isBlank()) { Path candidate=Path.of(override);if(Files.isRegularFile(candidate))return candidate;throw new IOException("Verification browser executable is unavailable"); }
         for(String name:List.of("ProgramFiles(x86)","ProgramFiles","LOCALAPPDATA")) {
             String value=System.getenv(name);if(value!=null&&!value.isBlank())roots.add(value);
@@ -194,7 +194,7 @@ final class BrowserVerificationSession implements AutoCloseable {
         client.shutdownNow();executor.shutdownNow();deleteProfile(profile);
     }
     private static void deleteProfile(Path profile) {
-        if(!profile.getFileName().toString().startsWith("xiugou-verification-"))return;
+        if(!profile.getFileName().toString().startsWith("yingshi-verification-"))return;
         try(var files=Files.walk(profile)){for(Path file:files.sorted(Comparator.reverseOrder()).toList())try{Files.deleteIfExists(file);}catch(IOException ignored){}}
         catch(IOException ignored) { }
     }

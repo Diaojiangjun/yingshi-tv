@@ -25,7 +25,7 @@
     打开后校验 runtime/jre 完整性，并让它进入必需文件清单。
 .PARAMETER BundleRuntimes
     把 Python / Node / PHP 三类解释器打进发布包。默认关闭：它们同样由
-    「设置 → 运行时」按需下载（合计约 100 MB），启动时用 -Dxiugou.{python,node,php}
+    「设置 → 运行时」按需下载（合计约 100 MB），启动时用 -Dyingshi.{python,node,php}
     指向 APPDATA 里的安装位置。打开后要求 companion/dist 下三者齐备。
 .PARAMETER BuildConfigFile
     客户端编译配置路径。测试包和正式包同样要求 TMDB、弹幕和共享片段均已配置。
@@ -50,8 +50,8 @@ $ProjectRoot = (Resolve-Path "$ScriptDir/..").Path
 $BuildOutputDir = "$ProjectRoot/build/windows/x64/runner/Release"
 $DistDir = "$ProjectRoot/dist"
 if ($IncludeMdk) {
-    if (!$env:XIUGOU_MDK_SDK_DIR -or !(Test-Path -LiteralPath (Join-Path $env:XIUGOU_MDK_SDK_DIR 'include/mdk/c/Player.h') -PathType Leaf)) {
-        throw 'MDK 构建需要 XIUGOU_MDK_SDK_DIR 指向已验证的 MDK SDK。'
+    if (!$env:YINGSHI_MDK_SDK_DIR -or !(Test-Path -LiteralPath (Join-Path $env:YINGSHI_MDK_SDK_DIR 'include/mdk/c/Player.h') -PathType Leaf)) {
+        throw 'MDK 构建需要 YINGSHI_MDK_SDK_DIR 指向已验证的 MDK SDK。'
     }
 }
 . (Join-Path $ScriptDir 'package_tree.ps1')
@@ -175,8 +175,8 @@ try {
     $Commit = (& git -C $ProjectRoot rev-parse --short=8 HEAD 2>$null).Trim()
     if ($Commit -and (& git -C $ProjectRoot status --porcelain --untracked-files=no 2>$null)) { $Commit = "$Commit-dirty" }
 } catch { $Commit = "" }
-$BuildArgs += "--dart-define=XIUGOU_BUILD_TIME=$BuildTime"
-if ($Commit) { $BuildArgs += "--dart-define=XIUGOU_COMMIT=$Commit" }
+$BuildArgs += "--dart-define=YINGSHI_BUILD_TIME=$BuildTime"
+if ($Commit) { $BuildArgs += "--dart-define=YINGSHI_COMMIT=$Commit" }
 Write-Host "      Build info: $BuildTime  $Commit" -ForegroundColor Gray
 $BuildArgs += "--dart-define-from-file=$BuildConfigFile"
 & $FlutterCmd @BuildArgs
@@ -184,8 +184,8 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "flutter build windows --release failed."
 }
 
-if (-not (Test-Path -LiteralPath "$BuildOutputDir/xiugou_tv.exe" -PathType Leaf)) {
-    Write-Error "Build output executable not found at: $BuildOutputDir/xiugou_tv.exe"
+if (-not (Test-Path -LiteralPath "$BuildOutputDir/yingshi_tv.exe" -PathType Leaf)) {
+    Write-Error "Build output executable not found at: $BuildOutputDir/yingshi_tv.exe"
 }
 Assert-PackageClientConfig $clientConfig (Join-Path $BuildOutputDir 'data/app.so')
 
@@ -240,7 +240,7 @@ if ($BundleJre) {
         }
     }
 } else {
-    # 默认不内置：JRE 由应用按需下载到 %APPDATA%\XiugouTV\runtime\jre。
+    # 默认不内置：JRE 由应用按需下载到 %APPDATA%\YingshiTV\runtime\jre。
     # 构建机没有 runtime/jre 也能出包，这正是「不打包」的意义。
     Write-Host "  [*] JRE 不随包分发：首次使用 jar 源时由「设置 → 运行时」按需下载。" -ForegroundColor Cyan
 }
@@ -299,7 +299,7 @@ foreach ($lib in $CompanionUnidbgJars) {
     Copy-Item -LiteralPath $lib.FullName -Destination $TargetUnidbgDir -Force
 }
 # py 源脚本宿主 pyshell 只有几百 KB，必须随包；解释器（pyruntime）改为应用内按需下载。
-# PyRuntime 的查找顺序是 -Dxiugou.python → jar 同级 pyruntime → PATH，所以不带也能跑，
+# PyRuntime 的查找顺序是 -Dyingshi.python → jar 同级 pyruntime → PATH，所以不带也能跑，
 # 但只对装了 Python 的开发机成立。
 $PyShellDist = Join-Path $ProjectRoot "companion/dist/pyshell"
 if (-not (Test-Path -LiteralPath $PyShellDist -PathType Container)) {
@@ -308,7 +308,7 @@ if (-not (Test-Path -LiteralPath $PyShellDist -PathType Container)) {
 Copy-Item -LiteralPath $PyShellDist -Destination $TargetCompanionDir -Recurse -Force
 
 # 三类解释器默认都不随包（安装包小 ~100 MB），由「设置 → 运行时」按需下载到 APPDATA，
-# 启动时用 -Dxiugou.{python,node,php} 指过去。需要离线开箱版本时加 -BundleRuntimes。
+# 启动时用 -Dyingshi.{python,node,php} 指过去。需要离线开箱版本时加 -BundleRuntimes。
 $OptionalRuntimes = @(
     @{ Dir = 'pyruntime'; Probe = 'python.exe' },
     @{ Dir = 'noderuntime'; Probe = 'node.exe' },
@@ -361,7 +361,7 @@ if ($BundleJre) {
 }
 
 # 3.3 VC++ 运行库应用本地部署（issue #2：用户机未装 vc_redist 时报缺 VCRUNTIME140_1.dll、打不开）。
-# xiugou_tv.exe 与各插件 DLL 以 /MD 链接 MSVCP140 / VCRUNTIME140 / VCRUNTIME140_1；Windows 先在 exe 目录
+# yingshi_tv.exe 与各插件 DLL 以 /MD 链接 MSVCP140 / VCRUNTIME140 / VCRUNTIME140_1；Windows 先在 exe 目录
 # 找 DLL，因此随包放一份即可。来源优先取 VS 自带的可再发行目录（与编译器同版本），找不到才退回 System32。
 # 注意不要用 runtime/jre/bin 下的那份：版本 14.36 低于编译器，新编译器产物配旧 msvcp140 可能在加锁时崩溃。
 Write-Host "[3.3/5] Bundling VC++ runtime (app-local)..." -ForegroundColor Yellow
@@ -422,7 +422,7 @@ Write-Host "  [+] Clean application stage: $StagedAppDir ($($ApplicationStage.Fi
 $Artifacts = @()
 if (-not $SkipZip) {
     Write-Host "[4/5] Packaging Portable ZIP archive..." -ForegroundColor Yellow
-    $ZipPath = Join-Path $PackageStage "xiugou-tv-windows-x64-v$Version-portable.zip"
+    $ZipPath = Join-Path $PackageStage "yingshi-tv-windows-x64-v$Version-portable.zip"
 
     # 不用 Compress-Archive / ZipFile.CreateFromDirectory：在 Windows PowerShell 5.1（.NET Framework 兼容模式）下
     # 两者都把条目路径写成反斜杠（runtime\jre\...），不符合 zip 规范（APPNOTE 4.4.17 要求 /），
@@ -474,7 +474,7 @@ if (-not $SkipInstaller) {
         if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup compilation failed with exit code $LASTEXITCODE."
         }
-        $Artifacts += Join-Path $PackageStage "xiugou-tv-windows-x64-v$Version-setup.exe"
+        $Artifacts += Join-Path $PackageStage "yingshi-tv-windows-x64-v$Version-setup.exe"
     } else {
         throw "ISCC.exe not found. Install Inno Setup or explicitly use -SkipInstaller."
     }

@@ -80,7 +80,7 @@ const env = () => ({ DB: fakeD1(), CLIENT_TOKEN: 'tk-test', IP_SALT: 'salt' });
 const call = (e, method, path, body, headers = {}) =>
   worker.fetch(new Request(`https://w.test${path}`, {
     method,
-    headers: { 'x-xiugou-token': 'tk-test', 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4', ...headers },
+    headers: { 'x-yingshi-token': 'tk-test', 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4', ...headers },
     body: body ? JSON.stringify(body) : undefined,
   }), e);
 
@@ -90,8 +90,8 @@ const intro = (clientId, startMs = 0, endMs = 92000) => ({
 
 test('Worker：令牌、提交、一次机会、多数一致、我已提交', async () => {
   const e = env();
-  assert.equal((await call(e, 'GET', '/v1/health', null, { 'x-xiugou-token': '' })).status, 200);
-  assert.equal((await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-xiugou-token': 'wrong' })).status, 401);
+  assert.equal((await call(e, 'GET', '/v1/health', null, { 'x-yingshi-token': '' })).status, 200);
+  assert.equal((await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-yingshi-token': 'wrong' })).status, 401);
 
   let r = await call(e, 'POST', '/v1/segments', intro('client-aaaaaaaaaaaaaaaa'));
   assert.equal(r.status, 201);
@@ -111,7 +111,7 @@ test('Worker：令牌、提交、一次机会、多数一致、我已提交', as
 
   // 第二个人提交接近的时间 → 2 票
   await call(e, 'POST', '/v1/segments', intro('client-bbbbbbbbbbbbbbbb', 1000, 91000));
-  r = await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-xiugou-client': 'client-cccccccccccccccc' });
+  r = await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-yingshi-client': 'client-cccccccccccccccc' });
   body = await r.json();
   const seg = body.segments.find((s) => s.category === 'intro');
   assert.equal(seg.votes, 2);
@@ -159,7 +159,7 @@ test('Worker 反馈：认可计票；提交者本人不计；两人撤销 → �
   assert.equal(res.hidden, true);
   assert.deepEqual({ s: res.supporters, d: res.downs }, { s: 2, d: 2 });
 
-  body = await (await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-xiugou-client': 'client-aaaaaaaaaaaaaaaa' })).json();
+  body = await (await call(e, 'GET', `/v1/segments?key=${KEY}`, null, { 'x-yingshi-client': 'client-aaaaaaaaaaaaaaaa' })).json();
   assert.equal(body.segments.length, 0, '撤下后不再下发');
   assert.deepEqual(body.submitted, [], '原提交者的「已提交」也解除');
 

@@ -1,7 +1,7 @@
 """Run the unchanged YSP author against real runtime APIs and local HTTP peers.
 
 Run: python -B -m unittest discover -s companion/pyshell/tests -p test_author_yangshipin.py -v
-Only a missing author reference skips this suite (override with XIUGOU_AUTHOR_YSP).
+Only a missing author reference skips this suite (override with YINGSHI_AUTHOR_YSP).
 The web fixture reuses synthetic WASM; it does not validate the official signing binary.
 """
 
@@ -34,9 +34,9 @@ from author_ysp_fixture import (  # noqa: E402
 class AuthorYangshipinTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = Path(os.environ.get("XIUGOU_AUTHOR_YSP") or DEFAULT_AUTHOR)
+        cls.source = Path(os.environ.get("YINGSHI_AUTHOR_YSP") or DEFAULT_AUTHOR)
         if not cls.source.is_file():
-            raise unittest.SkipTest("author YSP source missing; set XIUGOU_AUTHOR_YSP")
+            raise unittest.SkipTest("author YSP source missing; set YINGSHI_AUTHOR_YSP")
         cls.source_hash = hashlib.sha256(cls.source.read_bytes()).hexdigest()
         if cls.source_hash != AUTHOR_SHA256:
             raise AssertionError("author YSP reference hash differs from the task28 original")

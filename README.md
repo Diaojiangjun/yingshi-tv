@@ -109,7 +109,7 @@
 
 装好后优先使用应用自带的那份，不再依赖本机是否装过 Java / Python / Node / PHP；也可以随时删除。安装版与便携版从 [GitHub Releases](https://github.com/Diaojiangjun/yingshi-tv/releases/latest) 获取，摘要以该次发行附带的 SHA256SUMS 为准。
 
-安装版请先完全退出旧程序再运行安装向导；便携版解压到新的可写目录后运行 `xiugou_tv.exe`。升级前在旧版设置中导出备份，记下实际资料目录并退出；确认配置、历史、收藏和偏好正常前，保留旧目录与备份。
+安装版请先完全退出旧程序再运行安装向导；便携版解压到新的可写目录后运行 `yingshi_tv.exe`。升级前在旧版设置中导出备份，记下实际资料目录并退出；确认配置、历史、收藏和偏好正常前，保留旧目录与备份。
 
 第三方组件及 MDK／FFmpeg 的分发材料见 [第三方许可](THIRD_PARTY_LICENSES.md)。
 

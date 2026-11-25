@@ -1260,7 +1260,7 @@ class _ConfigSourcesPanelState extends State<ConfigSourcesPanel> {
     setState(() => _exporting = true);
     try {
       final picker = widget.pickExportPath ?? _defaultPickExportPath;
-      var path = await picker('xiugou-tv-config.json');
+      var path = await picker('yingshi-tv-config.json');
       if (path == null || path.trim().isEmpty) return;
       if (!path.toLowerCase().endsWith('.json')) path = '$path.json';
       await _repo.exportCurrentConfig(path);
@@ -4601,7 +4601,7 @@ class _StorageCacheCardState extends State<_StorageCacheCard> {
     _toast('已停用自定义目录，继续使用默认目录', type: AppMessageType.success);
   }
 
-  /// 旧版本数据在 `%APPDATA%/XiugouTV` 时，允许用户主动搬到安装目录下的 `user_data`。
+  /// 旧版本数据在 `%APPDATA%/YingshiTV` 时，允许用户主动搬到安装目录下的 `user_data`。
   ///
   /// 走既有的 pending + 启动迁移流程：只复制不删除，失败保留原目录。
   Future<void> _moveToPortableDirectory() async {
@@ -4992,7 +4992,7 @@ class _DataBackupCardState extends State<_DataBackupCard> {
   String _suggestedName() {
     final now = DateTime.now();
     String two(int value) => value.toString().padLeft(2, '0');
-    return 'xiugou-tv-backup-${now.year}${two(now.month)}${two(now.day)}-'
+    return 'yingshi-tv-backup-${now.year}${two(now.month)}${two(now.day)}-'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}.json';
   }
 

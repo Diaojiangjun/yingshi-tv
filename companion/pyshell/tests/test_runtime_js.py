@@ -45,7 +45,7 @@ class RuntimeJSValidationTest(unittest.TestCase):
             popen.assert_not_called()
 
     def test_missing_or_relative_host_configuration_fails_safely(self):
-        for values in [{}, {"XIUGOU_JAVA_BIN": "java", "XIUGOU_JAVA_CLASSPATH": "."}]:
+        for values in [{}, {"YINGSHI_JAVA_BIN": "java", "YINGSHI_JAVA_CLASSPATH": "."}]:
             with patch.dict(os.environ, values, clear=True), patch("base.js.subprocess.Popen") as popen:
                 with self.assertRaisesRegex(RuntimeError, "absolute Java"):
                     RuntimeJS().eval("1")
@@ -64,8 +64,8 @@ class RuntimeJSTransportTest(unittest.TestCase):
             processes.append(child)
             return child
 
-        env = {"XIUGOU_JAVA_BIN": sys.executable,
-               "XIUGOU_JAVA_CLASSPATH": str(Path(__file__).resolve().parent),
+        env = {"YINGSHI_JAVA_BIN": sys.executable,
+               "YINGSHI_JAVA_CLASSPATH": str(Path(__file__).resolve().parent),
                "JAVA_TOOL_OPTIONS": "TEST_SECRET", "JDK_JAVA_OPTIONS": "TEST_SECRET", "_JAVA_OPTIONS": "TEST_SECRET"}
         self.addCleanup(self.assert_processes_closed, processes)
         with patch.dict(os.environ, env), patch("base.js.subprocess.Popen", side_effect=start):
@@ -109,8 +109,8 @@ class RuntimeJSTransportTest(unittest.TestCase):
 class RuntimeJSTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not os.environ.get("XIUGOU_JAVA_BIN") or not os.environ.get("XIUGOU_JAVA_CLASSPATH"):
-            raise unittest.SkipTest("set XIUGOU_JAVA_BIN and XIUGOU_JAVA_CLASSPATH to the real helper")
+        if not os.environ.get("YINGSHI_JAVA_BIN") or not os.environ.get("YINGSHI_JAVA_CLASSPATH"):
+            raise unittest.SkipTest("set YINGSHI_JAVA_BIN and YINGSHI_JAVA_CLASSPATH to the real helper")
 
     def test_md5_vectors_and_js_string_coercion(self):
         values = ["", "abc", "message digest", "中文😀", "a\x00b"]
@@ -160,7 +160,7 @@ class RuntimeJSTest(unittest.TestCase):
         self.assertEqual(RuntimeJS().eval("6*7"), 42)
 
     def test_single_request_main_uses_only_json_stdout(self):
-        command = [os.environ["XIUGOU_JAVA_BIN"], "-cp", os.environ["XIUGOU_JAVA_CLASSPATH"],
+        command = [os.environ["YINGSHI_JAVA_BIN"], "-cp", os.environ["YINGSHI_JAVA_CLASSPATH"],
                    "com.fongmi.companion.ScriptJsEvaluator"]
         result = subprocess.run(command, input=json.dumps({"source": "print('TEST_SECRET'); console.log('TEST_SECRET'); '中文😀'"}).encode(),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=True)
@@ -169,9 +169,9 @@ class RuntimeJSTest(unittest.TestCase):
         self.assertLess(len(result.stderr), 4096)
 
     def test_original_douyu_function_with_local_signing_fixture(self):
-        original = Path(os.environ.get("XIUGOU_GAME_LIVE_SOURCE", "E:/code/tvbox_1102/live-python/vod/game_live.py"))
+        original = Path(os.environ.get("YINGSHI_GAME_LIVE_SOURCE", "E:/code/tvbox_1102/live-python/vod/game_live.py"))
         if not original.is_file():
-            self.skipTest("original game_live.py not available; set XIUGOU_GAME_LIVE_SOURCE")
+            self.skipTest("original game_live.py not available; set YINGSHI_GAME_LIVE_SOURCE")
         tree = ast.parse(original.read_text(encoding="utf-8"))
         owner = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Spider")
         method = next(node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == "_douyu_stream")

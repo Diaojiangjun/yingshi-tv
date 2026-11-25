@@ -73,7 +73,7 @@ class RuntimeComponent {
   final String summary;
 
   /// 安装目录名。JRE 必须是 `jre`、Python 是 `python`、Node 是 `node`、
-  /// PHP 是 `php`——`CompanionProcessManager` 靠这些名字拼 `-Dxiugou.*`。
+  /// PHP 是 `php`——`CompanionProcessManager` 靠这些名字拼 `-Dyingshi.*`。
   final String dirName;
 
   /// 版本号，写进安装目录的 `.version`，也用于展示「已安装 21.0.13.1」。
@@ -166,7 +166,7 @@ const RuntimeComponent nodeRuntimeComponent = RuntimeComponent(
   version: '22.22.2',
   approxBytes: 33 * 1024 * 1024,
   probes: ['node.exe'],
-  systemProperty: 'xiugou.node',
+  systemProperty: 'yingshi.node',
   artifacts: [
     RuntimeArtifact(
       label: 'Node',
@@ -200,7 +200,7 @@ const RuntimeComponent pythonRuntimeComponent = RuntimeComponent(
     'python313.zip',
     'Lib/site-packages/requests/__init__.py',
   ],
-  systemProperty: 'xiugou.python',
+  systemProperty: 'yingshi.python',
   postStep: RuntimePostStep.pythonSitePackages,
   artifacts: [
     RuntimeArtifact(
@@ -323,7 +323,7 @@ const RuntimeComponent phpRuntimeComponent = RuntimeComponent(
   version: '8.3.37',
   approxBytes: 33 * 1024 * 1024,
   probes: ['php.exe', 'ext/php_curl.dll'],
-  systemProperty: 'xiugou.php',
+  systemProperty: 'yingshi.php',
   postStep: RuntimePostStep.phpVcRuntime,
   artifacts: [
     RuntimeArtifact(

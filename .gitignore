@@ -122,7 +122,7 @@ doc/
 
 # 仅忽略根目录中的个人运行数据副本，不屏蔽 test/ 下的 JSON 样例
 /appdata/
-/XiugouTV/
+/YingshiTV/
 /desktop_window.json
 /cached_vod_config.json
 /current_config.json
@@ -180,7 +180,7 @@ $RECYCLE.BIN/
 /companion/noderuntime/node.exe
 /companion/phpruntime/
 !/tools/update-mirrors-worker/README.md
-/xiugou-tv-backup-*.json
+/yingshi-tv-backup-*.json
 # /companion/libs/      —— 同上
 # /test/lib/*.jar        —— test/ 已不在仓库内
 

@@ -23,7 +23,7 @@ import javax.crypto.ShortBufferException;
 public class Pkcs7Provider extends Provider {
 
     public Pkcs7Provider() {
-        super("XiugouPkcs7", "1.0", "AES/CBC/PKCS7Padding alias to PKCS5 for desktop JVM");
+        super("YingshiPkcs7", "1.0", "AES/CBC/PKCS7Padding alias to PKCS5 for desktop JVM");
         put("Cipher.AES/CBC/PKCS7Padding", Pkcs7Cipher.class.getName());
     }
 

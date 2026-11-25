@@ -61,7 +61,7 @@ class _AgreementGuardState extends ConsumerState<AgreementGuard> {
     try {
       await ref.read(agreementStoreProvider).accept();
     } catch (error) {
-      debugPrint('[xiugou-tv] 协议同意状态保存失败: $error');
+      debugPrint('[yingshi-tv] 协议同意状态保存失败: $error');
     }
   }
 }

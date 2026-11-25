@@ -21,7 +21,7 @@ import 'danmaku_source.dart';
 /// 注意：值会编进发布的 exe，只能防「拿仓库代码就能用」，挡不住拆包或抓包；防滥用靠服务端限流 / 换令牌。
 /// 构建期内置的主接口地址（不含用户自填值）：设置页据此区分「有内置服务」与「完全没配」。
 String get kBuiltinDanmakuApiBase => composeDanmakuApiBase(
-    AppEnv.get('XIUGOU_DANMAKU_URL'), AppEnv.get('XIUGOU_DANMAKU_TOKEN'));
+    AppEnv.get('YINGSHI_DANMAKU_URL'), AppEnv.get('YINGSHI_DANMAKU_TOKEN'));
 
 /// 主接口的「当前生效」地址：用户在设置里填的优先，留空回落到构建期内置值。
 String get kDanmakuApiBase {
@@ -37,7 +37,7 @@ String get kDanmakuApiBase {
 String danmakuApiBaseFor(DanmakuSource source) => switch (source) {
       DanmakuSource.primary => kDanmakuApiBase,
       DanmakuSource.secondary =>
-        composeDanmakuApiBase(AppEnv.get('XIUGOU_DANMAKU_SECONDARY_URL'), ''),
+        composeDanmakuApiBase(AppEnv.get('YINGSHI_DANMAKU_SECONDARY_URL'), ''),
     };
 
 List<DanmakuSource> get configuredDanmakuSources => [

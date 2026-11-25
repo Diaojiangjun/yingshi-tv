@@ -20,11 +20,11 @@ class PersistentCacheTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         env = patch.dict(os.environ, {
-            "XIUGOU_NET_CACHE_DIR": str(self.root / "public-cache"),
-            "XIUGOU_SCRIPT_SITE_KEY": "直播 +&=",
-            "XIUGOU_SCRIPT_API": "https://scripts.example/game_live.py?revision=1",
-            "XIUGOU_CACHE_DIR": str(self.root / "legacy"),
-            "XIUGOU_LOCAL_DIR": str(self.root / "local"),
+            "YINGSHI_NET_CACHE_DIR": str(self.root / "public-cache"),
+            "YINGSHI_SCRIPT_SITE_KEY": "直播 +&=",
+            "YINGSHI_SCRIPT_API": "https://scripts.example/game_live.py?revision=1",
+            "YINGSHI_CACHE_DIR": str(self.root / "legacy"),
+            "YINGSHI_LOCAL_DIR": str(self.root / "local"),
         })
         env.start()
         self.addCleanup(env.stop)
@@ -60,10 +60,10 @@ class PersistentCacheTest(unittest.TestCase):
     def test_site_and_original_script_identity_are_isolated_and_captured(self):
         first = self.net()
         self.assertEqual(first.cached("catalog", self.options, lambda: "first"), "first")
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": "other"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": "other"}):
             self.assertEqual(self.net().cached("catalog", self.options, lambda: "site"), "site")
             self.assertEqual(first.cached("catalog", self.options, self.fail), "first")
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_API": "https://scripts.example/other.py"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_API": "https://scripts.example/other.py"}):
             self.assertEqual(self.net().cached("catalog", self.options, lambda: "script"), "script")
         self.assertEqual(self.net().cached("catalog", self.options, self.fail), "first")
         paths = list((self.root / "public-cache").glob("*.json"))
@@ -98,7 +98,7 @@ class PersistentCacheTest(unittest.TestCase):
         net = self.net()
         for key in ("a", "b"):
             net.cached(key, self.options, lambda key=key: key)
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": "other"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": "other"}):
             self.net().cached("a", self.options, lambda: "other")
         net.clearCache("a")
         fresh = self.net()
@@ -108,7 +108,7 @@ class PersistentCacheTest(unittest.TestCase):
         self.assertEqual(self.net().cached("b", self.options, lambda: "new"), "new")
         fresh.clearCache()
         self.assertEqual(self.net().cached("a", self.options, lambda: "cleared"), "cleared")
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": "other"}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": "other"}):
             self.assertEqual(self.net().cached("a", self.options, self.fail), "other")
         self.assertEqual(sentinel.read_text(encoding="utf-8"), '{"device":"preserved"}')
 
@@ -138,8 +138,8 @@ class PersistentCacheTest(unittest.TestCase):
         self.assertEqual(net.cached("b", self.options, lambda: "retried"), "retried")
 
     def test_unconfigured_persistence_fails_before_loader_and_close_never_persists_late_work(self):
-        for env in ({"XIUGOU_NET_CACHE_DIR": ""}, {"XIUGOU_NET_CACHE_DIR": "relative"},
-                    {"XIUGOU_SCRIPT_SITE_KEY": " "}, {"XIUGOU_SCRIPT_API": ""}):
+        for env in ({"YINGSHI_NET_CACHE_DIR": ""}, {"YINGSHI_NET_CACHE_DIR": "relative"},
+                    {"YINGSHI_SCRIPT_SITE_KEY": " "}, {"YINGSHI_SCRIPT_API": ""}):
             with self.subTest(env=env), patch.dict(os.environ, env):
                 with self.assertRaisesRegex(RuntimeError, "not configured"):
                     self.net().cached("a", self.options, self.fail)
@@ -162,7 +162,7 @@ class PersistentCacheTest(unittest.TestCase):
             document = json.loads(next(root.glob("*.json")).read_bytes())
             self.assertEqual(list(document["entries"]), ["2", "3"])
             for index in range(4):
-                with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": str(index)}):
+                with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": str(index)}):
                     self.net().cached("catalog", self.options, lambda: "x" * 250)
             paths = list(root.glob("*.json"))
             self.assertLessEqual(len(paths), 2)

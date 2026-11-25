@@ -46,7 +46,7 @@ bool Adopt(DWORD pid) {
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
 RegisterProcessJobChannel(flutter::BinaryMessenger* messenger) {
   auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-      messenger, "xiugou/process_job",
+      messenger, "yingshi/process_job",
       &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,

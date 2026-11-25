@@ -14,7 +14,7 @@ class LiveDirectModeMemory {
   /// 落盘格式版本（旧文件无此键也按 1 处理）。
   static const int formatVersion = 1;
 
-  /// 落盘文件名（与直播源同目录：`%APPDATA%/XiugouTV/`）。
+  /// 落盘文件名（与直播源同目录：`%APPDATA%/YingshiTV/`）。
   static const String fileName = 'live_direct_modes.json';
 
   final Map<String, PlaybackMode> _hosts;

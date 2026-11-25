@@ -64,7 +64,7 @@ public final class PayloadCryptoMain {
             return;
         }
         if (args.length >= 3 && !JarIndex.isEmpty(args[2])) {
-            System.setProperty("xiugou.hardshell.profiles", args[2]);
+            System.setProperty("yingshi.hardshell.profiles", args[2]);
         }
         ShellProfile profile = ShellRegistry.byId(args[1]);
         if (profile == null || !profile.hasCrypto()) {

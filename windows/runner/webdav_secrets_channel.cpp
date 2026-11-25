@@ -10,7 +10,7 @@
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
 RegisterWebDavSecretsChannel(flutter::BinaryMessenger* messenger) {
   auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-      messenger, "xiugou/webdav_secrets",
+      messenger, "yingshi/webdav_secrets",
       &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,

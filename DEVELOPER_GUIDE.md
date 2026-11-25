@@ -22,12 +22,12 @@ cp config/app.env.example config/app.env
 
 ```env
 # 弹幕：自部署 LogVar Danmu API 的根地址（不带令牌、末尾不带 /）与令牌（路径第一段）
-XIUGOU_DANMAKU_URL="https://danmu.example.com"
-XIUGOU_DANMAKU_TOKEN="your-token"
+YINGSHI_DANMAKU_URL="https://danmu.example.com"
+YINGSHI_DANMAKU_TOKEN="your-token"
 
 # 共享片段：Cloudflare Worker 地址与令牌（= Worker 的 secret CLIENT_TOKEN）
-XIUGOU_SEGMENTS_URL="https://xiugou-segments.example.workers.dev"
-XIUGOU_SEGMENTS_TOKEN="your-client-token"
+YINGSHI_SEGMENTS_URL="https://yingshi-segments.example.workers.dev"
+YINGSHI_SEGMENTS_TOKEN="your-client-token"
 ```
 
 只想要其中一项，另一项留空即可；留空的那项功能不出现。

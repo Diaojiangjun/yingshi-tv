@@ -1,5 +1,5 @@
 <?php
-// Xiugou's stdin bridge for the public BaseSpider method contract.
+// Yingshi's stdin bridge for the public BaseSpider method contract.
 // Source code and its libraries remain source-owned; no HTTP server is started.
 define('DRPY_BRIDGE', true);
 ini_set('display_errors', '0');

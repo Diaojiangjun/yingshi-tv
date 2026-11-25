@@ -152,7 +152,7 @@ public final class ScriptProxyHandler implements HttpHandler {
             return thread;
         });
         private final Thread writer = Thread.currentThread();
-        private final long timeoutMs = Math.max(1L, Math.min(30_000L, Long.getLong("xiugou.py.streamIdleTimeoutMs", 30_000L)));
+        private final long timeoutMs = Math.max(1L, Math.min(30_000L, Long.getLong("yingshi.py.streamIdleTimeoutMs", 30_000L)));
         private final ScheduledFuture<?> timer;
         private long started;
         private boolean expired;

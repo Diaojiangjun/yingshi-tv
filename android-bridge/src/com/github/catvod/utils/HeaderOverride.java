@@ -14,14 +14,14 @@ import okhttp3.Request;
  * 可以不改代码直接做 A/B。所有取值都来自 JVM 系统属性：
  *
  * <pre>
- *   -Dxiugou.http.preset=android-app   // okhttp/3.12.1 + X-Requested-With + zh-CN
- *   -Dxiugou.http.preset=android-web   // Android Chrome Mobile UA
- *   -Dxiugou.http.preset=tvbox         // 仅 okhttp/3.12.1
- *   -Dxiugou.http.ua=...               // 单独指定 UA
- *   -Dxiugou.http.referer=...          // 单独指定 Referer
- *   -Dxiugou.http.cookie=...           // 单独指定 Cookie
- *   -Dxiugou.http.headers=K1:V1;K2:V2  // 追加/覆盖任意头
- *   -Dxiugou.http.force=true           // 连爬虫自己设置的 UA 也覆盖（默认只补缺失的）
+ *   -Dyingshi.http.preset=android-app   // okhttp/3.12.1 + X-Requested-With + zh-CN
+ *   -Dyingshi.http.preset=android-web   // Android Chrome Mobile UA
+ *   -Dyingshi.http.preset=tvbox         // 仅 okhttp/3.12.1
+ *   -Dyingshi.http.ua=...               // 单独指定 UA
+ *   -Dyingshi.http.referer=...          // 单独指定 Referer
+ *   -Dyingshi.http.cookie=...           // 单独指定 Cookie
+ *   -Dyingshi.http.headers=K1:V1;K2:V2  // 追加/覆盖任意头
+ *   -Dyingshi.http.force=true           // 连爬虫自己设置的 UA 也覆盖（默认只补缺失的）
  * </pre>
  *
  * <p>默认 `force=false`：只补爬虫没设置的头，避免把本来正常的站点带坏。
@@ -34,7 +34,7 @@ public final class HeaderOverride {
 
     static {
         Map<String, String> map = new LinkedHashMap<>();
-        String preset = prop("xiugou.http.preset", "").toLowerCase(Locale.ROOT);
+        String preset = prop("yingshi.http.preset", "").toLowerCase(Locale.ROOT);
         switch (preset) {
             case "android-app":
                 map.put("User-Agent", "okhttp/3.12.1");
@@ -53,10 +53,10 @@ public final class HeaderOverride {
             default:
                 break;
         }
-        putIfPresent(map, "User-Agent", prop("xiugou.http.ua", ""));
-        putIfPresent(map, "Referer", prop("xiugou.http.referer", ""));
-        putIfPresent(map, "Cookie", prop("xiugou.http.cookie", ""));
-        String extra = prop("xiugou.http.headers", "");
+        putIfPresent(map, "User-Agent", prop("yingshi.http.ua", ""));
+        putIfPresent(map, "Referer", prop("yingshi.http.referer", ""));
+        putIfPresent(map, "Cookie", prop("yingshi.http.cookie", ""));
+        String extra = prop("yingshi.http.headers", "");
         for (String part : extra.split(";")) {
             int idx = part.indexOf(':');
             if (idx > 0) {
@@ -69,7 +69,7 @@ public final class HeaderOverride {
         map.remove("Accept-Encoding");
         HEADERS = Collections.unmodifiableMap(map);
         ENABLED = !HEADERS.isEmpty();
-        FORCE = bool("xiugou.http.force", false);
+        FORCE = bool("yingshi.http.force", false);
     }
 
     private HeaderOverride() {

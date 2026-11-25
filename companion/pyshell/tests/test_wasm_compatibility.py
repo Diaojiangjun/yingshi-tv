@@ -21,7 +21,7 @@ import numpy
 
 
 RUNTIME = Path(__file__).resolve().parents[2] / "pyruntime"
-AUTHOR = Path(os.environ.get("XIUGOU_AUTHOR_YSP") or
+AUTHOR = Path(os.environ.get("YINGSHI_AUTHOR_YSP") or
               r"E:\code\tvbox_1102\live-python-20261107\live\yangshipin.py")
 AUTHOR_SHA256 = "67c66cf3f36723f41eb1e10ca0f48a11f24a69eb81c6ccf46e64aea45e75c850"
 WASM_SHA256 = "0df0d751d771afd195a89d125cc1eabeded0a4425f45005362f3fd7033987754"
@@ -49,7 +49,7 @@ def opcode_module(instructions, results=b""):
 
 class WasmCompatibilityTest(unittest.TestCase):
     def setUp(self):
-        directory = tempfile.TemporaryDirectory(prefix="xiugou-wasm-abi-")
+        directory = tempfile.TemporaryDirectory(prefix="yingshi-wasm-abi-")
         self.addCleanup(directory.cleanup)
         self.wasm = Path(directory.name) / "synthetic.wasm"
         self.assertEqual(len(WASM), 421)
@@ -121,7 +121,7 @@ class WasmCompatibilityTest(unittest.TestCase):
         self.assertEqual(runtime.exec("f64_sqrt", [9.0]), 3.0)
         self.assertEqual(events, ["get", "string_get", "drop"])
 
-    @unittest.skipUnless(AUTHOR.is_file(), "author source missing; set XIUGOU_AUTHOR_YSP")
+    @unittest.skipUnless(AUTHOR.is_file(), "author source missing; set YINGSHI_AUTHOR_YSP")
     def test_original_keygen_class_with_synthetic_wasm(self):
         source = AUTHOR.read_bytes()
         self.assertEqual(hashlib.sha256(source).hexdigest(), AUTHOR_SHA256,

@@ -18,18 +18,18 @@ class SpiderDanmakuUrlTest(unittest.TestCase):
     def setUp(self):
         self.spider = Spider.__new__(Spider)
         environment = patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_DANMAKU_BASE": "http://127.0.0.1:12345/opaque/endpoint?token=opaque%2B%25&route=a%2Bb&empty=",
-            "XIUGOU_SCRIPT_SITE_KEY": "游戏 +&=",
-            "XIUGOU_SCRIPT_PROXY_BASE": "http://127.0.0.1:54321/proxy?token=other",
+            "YINGSHI_SCRIPT_DANMAKU_BASE": "http://127.0.0.1:12345/opaque/endpoint?token=opaque%2B%25&route=a%2Bb&empty=",
+            "YINGSHI_SCRIPT_SITE_KEY": "游戏 +&=",
+            "YINGSHI_SCRIPT_PROXY_BASE": "http://127.0.0.1:54321/proxy?token=other",
         })
         environment.start()
         self.addCleanup(environment.stop)
 
     def test_original_game_player_includes_host_danmaku_url_for_room(self):
-        path = Path(os.environ.get("XIUGOU_AUTHOR_GAME") or
+        path = Path(os.environ.get("YINGSHI_AUTHOR_GAME") or
                     r"E:\code\tvbox_1102\live-python\vod\game_live.py")
         if not path.is_file():
-            self.skipTest("original game source missing; set XIUGOU_AUTHOR_GAME")
+            self.skipTest("original game source missing; set YINGSHI_AUTHOR_GAME")
         spec = importlib.util.spec_from_file_location("author_game_danmaku_url_fixture", path)
         author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(author)
@@ -57,7 +57,7 @@ class SpiderDanmakuUrlTest(unittest.TestCase):
 
     def test_host_routing_and_id_are_forced_without_duplicate_parameters(self):
         base = "http://127.0.0.1/danmaku?token=kept&do=other&siteKey=other&id=old&id=again"
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_DANMAKU_BASE": base}):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_DANMAKU_BASE": base}):
             query = parse_qs(urlsplit(self.spider.danmakuUrl("yy:123_456")).query)
         self.assertEqual(query, {"token": ["kept"], "do": ["py"],
                                  "siteKey": ["游戏 +&="], "id": ["yy:123_456"]})
@@ -65,14 +65,14 @@ class SpiderDanmakuUrlTest(unittest.TestCase):
     def test_only_literal_loopback_or_localhost_http_endpoints_are_accepted(self):
         for authority in ("127.0.0.1:80", "127.10.20.30:81", "localhost:82", "[::1]:83"):
             with self.subTest(authority=authority), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_DANMAKU_BASE": "https://" + authority + "/endpoint?token=fixture",
+                "YINGSHI_SCRIPT_DANMAKU_BASE": "https://" + authority + "/endpoint?token=fixture",
             }):
                 self.assertEqual(urlsplit(self.spider.danmakuUrl("huya:abc")).netloc, authority)
         for base in ("http://example.invalid/", "http://127.0.0.1.evil.invalid/", "http://0.0.0.0/",
                      "http://192.168.1.1/", "http://[::]/", "http://127.1/", "http://2130706433/",
                      "file:///local", "ws://127.0.0.1/", "//127.0.0.1/path"):
             with self.subTest(base=base), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_DANMAKU_BASE": base + "?token=secret",
+                "YINGSHI_SCRIPT_DANMAKU_BASE": base + "?token=secret",
             }), self.assertRaises(RuntimeError) as caught:
                 self.spider.danmakuUrl("douyu:123")
             self.assertNotIn("secret", str(caught.exception))
@@ -84,11 +84,11 @@ class SpiderDanmakuUrlTest(unittest.TestCase):
                      "http://[invalid/?token=x", "http://127.0.0.1/\n?token=secret",
                      "http://127.0.0.1/?token=secret#fragment"):
             with self.subTest(base=base), patch.dict(os.environ, {
-                "XIUGOU_SCRIPT_DANMAKU_BASE": base,
+                "YINGSHI_SCRIPT_DANMAKU_BASE": base,
             }), self.assertRaises(RuntimeError) as caught:
                 self.spider.danmakuUrl("douyu:123")
             self.assertNotIn("secret", str(caught.exception))
-        with patch.dict(os.environ, {"XIUGOU_SCRIPT_SITE_KEY": " "}), self.assertRaises(RuntimeError):
+        with patch.dict(os.environ, {"YINGSHI_SCRIPT_SITE_KEY": " "}), self.assertRaises(RuntimeError):
             self.spider.danmakuUrl("douyu:123")
 
     def test_only_a_nonempty_room_string_can_be_passed(self):

@@ -1,14 +1,14 @@
 // 修狗TV 共享跳过片段 Worker（§44）。部署说明见 ../README.md。
 //
-// 接口（均需请求头 X-Xiugou-Token = CLIENT_TOKEN）：
-//   GET  /v1/segments?key=<ep_key>          —— 该集的采纳结果；带 X-Xiugou-Client 时附带「我已提交的分类」
+// 接口（均需请求头 X-Yingshi-Token = CLIENT_TOKEN）：
+//   GET  /v1/segments?key=<ep_key>          —— 该集的采纳结果；带 X-Yingshi-Client 时附带「我已提交的分类」
 //   POST /v1/segments                       —— 提交一条片段（JSON，见 rules.js 的 validate）
 //   POST /v1/feedback                       —— 自动执行后的反馈：up = 没撤销（认可）/ down = 撤销（异议）
 //   GET  /v1/health                         —— 健康检查（不需要令牌）
 //
 // 绑定：
 //   DB           —— D1 数据库（schema.sql）
-//   CLIENT_TOKEN —— secret，客户端令牌（与 config/app.env 的 XIUGOU_SEGMENTS_TOKEN 一致）
+//   CLIENT_TOKEN —— secret，客户端令牌（与 config/app.env 的 YINGSHI_SEGMENTS_TOKEN 一致）
 //   IP_SALT      —— secret，IP 哈希用的盐（随便一串随机字符）
 
 import { CATEGORIES, VERDICTS, merge, sameSegment, shouldHide, validate } from './rules.js';
@@ -142,7 +142,7 @@ async function handleFeedback(request, env) {
 async function handleGet(request, env, url) {
   const key = url.searchParams.get('key') ?? '';
   if (!/^[0-9a-f]{40}$/.test(key)) return fail(400, 'bad_key', '影片标识无效');
-  const clientId = request.headers.get('x-xiugou-client') ?? '';
+  const clientId = request.headers.get('x-yingshi-client') ?? '';
   return json(200, { ok: true, ...(await loadEpisode(env, key, clientId)) });
 }
 
@@ -195,7 +195,7 @@ export default {
     try {
       if (url.pathname === '/v1/health') return json(200, { ok: true });
       if (!env.CLIENT_TOKEN) return fail(503, 'not_configured', '服务未配置令牌');
-      if (!safeEqual(request.headers.get('x-xiugou-token') ?? '', env.CLIENT_TOKEN)) {
+      if (!safeEqual(request.headers.get('x-yingshi-token') ?? '', env.CLIENT_TOKEN)) {
         return fail(401, 'unauthorized', '令牌无效');
       }
       if (url.pathname === '/v1/segments') {

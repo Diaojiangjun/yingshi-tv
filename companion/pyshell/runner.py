@@ -322,10 +322,10 @@ def _proxy_result(value):
             if not isinstance(name, str) or not _HEADER_NAME.fullmatch(name):
                 raise ValueError("invalid proxy header name")
             normalized[name] = _header_value(content)
-        envelope = {"__xiugou_proxy__": 1, "status": status, "mime": mime, "headers": normalized}
+        envelope = {"__yingshi_proxy__": 1, "status": status, "mime": mime, "headers": normalized}
         if reader is not None:
             handle = _stream_generation + ":" + uuid.uuid4().hex
-            envelope.update({"__xiugou_proxy__": 2, "streamId": handle})
+            envelope.update({"__yingshi_proxy__": 2, "streamId": handle})
             json.dumps(envelope, ensure_ascii=False, allow_nan=False).encode("utf-8")
             with _STREAM_LOCK:
                 if len(_streams) >= _MAX_STREAMS or any(item.reader is reader for item in _streams.values()):
@@ -399,8 +399,8 @@ def _load(path, ext="", cache_id=None):
     if not os.path.isfile(path):
         raise RuntimeError("脚本不存在: %s" % path)
     _close_instance()
-    os.environ["XIUGOU_SCRIPT_ID"] = cache_id or os.path.normcase(os.path.realpath(path))
-    name = "xiugou_spider_%d" % (abs(hash(path)) % (10 ** 9))
+    os.environ["YINGSHI_SCRIPT_ID"] = cache_id or os.path.normcase(os.path.realpath(path))
+    name = "yingshi_spider_%d" % (abs(hash(path)) % (10 ** 9))
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
@@ -474,7 +474,7 @@ def _execute(req, prepared=None):
                     pass
             _reply({'id': rid, 'type': 'error', 'error': 'script danmaku failed'})
         elif action in ('streamRead', 'streamClose') or action == 'call' and req.get('method') == 'proxy':
-            if isinstance(value, dict) and value.get('__xiugou_proxy__') == 2:
+            if isinstance(value, dict) and value.get('__yingshi_proxy__') == 2:
                 try:
                     _stream_close(value['streamId'])
                 except Exception:

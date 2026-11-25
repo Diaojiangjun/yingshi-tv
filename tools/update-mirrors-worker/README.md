@@ -80,7 +80,7 @@ These are operator instructions; running tests does not install tooling, create 
 Run from this directory:
 
 ```sh
-wrangler d1 create xiugou-update-mirrors
+wrangler d1 create yingshi-update-mirrors
 cp wrangler.toml.example wrangler.toml
 ```
 
@@ -89,22 +89,22 @@ In the copied configuration, replace `REPLACE_WITH_D1_DATABASE_ID` with the retu
 Apply both ordered migrations to a local database, then optionally start a local Worker:
 
 ```sh
-wrangler d1 migrations apply xiugou-update-mirrors --local
+wrangler d1 migrations apply yingshi-update-mirrors --local
 wrangler dev
 ```
 
 For the selected Cloudflare account/database, apply the migrations remotely and deploy:
 
 ```sh
-wrangler d1 migrations apply xiugou-update-mirrors --remote
+wrangler d1 migrations apply yingshi-update-mirrors --remote
 wrangler deploy
 ```
 
 Use the HTTPS Worker URL returned by Wrangler, or your configured custom domain, with `/v1/mirrors` appended. Perform a live smoke check, then repeat with the returned ETag in `If-None-Match` to check the `304` response:
 
 ```sh
-curl -i https://xiugou-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
-curl -i -H 'If-None-Match: "PASTE-THE-RETURNED-HASH"' https://xiugou-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
+curl -i https://yingshi-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
+curl -i -H 'If-None-Match: "PASTE-THE-RETURNED-HASH"' https://yingshi-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
 ```
 
 On Windows PowerShell use `curl.exe` if `curl` resolves to another command. For production errors, inspect Worker logs (for example `wrangler tail`) and validate D1 rows before retrying.
@@ -115,14 +115,14 @@ Set the app updater's `mirrorsUrl` configuration value to the complete HTTPS end
 
 ```json
 {
-  "mirrorsUrl": "https://xiugou-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors"
+  "mirrorsUrl": "https://yingshi-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors"
 }
 ```
 
-A build can instead supply the compile-time default using `XIUGOU_UPDATE_MIRRORS_URL`:
+A build can instead supply the compile-time default using `YINGSHI_UPDATE_MIRRORS_URL`:
 
 ```sh
-flutter build apk --dart-define=XIUGOU_UPDATE_MIRRORS_URL=https://xiugou-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
+flutter build apk --dart-define=YINGSHI_UPDATE_MIRRORS_URL=https://yingshi-update-mirrors.YOUR-SUBDOMAIN.workers.dev/v1/mirrors
 ```
 
 These are configuration examples for the consuming app; this directory contains only the Worker. The endpoint must be the manifest URL, not an individual proxy prefix. A valid empty manifest disables mirror use on the client.
@@ -136,7 +136,7 @@ These are configuration examples for the consuming app; this directory contains 
 Inspect current data:
 
 ```sh
-wrangler d1 execute xiugou-update-mirrors --remote --command "SELECT * FROM mirror_manifest; SELECT * FROM mirrors ORDER BY priority, id;"
+wrangler d1 execute yingshi-update-mirrors --remote --command "SELECT * FROM mirror_manifest; SELECT * FROM mirrors ORDER BY priority, id;"
 ```
 
 Edit a label or prefix (the trigger increases revision):
@@ -178,7 +178,7 @@ DELETE FROM mirrors WHERE id = 'operator-mirror';
 Execute a statement through Wrangler, or use the D1 dashboard SQL console:
 
 ```sh
-wrangler d1 execute xiugou-update-mirrors --remote --command "UPDATE mirrors SET enabled = 0 WHERE id = 'tvv-tw';"
+wrangler d1 execute yingshi-update-mirrors --remote --command "UPDATE mirrors SET enabled = 0 WHERE id = 'tvv-tw';"
 ```
 
 D1 constraints catch basic types and exact duplicates, while the Worker also checks the complete hostname/path/manifest contract. Test uncertain SQL changes against `--local` and inspect the manifest before applying them remotely. To correct an operator mistake, restore the prior row values using normal UPDATE statements; keep the new, higher revision. The one-hour HTTP cache can delay client-visible corrections.

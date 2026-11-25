@@ -12,7 +12,7 @@ import java.io.File;
  * 桌面端没有真实 WebView，这里提供一个**形态可信的 Android WebView UA**，
  * 让载荷拿到的指纹与手机端一致（而不是抛 {@code NoClassDefFoundError} 后保留字符串表里的 UA）。
  *
- * <p>可用 {@code -Dxiugou.webview.ua=<UA>} 覆盖默认值；设为空串则退回内置默认。
+ * <p>可用 {@code -Dyingshi.webview.ua=<UA>} 覆盖默认值；设为空串则退回内置默认。
  */
 public class WebSettings {
 
@@ -37,7 +37,7 @@ public class WebSettings {
 
     /** 手机 WebView 的典型 UA 形态：Linux; Android <ver>; <model> Build/<id>; wv。 */
     private static String buildDefaultUa() {
-        String override = System.getProperty("xiugou.webview.ua", "");
+        String override = System.getProperty("yingshi.webview.ua", "");
         if (!override.isEmpty()) return override;
         return "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; " + Build.MODEL
                 + " Build/" + Build.ID + "; wv) AppleWebKit/537.36 (KHTML, like Gecko) "

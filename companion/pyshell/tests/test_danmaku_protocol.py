@@ -145,7 +145,7 @@ def await_file(path, timeout=3):
 
 class DanmakuProtocolTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='xiugou-danmaku-protocol-')
+        self.temp = tempfile.TemporaryDirectory(prefix='yingshi-danmaku-protocol-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.runner = Runner(self.root)

@@ -20,7 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * SharedPreferences 的桌面实现：内存 Map + JSON 行格式文件持久化，
- * 存放于 ~/.xiugou_tv_companion/prefs/&lt;name&gt;.json，跨进程重启保留。
+ * 存放于 ~/.yingshi_tv_companion/prefs/&lt;name&gt;.json，跨进程重启保留。
  */
 class SharedPreferencesImpl implements SharedPreferences {
 

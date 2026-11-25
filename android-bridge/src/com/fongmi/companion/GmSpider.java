@@ -78,9 +78,9 @@ public final class GmSpider extends Spider {
         Map<String, Object> settings = object(config.get("webViewSettings"));
         String configuredUa = text(settings.get("userAgent"));
         if (!configuredUa.isBlank()) userAgent = configuredUa;
-        timeoutMs = Math.max(250, Math.min(120_000, Long.getLong("xiugou.gm.timeoutMs", 45_000L)));
+        timeoutMs = Math.max(250, Math.min(120_000, Long.getLong("yingshi.gm.timeoutMs", 45_000L)));
         playbackSite = GmPlayback.site(scriptUrl);
-        playbackTtlMs = Math.max(250, Math.min(3_600_000, Long.getLong("xiugou.gm.playbackTtlMs", 1_800_000L)));
+        playbackTtlMs = Math.max(250, Math.min(3_600_000, Long.getLong("yingshi.gm.playbackTtlMs", 1_800_000L)));
         beginCall();
         try {
             String source = download(scriptUrl);

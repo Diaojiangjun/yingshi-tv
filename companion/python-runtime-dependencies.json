@@ -39,7 +39,7 @@
       "installed_size_bytes": 149292,
       "installation": {
         "method": "Extract the ten pywasm/*.py package files and upstream license from the verified local sdist; generate installed dist-info without setup.py, pip, or a build backend.",
-        "metadata": "METADATA preserves upstream PKG-INFO with Requires-Dist: numpy added from the upstream requirement. Original source/PKG-INFO, source/requires.txt and top_level.txt are retained. INSTALLER identifies xiugou-local-archive, direct_url.json records the sdist URL/hash, and RECORD hashes all installed pywasm files. No WHEEL is generated because no wheel was built.",
+        "metadata": "METADATA preserves upstream PKG-INFO with Requires-Dist: numpy added from the upstream requirement. Original source/PKG-INFO, source/requires.txt and top_level.txt are retained. INSTALLER identifies yingshi-local-archive, direct_url.json records the sdist URL/hash, and RECORD hashes all installed pywasm files. No WHEEL is generated because no wheel was built.",
         "source_code_modified": false
       }
     },
@@ -126,7 +126,7 @@
     "fixture_sha256": "0df0d751d771afd195a89d125cc1eabeded0a4425f45005362f3fd7033987754",
     "optional_reference": {
       "default_path": "E:/code/tvbox_1102/live-python-20261107/live/yangshipin.py",
-      "environment_override": "XIUGOU_AUTHOR_YSP",
+      "environment_override": "YINGSHI_AUTHOR_YSP",
       "sha256": "67c66cf3f36723f41eb1e10ca0f48a11f24a69eb81c6ccf46e64aea45e75c850",
       "method": "Parse the read-only source and compile only the unchanged _Keygen class AST against the synthetic fixture. Verify token_random, signature, heap cleanup and stack restoration. Skip if absent; fail if the source hash changed. No top-level author module code runs."
     },

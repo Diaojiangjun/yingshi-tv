@@ -29,7 +29,12 @@ class BITMAPINFOHEADER(ctypes.Structure):
 
 
 def find_window(title_part):
-    got = []
+    """优先返回标题完全相同的窗口。
+
+    只按「包含」匹配会误伤：浏览器标签一旦标题里带上软件名（比如 GitHub 仓库页
+    的描述写着「影视 —— …」），截到的就是浏览器而不是应用。
+    """
+    exact, fuzzy = [], []
 
     @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
     def cb(hwnd, _):
@@ -37,12 +42,15 @@ def find_window(title_part):
         if n:
             b = ctypes.create_unicode_buffer(n + 1)
             user32.GetWindowTextW(hwnd, b, n + 1)
-            if title_part in b.value and user32.IsWindowVisible(hwnd):
-                got.append((hwnd, b.value))
+            if user32.IsWindowVisible(hwnd):
+                if b.value == title_part:
+                    exact.append((hwnd, b.value))
+                elif title_part in b.value:
+                    fuzzy.append((hwnd, b.value))
         return True
 
     user32.EnumWindows(cb, 0)
-    return got
+    return exact or fuzzy
 
 
 def force_foreground(hwnd):

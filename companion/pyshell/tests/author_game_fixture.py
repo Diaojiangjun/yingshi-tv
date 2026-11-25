@@ -73,8 +73,8 @@ def install(author_path, origin, ws_url, observations):
     spec.loader.exec_module(author)
     author.HUYA = origin
     record({"kind": "loaded", "author": str(author_path), "environment": {
-        key: os.environ.get(key) for key in ("XIUGOU_SCRIPT_API", "XIUGOU_SCRIPT_ENTRY",
-            "XIUGOU_SCRIPT_BASE", "XIUGOU_SCRIPT_SITE_KEY", "XIUGOU_SCRIPT_DANMAKU_BASE")}})
+        key: os.environ.get(key) for key in ("YINGSHI_SCRIPT_API", "YINGSHI_SCRIPT_ENTRY",
+            "YINGSHI_SCRIPT_BASE", "YINGSHI_SCRIPT_SITE_KEY", "YINGSHI_SCRIPT_DANMAKU_BASE")}})
     return author.Spider
 
 

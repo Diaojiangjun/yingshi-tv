@@ -50,7 +50,7 @@ function Assert-NoReleaseInstallConflict([object[]]$Registrations, [switch]$Allo
     })
     if ($conflicts.Count -gt 0) {
         $locations = ($conflicts | ForEach-Object { "$($_.Hive)/$($_.View)/$($_.Key): $($_.InstallLocation)" }) -join '; '
-        throw "Existing XiugouTV installation registration; refusing installer smoke and uninstall: $locations"
+        throw "Existing YingshiTV installation registration; refusing installer smoke and uninstall: $locations"
     }
 }
 

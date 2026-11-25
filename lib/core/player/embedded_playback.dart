@@ -13,7 +13,7 @@ enum NativePlaybackBackend {
 
 class EmbeddedPlaybackChannel {
   const EmbeddedPlaybackChannel({
-    this.channel = const MethodChannel('xiugou/native_playback'),
+    this.channel = const MethodChannel('yingshi/native_playback'),
   });
   final MethodChannel channel;
 

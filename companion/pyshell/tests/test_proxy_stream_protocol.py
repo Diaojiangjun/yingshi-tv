@@ -193,14 +193,14 @@ class ProxyStreamProtocolTest(unittest.TestCase):
         cls.worker.join(timeout=2)
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="xiugou-stream-protocol-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="yingshi-stream-protocol-")
         self.addCleanup(self.temporary.cleanup)
         self.runner = Runner(Path(self.temporary.name), self.origin)
         self.addCleanup(self.runner.close)
 
     def handle(self, kind="small"):
         result = self.runner.proxy(kind)
-        self.assertEqual(result["__xiugou_proxy__"], 2)
+        self.assertEqual(result["__yingshi_proxy__"], 2)
         self.assertEqual(result["status"], 206)
         self.assertNotIn("bodyBase64", result)
         self.assertIsInstance(result["streamId"], str)

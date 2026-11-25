@@ -21,8 +21,8 @@ import java.security.ProtectionDomain;
  * 注入一行 {@code HttpLogHook.install(this)}，于是**任何**通过 Builder 创建的
  * 客户端都会带上 {@link HttpLogHook} 的拦截器。
  *
- * <p>只有 {@code -Dxiugou.debug=true} 时才安装 transformer；关闭时开销为零。
- * 启动方式：{@code -javaagent:companion-service.jar -Dxiugou.debug=true -jar companion-service.jar}
+ * <p>只有 {@code -Dyingshi.debug=true} 时才安装 transformer；关闭时开销为零。
+ * 启动方式：{@code -javaagent:companion-service.jar -Dyingshi.debug=true -jar companion-service.jar}
  */
 public final class HttpLogAgent {
 

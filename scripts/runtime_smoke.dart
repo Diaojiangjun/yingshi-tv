@@ -9,8 +9,8 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:xiugou_tv/core/runtime/runtime_component.dart';
-import 'package:xiugou_tv/core/runtime/runtime_installer.dart';
+import 'package:yingshi_tv/core/runtime/runtime_component.dart';
+import 'package:yingshi_tv/core/runtime/runtime_installer.dart';
 
 Future<void> main(List<String> args) async {
   final id = args.isNotEmpty ? args.first : 'jvm';

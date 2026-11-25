@@ -51,7 +51,7 @@ final class PhpSource {
         for (var item : files.entrySet()) atomicWrite(dir.resolve(item.getKey()), item.getValue());
         try (InputStream bridge = PhpSource.class.getResourceAsStream("/php/bridge.php")) {
             if (bridge == null) throw new IOException("PHP bridge missing from companion");
-            atomicWrite(dir.resolve(".xiugou-bridge.php"), bridge.readAllBytes());
+            atomicWrite(dir.resolve(".yingshi-bridge.php"), bridge.readAllBytes());
         }
         return dir.resolve(name);
     }
@@ -65,7 +65,7 @@ final class PhpSource {
                 connection = URI.create(uri.toASCIIString()).toURL().openConnection();
                 connection.setConnectTimeout(15_000);
                 connection.setReadTimeout(20_000);
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 XiugouTV");
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 YingshiTV");
                 stream = connection.getInputStream();
             }
             try (InputStream input = stream) {

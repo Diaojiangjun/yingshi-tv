@@ -23,7 +23,7 @@ def tls_contexts():
     if source is None:
         raise unittest.SkipTest("CPython localhost TLS fixture certificate is unavailable")
     original_factory = ssl.create_default_context
-    with tempfile.TemporaryDirectory(prefix="xiugou-http-tls-") as folder:
+    with tempfile.TemporaryDirectory(prefix="yingshi-http-tls-") as folder:
         certificate = Path(folder) / "localhost.pem"
         shutil.copyfile(source, certificate)
         server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

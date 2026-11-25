@@ -34,12 +34,12 @@ class WindowsConfigStorage {
 
   /// 存储目录路径（同步计算，不触盘）。
   ///
-  /// 便携版默认是安装目录下的 `user_data`（安装目录不可写时回退 `%APPDATA%/XiugouTV`），
+  /// 便携版默认是安装目录下的 `user_data`（安装目录不可写时回退 `%APPDATA%/YingshiTV`），
   /// 若用户在设置里选择了自定义目录，则由 [DataDirectoryManager] 在启动时解析并返回。
   /// 供不便等待异步 IO 的诊断展示等场景使用。
   static String storageDirectoryPath() => DataDirectoryManager.currentPath;
 
-  /// 获取或初始化数据目录（便携版为 `<exe>/user_data`，只读安装目录回退 `%APPDATA%/XiugouTV`）
+  /// 获取或初始化数据目录（便携版为 `<exe>/user_data`，只读安装目录回退 `%APPDATA%/YingshiTV`）
   Future<Directory> getStorageDirectory() async {
     if (_baseDir != null) return _baseDir!;
 

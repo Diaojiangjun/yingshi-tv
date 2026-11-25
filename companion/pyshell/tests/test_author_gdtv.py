@@ -49,10 +49,10 @@ class _GdHandler(BaseHTTPRequestHandler):
 class AuthorGdtvTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        source = Path(os.environ.get("XIUGOU_AUTHOR_GDTV") or DEFAULT_AUTHOR)
+        source = Path(os.environ.get("YINGSHI_AUTHOR_GDTV") or DEFAULT_AUTHOR)
         if not source.is_file():
-            raise unittest.SkipTest("author GD source missing; set XIUGOU_AUTHOR_GDTV")
-        spec = importlib.util.spec_from_file_location("xiugou_author_gdtv_fixture", source)
+            raise unittest.SkipTest("author GD source missing; set YINGSHI_AUTHOR_GDTV")
+        spec = importlib.util.spec_from_file_location("yingshi_author_gdtv_fixture", source)
         cls.author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.author)
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), _GdHandler)
@@ -83,9 +83,9 @@ class AuthorGdtvTest(unittest.TestCase):
         endpoints.start()
         self.addCleanup(endpoints.stop)
         environment = patch.dict(os.environ, {
-            "XIUGOU_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=gd%2Bfixture",
-            "XIUGOU_SCRIPT_SITE_KEY": "author-gdtv",
-            "XIUGOU_CACHE_DIR": "",
+            "YINGSHI_SCRIPT_PROXY_BASE": self.origin + "/script-proxy?token=gd%2Bfixture",
+            "YINGSHI_SCRIPT_SITE_KEY": "author-gdtv",
+            "YINGSHI_CACHE_DIR": "",
             "NO_PROXY": "127.0.0.1,localhost",
         })
         environment.start()

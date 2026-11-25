@@ -16,8 +16,8 @@ class ScriptCache(dict):
         self._lock = threading.RLock()
         self._reported = set()
         self._path = None
-        directory = os.environ.get("XIUGOU_CACHE_DIR", "")
-        identity = os.environ.get("XIUGOU_SCRIPT_ID", "")
+        directory = os.environ.get("YINGSHI_CACHE_DIR", "")
+        identity = os.environ.get("YINGSHI_SCRIPT_ID", "")
         if not directory or not identity:
             return
         try:

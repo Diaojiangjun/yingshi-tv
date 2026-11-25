@@ -1,5 +1,5 @@
 {
-  "name": "xiugou-segments-worker",
+  "name": "yingshi-segments-worker",
   "private": true,
   "type": "module",
   "description": "影视 共享跳过片段服务（Cloudflare Worker + D1），见 README.md",
@@ -7,7 +7,7 @@
     "test": "node --test test/worker.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute xiugou-segments --remote --file=schema.sql"
+    "db:init": "wrangler d1 execute yingshi-segments --remote --file=schema.sql"
   },
   "devDependencies": {
     "wrangler": "^4"

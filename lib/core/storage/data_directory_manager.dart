@@ -21,7 +21,7 @@ class DataDirectoryStatus {
   final String activePath;
 
   /// 默认目录：便携版是安装目录下的 `user_data`；安装目录不可写、或沿用了旧版数据时
-  /// 是 `%APPDATA%/XiugouTV`。
+  /// 是 `%APPDATA%/YingshiTV`。
   final String defaultPath;
 
   /// 指针文件里记录的自定义目录（即使当前不可用也保留，便于展示与修复）。
@@ -39,7 +39,7 @@ class DataDirectoryStatus {
   bool get usesCustom =>
       customPath != null && _samePath(activePath, customPath!);
 
-  /// 当前用的就是旧版 `%APPDATA%/XiugouTV`（没有自定义目录）。
+  /// 当前用的就是旧版 `%APPDATA%/YingshiTV`（没有自定义目录）。
   ///
   /// 两种来源：安装目录不可写而回退（[unavailableReason] 会说明），
   /// 或旧版本已有数据、第一次用新版本时沿用旧目录。设置页据此提示可迁移到安装目录。
@@ -103,8 +103,8 @@ class DataDirectoryException implements Exception {
 ///
 /// 设计要点：
 /// - 默认目录是**安装目录下的 `user_data`**（便携 ZIP 解压即用）；安装目录不可写
-///   （Program Files / 只读介质）时回退 `%APPDATA%/XiugouTV` 并给出中文原因；
-/// - 旧版本的数据可从 `%APPDATA%/XiugouTV` 复制到可写的 `user_data`；
+///   （Program Files / 只读介质）时回退 `%APPDATA%/YingshiTV` 并给出中文原因；
+/// - 旧版本的数据可从 `%APPDATA%/YingshiTV` 复制到可写的 `user_data`；
 ///   迁移成功后切换，不删除旧资料；自定义目录或待重置的数据不自动搬家；
 /// - 自定义目录优先于默认目录，指针与 pending 标记都放在**默认目录**，因此自定义
 ///   目录换了位置也能找回；
@@ -127,10 +127,17 @@ class DataDirectoryManager {
 
   /// 便携数据目录名（安装目录下）。
   static const String portableDirectoryName = 'user_data';
-  static const String companionDirectoryName = '.xiugou_tv_companion';
+  static const String companionDirectoryName = '.yingshi_tv_companion';
 
   /// 旧版本默认目录名（`%APPDATA%` 下）。
-  static const String legacyDirectoryName = 'XiugouTV';
+  static const String legacyDirectoryName = 'YingshiTV';
+
+  /// 改名前的目录名。**只用于把老数据搬到新目录**，不参与任何展示或新写入；
+  /// 保留它是因为「换名」不该让用户的配置源、播放历史、已下载的运行时凭空消失。
+  static const String preRenameDirectoryName = 'XiugouTV';
+
+  /// 改名前的站源目录名（数据目录内，旧版叫 `.xiugou_tv_companion`）。
+  static const String _preRenameCompanionDirectoryName = '.xiugou_tv_companion';
 
   /// 迁移范围：注册表里的数据文件 + 跟随根目录的子目录（不含 runtime）。
   ///
@@ -144,7 +151,7 @@ class DataDirectoryManager {
     companionDirectoryName,
   ];
 
-  static const String markerFormat = 'xiugou-tv-data-location';
+  static const String markerFormat = 'yingshi-tv-data-location';
   static const int markerVersion = 1;
 
   static String? _activePath;
@@ -160,14 +167,64 @@ class DataDirectoryManager {
   /// 测试注入的安装目录（默认取 exe 所在目录）。
   static String? _installDirectoryOverride;
 
-  /// 旧版本默认目录：`%APPDATA%/XiugouTV`（缺失环境变量时 `%USERPROFILE%/.XiugouTV`）。
+  /// 旧版本默认目录：`%APPDATA%/YingshiTV`（缺失环境变量时 `%USERPROFILE%/.YingshiTV`）。
+  ///
+  /// 改名前的 `%APPDATA%/XiugouTV` 若还没搬过来（搬失败、被占用），继续指回它：
+  /// 宁可用旧目录名，也不能让用户看到「配置和历史都没了」。
   static String legacyDirectoryPath() {
     final appData = Platform.environment['APPDATA'];
     if (appData != null && appData.isNotEmpty) {
-      return p.join(appData, legacyDirectoryName);
+      final target = p.join(appData, legacyDirectoryName);
+      final old = p.join(appData, preRenameDirectoryName);
+      if (!Directory(target).existsSync() && Directory(old).existsSync()) {
+        return old;
+      }
+      return target;
     }
     final userProfile = Platform.environment['USERPROFILE'] ?? '.';
-    return p.join(userProfile, '.$legacyDirectoryName');
+    final target = p.join(userProfile, '.$legacyDirectoryName');
+    final old = p.join(userProfile, '.$preRenameDirectoryName');
+    if (!Directory(target).existsSync() && Directory(old).existsSync()) {
+      return old;
+    }
+    return target;
+  }
+
+  /// 把改名前的数据目录整体搬到新名字下（原子 rename，不复制）。
+  ///
+  /// 只在「新目录不存在、旧目录存在」时动手；`runtime/` 里可能是几百 MB 的
+  /// JRE / Node / PHP，递归复制要几分钟，rename 是瞬时的。失败就原样保留，
+  /// [legacyDirectoryPath] 会继续使用旧目录。
+  static void _migratePreRenameDirectory() {
+    final appData = Platform.environment['APPDATA'];
+    final root = (appData != null && appData.isNotEmpty)
+        ? appData
+        : (Platform.environment['USERPROFILE'] ?? '.');
+    final old = p.join(root, preRenameDirectoryName);
+    final target = p.join(root, legacyDirectoryName);
+    if (!Directory(old).existsSync()) return;
+    if (Directory(target).existsSync()) return;
+    try {
+      Directory(old).renameSync(target);
+    } catch (_) {
+      // 被占用 / 权限不足：保持旧目录不动，交给 legacyDirectoryPath 兜底。
+      return;
+    }
+    _renameCompanionDirectory(target);
+  }
+
+  /// 数据目录内的站源目录跟着改名；旧名字留着只会让已导入的站源重新下载一遍。
+  static void _renameCompanionDirectory(String root) {
+    if (root.isEmpty) return;
+    final old = Directory(p.join(root, _preRenameCompanionDirectoryName));
+    if (!old.existsSync()) return;
+    final target = Directory(p.join(root, companionDirectoryName));
+    if (target.existsSync()) return;
+    try {
+      old.renameSync(target.path);
+    } catch (_) {
+      // 缓存目录，搬不动就重新生成，不值得打断启动。
+    }
   }
 
   /// 便携数据目录：安装目录（exe 所在目录）下的 `user_data`。
@@ -177,7 +234,7 @@ class DataDirectoryManager {
   /// 默认目录：启动时解析的结果；未初始化时返回旧版目录（不探测磁盘，避免副作用）。
   ///
   /// 解析顺序见 [_resolveDefaultDirectory]：安装目录可写 → `user_data`；
-  /// 安装目录不可写 → 回退 `%APPDATA%/XiugouTV`；旧版 APPDATA 已有数据 → 沿用旧目录。
+  /// 安装目录不可写 → 回退 `%APPDATA%/YingshiTV`；旧版 APPDATA 已有数据 → 沿用旧目录。
   static String defaultDirectoryPath() =>
       _resolvedDefaultPath ?? legacyDirectoryPath();
 
@@ -225,6 +282,12 @@ class DataDirectoryManager {
   }) async {
     if (installDirectory != null && installDirectory.trim().isNotEmpty) {
       _installDirectoryOverride = p.normalize(p.absolute(installDirectory));
+    }
+    // 真实启动（不带任何测试注入）时先把改名前的 `%APPDATA%/XiugouTV` 搬过来，
+    // 之后所有解析都只看新名字。便携目录里的站源目录同样处理。
+    if (defaultDirectory == null && legacyDirectory == null) {
+      _migratePreRenameDirectory();
+      _renameCompanionDirectory(portableDirectoryPath());
     }
     final resolution = defaultDirectory == null
         ? await _resolveDefaultDirectory(legacyDirectory: legacyDirectory)
@@ -303,7 +366,7 @@ class DataDirectoryManager {
       }
     }
 
-    // 便携搬迁：升级用户的数据还留在旧版 %APPDATA%/XiugouTV 时，自动搬一次到
+    // 便携搬迁：升级用户的数据还留在旧版 %APPDATA%/YingshiTV 时，自动搬一次到
     // 安装目录下的 user_data —— 这就是「数据跟着安装目录走」的实现路径。
     // 仍然只复制不删除、逐文件 sha256 校验，成功后才切换；失败保留旧目录，
     // 记下原因，之后不再自动重试（设置页还能手动迁移）。
@@ -360,7 +423,7 @@ class DataDirectoryManager {
   ///
   /// 顺序：
   /// 1. `user_data` 里已有数据（便携版用户）→ 校验可写后用便携目录；
-  /// 2. 否则旧版 `%APPDATA%/XiugouTV` 有数据 → 先把旧目录当作默认目录，再由
+  /// 2. 否则旧版 `%APPDATA%/YingshiTV` 有数据 → 先把旧目录当作默认目录，再由
   ///    [initialize] 的「便携搬迁」把它一次性搬到安装目录下的 `user_data`；
   /// 3. 全新安装 → 探测安装目录可写，可写用 `user_data`，否则回退 APPDATA 并
   ///    记录中文原因。
@@ -663,7 +726,7 @@ class DataDirectoryManager {
 
   static Future<bool> _isWritable(String directory) async {
     final probe = File(p.join(
-        directory, '.xiugou-tv-write-test-$pid-${DateTime.now().microsecondsSinceEpoch}'));
+        directory, '.yingshi-tv-write-test-$pid-${DateTime.now().microsecondsSinceEpoch}'));
     try {
       await probe.writeAsString('probe', flush: true);
       await probe.delete();

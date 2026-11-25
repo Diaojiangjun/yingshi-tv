@@ -105,7 +105,7 @@ public class DexSpiderLoader {
 
     public DexSpiderLoader() {
         String userHome = System.getProperty("user.home", ".");
-        this.cacheDir = new File(new File(userHome, ".xiugou_tv_companion"), "jars");
+        this.cacheDir = new File(new File(userHome, ".yingshi_tv_companion"), "jars");
         if (!cacheDir.exists()) {
             cacheDir.mkdirs();
         }
@@ -863,8 +863,8 @@ public class DexSpiderLoader {
      * NoClassDefFoundError（Error 不被 catch(Exception) 捕获），比空串更糟。
      */
     private void enableGuardHideUtils(ClassLoader loader) {
-        // 诊断/回滚开关：-Dxiugou.guard.hideutils=off 时保留旧的反射兜底路径。
-        if ("off".equalsIgnoreCase(System.getProperty("xiugou.guard.hideutils"))) {
+        // 诊断/回滚开关：-Dyingshi.guard.hideutils=off 时保留旧的反射兜底路径。
+        if ("off".equalsIgnoreCase(System.getProperty("yingshi.guard.hideutils"))) {
             return;
         }
         final String hideUtils = "com.github.catvod.spider.HideUtils";

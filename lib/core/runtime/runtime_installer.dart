@@ -42,7 +42,7 @@ class RuntimeStatus {
 
   final RuntimeComponent component;
 
-  /// 下载安装目录（`%APPDATA%/XiugouTV/runtime/<dirName>`），未安装为 null。
+  /// 下载安装目录（`%APPDATA%/YingshiTV/runtime/<dirName>`），未安装为 null。
   final String? installedPath;
 
   /// 随安装包提供的目录（开发机 `runtime/jre`、正式包内置时也可能存在）。
@@ -119,7 +119,7 @@ class RuntimeInstaller {
   /// 外部运行时探测结果缓存，按组件 id 存。
   final Map<String, Future<ExternalRuntime?>> _externalRuntimeProbes = {};
 
-  /// 安装根目录：`%APPDATA%/XiugouTV/runtime`。
+  /// 安装根目录：`%APPDATA%/YingshiTV/runtime`。
   ///
   /// 必须与 `CompanionProcessManager.javaCandidates` 的 AppData 候选项一致，
   /// 否则装完仍然找不到 java.exe。
@@ -128,10 +128,10 @@ class RuntimeInstaller {
     if (override != null && override.isNotEmpty) return Directory(override);
     final appData = Platform.environment['APPDATA'];
     if (Platform.isWindows && appData != null && appData.isNotEmpty) {
-      return Directory(p.join(appData, 'XiugouTV', 'runtime'));
+      return Directory(p.join(appData, 'YingshiTV', 'runtime'));
     }
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-    return Directory(p.join(home ?? '.', '.local', 'share', 'XiugouTV', 'runtime'));
+    return Directory(p.join(home ?? '.', '.local', 'share', 'YingshiTV', 'runtime'));
   }
 
   /// 随包运行时可能出现的位置：可执行文件目录与开发期工作目录。
@@ -550,7 +550,7 @@ class RuntimeInstaller {
         final request = await client
             .getUrl(Uri.parse(url))
             .timeout(const Duration(seconds: 8));
-        request.headers.set(HttpHeaders.userAgentHeader, 'XiugouTV-Runtime/1.0');
+        request.headers.set(HttpHeaders.userAgentHeader, 'YingshiTV-Runtime/1.0');
         final response = await request.close().timeout(const Duration(seconds: 10));
         if (response.statusCode != HttpStatus.ok) {
           await response.drain<void>();
@@ -587,7 +587,7 @@ class RuntimeInstaller {
     IOSink? sink;
     try {
       final request = await client.getUrl(Uri.parse(url));
-      request.headers.set(HttpHeaders.userAgentHeader, 'XiugouTV-Runtime/1.0');
+      request.headers.set(HttpHeaders.userAgentHeader, 'YingshiTV-Runtime/1.0');
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();

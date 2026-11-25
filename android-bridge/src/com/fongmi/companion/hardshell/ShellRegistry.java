@@ -115,7 +115,7 @@ public final class ShellRegistry {
 
     /** 运行期 profile 目录：系统属性优先，其次 jars 缓存下的 hardshell/。 */
     public static File profilesDir(File cacheDir) {
-        String override = System.getProperty("xiugou.hardshell.profiles");
+        String override = System.getProperty("yingshi.hardshell.profiles");
         if (!JarIndex.isEmpty(override)) return new File(override.trim());
         return cacheDir == null ? null : new File(cacheDir, "hardshell");
     }

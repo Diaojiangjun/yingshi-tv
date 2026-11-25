@@ -44,17 +44,17 @@ class CompanionProcessManager implements CompanionRecoveryHost {
   ];
 
   /// 调试开关：
-  /// - 编译期：`flutter run --dart-define=XIUGOU_DEBUG=true`
-  /// - 运行期：启动前设置环境变量 `XIUGOU_DEBUG=1`（已打包的 exe 也能用）
+  /// - 编译期：`flutter run --dart-define=YINGSHI_DEBUG=true`
+  /// - 运行期：启动前设置环境变量 `YINGSHI_DEBUG=1`（已打包的 exe 也能用）
   ///
   /// 打开后 companion 会输出 [DBG] 明细（RPC 参数、HTTP 请求/响应），
   /// 并且把 companion 的 stdout/stderr 转发到 Flutter 控制台。
   static const bool _debugFromDefine =
-      bool.fromEnvironment('XIUGOU_DEBUG', defaultValue: false);
+      bool.fromEnvironment('YINGSHI_DEBUG', defaultValue: false);
 
   static bool get debugCompanion =>
       _debugFromDefine ||
-      (Platform.environment['XIUGOU_DEBUG'] ?? '') == '1';
+      (Platform.environment['YINGSHI_DEBUG'] ?? '') == '1';
 
   /// 独立生命周期的实例；默认构造仍共享应用级实例。
   /// applicationDirectory 默认取应用可执行文件目录，测试可注入隔离安装布局。
@@ -203,7 +203,7 @@ class CompanionProcessManager implements CompanionRecoveryHost {
       p.join(workingDirectory, 'jre/bin/$javaExe'),
       p.join(workingDirectory, 'companion/runtime/jre/bin/$javaExe'),
       if (appData != null && appData.isNotEmpty)
-        p.join(appData, 'XiugouTV/runtime/jre/bin/$javaExe'),
+        p.join(appData, 'YingshiTV/runtime/jre/bin/$javaExe'),
       if (javaHome != null && javaHome.isNotEmpty)
         p.join(javaHome, 'bin/$javaExe'),
     ];
@@ -246,7 +246,7 @@ class CompanionProcessManager implements CompanionRecoveryHost {
   /// 优先级:
   /// 1. 可执行文件目录: runtime/jre、jre、data/jre
   /// 2. 工作目录的开发回退: runtime/jre、jre、companion/runtime/jre
-  /// 3. AppData 持久化目录: %APPDATA%/XiugouTV/runtime/jre/bin/java.exe
+  /// 3. AppData 持久化目录: %APPDATA%/YingshiTV/runtime/jre/bin/java.exe
   /// 4. 环境变量: JAVA_HOME/bin/java.exe
   /// 5. 系统 PATH: java
   /// 所有候选都要过 [minimumJavaMajorVersion] 版本闸门。
@@ -286,7 +286,7 @@ class CompanionProcessManager implements CompanionRecoveryHost {
   /// 已安装运行时的 `-D` 覆盖参数。
   ///
   /// Java 侧默认只认 jar 同级的 `dist/pyruntime`、`dist/noderuntime`、
-  /// `dist/phpruntime`；按需下载把它们放到了 `%APPDATA%/XiugouTV/runtime/`，
+  /// `dist/phpruntime`；按需下载把它们放到了 `%APPDATA%/YingshiTV/runtime/`，
   /// 所以必须在启动时显式告诉它去哪找，否则下载了也等于没装。
   Future<List<String>> _runtimeSystemProperties() async {
     final args = <String>[];
@@ -407,7 +407,7 @@ class CompanionProcessManager implements CompanionRecoveryHost {
         if (privateTemp != null) '-Djava.io.tmpdir=$privateTemp',
         // 原生崩溃（hs_err）与 JVM 致命错误落到用户数据目录，便于用户直接回传。
         '-XX:ErrorFile=${_hsErrorFile()}',
-        if (debugCompanion) '-Dxiugou.debug=true',
+        if (debugCompanion) '-Dyingshi.debug=true',
         // 只改控制台输出编码，不动 file.encoding：后者会影响载荷里 new String(bytes) 的语义。
         if (debugCompanion) '-Dsun.stdout.encoding=UTF-8',
         if (debugCompanion) '-Dsun.stderr.encoding=UTF-8',
@@ -709,7 +709,7 @@ class CompanionProcessManager implements CompanionRecoveryHost {
       p.join(_applicationDirectory, 'companion/dist/companion-service.jar'),
       p.join(workingDirectory, 'companion/dist/companion-service.jar'),
       p.join(
-          workingDirectory, 'xiugou-tv/companion/dist/companion-service.jar'),
+          workingDirectory, 'yingshi-tv/companion/dist/companion-service.jar'),
       p.join(workingDirectory, '../companion/dist/companion-service.jar'),
     ];
     for (final c in candidates) {

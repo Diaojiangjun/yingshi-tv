@@ -51,7 +51,7 @@ public final class XptvHost {
     private static final ScriptHttpTransport NO_FOLLOW =
             new ScriptHttpTransport(HttpClient.Redirect.NEVER, null);
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final boolean DEBUG = Boolean.getBoolean("xiugou.xptv.debug");
+    private static final boolean DEBUG = Boolean.getBoolean("yingshi.xptv.debug");
     private static final Pattern DATA_CONTAINS = Pattern.compile("((?:^|[\\s,>+~(])(?:script|style)[^\\s,>+~]*?):contains\\(");
 
     private final String tag;

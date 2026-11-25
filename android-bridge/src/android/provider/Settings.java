@@ -26,7 +26,7 @@ public class Settings {
             String seed = java.lang.System.getProperty("user.name", "")
                     + '|' + java.lang.System.getProperty("os.name", "")
                     + '|' + java.lang.System.getProperty("os.version", "")
-                    + "|xiugou-tv-companion";
+                    + "|yingshi-tv-companion";
             byte[] d = MessageDigest.getInstance("MD5")
                     .digest(seed.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder(16);
@@ -48,7 +48,7 @@ public class Settings {
                     return ANDROID_ID;
                 case "bluetooth_name":
                 case "device_name":
-                    return "xiugou-desktop";
+                    return "yingshi-desktop";
                 case "default_input_method":
                     return "com.android.inputmethod.latin/.LatinIME";
                 default:
@@ -71,7 +71,7 @@ public class Settings {
             if (name == null) return null;
             switch (name) {
                 case "device_name":
-                    return "xiugou-desktop";
+                    return "yingshi-desktop";
                 case "advertising_id":
                 case "oaid":
                     // 平台还没给广告标识时，载荷会退回 android_id；这里给一个稳定值免得为 null

@@ -31,7 +31,8 @@ class RECT(ctypes.Structure):
 
 
 def focus_app():
-    found = []
+    """优先取标题完全相同的窗口：浏览器标签里带上软件名时不该被误聚焦。"""
+    exact, fuzzy = [], []
 
     EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
@@ -42,11 +43,14 @@ def focus_app():
         if n:
             buf = ctypes.create_unicode_buffer(n + 1)
             u.GetWindowTextW(h, buf, n + 1)
-            if TITLE in buf.value:
-                found.append(h)
+            if buf.value == TITLE:
+                exact.append(h)
+            elif TITLE in buf.value:
+                fuzzy.append(h)
         return True
 
     u.EnumWindows(EnumProc(cb), 0)
+    found = exact or fuzzy
     if not found:
         raise SystemExit("no window")
     hwnd = found[0]

@@ -108,7 +108,7 @@ class Spider(object):
 
     def __init__(self):
         self._cache = ScriptCache()
-        self._proxy_base = _ProxyUrl(os.environ.get("XIUGOU_PROXY_BASE", ""))
+        self._proxy_base = _ProxyUrl(os.environ.get("YINGSHI_PROXY_BASE", ""))
 
     def init(self, extend=""):
         """脚本常写 `super().init(extend)` 或在自己的 __init__ 里调它，基类必须有。"""
@@ -185,8 +185,8 @@ class Spider(object):
                 not isinstance(key, str) or not isinstance(value, str)
                 for key, value in params.items()):
             raise TypeError("proxy params must be a dict of strings")
-        base = os.environ.get("XIUGOU_SCRIPT_PROXY_BASE", "")
-        site_key = os.environ.get("XIUGOU_SCRIPT_SITE_KEY", "")
+        base = os.environ.get("YINGSHI_SCRIPT_PROXY_BASE", "")
+        site_key = os.environ.get("YINGSHI_SCRIPT_SITE_KEY", "")
         if not base or not site_key.strip():
             raise RuntimeError("script proxy is not configured")
         try:
@@ -214,8 +214,8 @@ class Spider(object):
             raise TypeError("danmaku id must be a room string")
         if not id.strip() or len(id) > 4096 or any(ord(char) < 32 or ord(char) == 127 for char in id):
             raise ValueError("danmaku id is invalid")
-        base = os.environ.get("XIUGOU_SCRIPT_DANMAKU_BASE", "")
-        site_key = os.environ.get("XIUGOU_SCRIPT_SITE_KEY", "")
+        base = os.environ.get("YINGSHI_SCRIPT_DANMAKU_BASE", "")
+        site_key = os.environ.get("YINGSHI_SCRIPT_SITE_KEY", "")
         if not base or not site_key.strip():
             raise RuntimeError("script danmaku is not configured")
         try:

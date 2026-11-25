@@ -20,7 +20,7 @@ final class ScriptDanmakuRegistry implements AutoCloseable {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private final Map<PySpider, Entry> current = new IdentityHashMap<>();
     private final long leaseNanos = TimeUnit.MILLISECONDS.toNanos(Math.max(100L,
-            Math.min(60_000L, Long.getLong("xiugou.py.danmakuLeaseMs", 60_000L))));
+            Math.min(60_000L, Long.getLong("yingshi.py.danmakuLeaseMs", 60_000L))));
     private final ScheduledExecutorService expiry = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "script-danmaku-lease");
         thread.setDaemon(true);

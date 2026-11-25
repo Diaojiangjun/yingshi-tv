@@ -26,9 +26,9 @@ public final class NativeCache {
     private NativeCache() {
     }
 
-    /** 缓存根目录：{@code <用户目录>/.xiugou_tv_companion/native}（父子进程同一用户，天然共享）。 */
+    /** 缓存根目录：{@code <用户目录>/.yingshi_tv_companion/native}（父子进程同一用户，天然共享）。 */
     public static File root() {
-        return new File(new File(System.getProperty("user.home", "."), ".xiugou_tv_companion"), "native");
+        return new File(new File(System.getProperty("user.home", "."), ".yingshi_tv_companion"), "native");
     }
 
     /**

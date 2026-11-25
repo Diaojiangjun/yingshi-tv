@@ -5,13 +5,13 @@ import 'package:flutter/foundation.dart';
 /// 构建信息（设置 → 关于：「Build Time」「Commit Hash」）。
 ///
 /// - 打包：`scripts/build_windows.ps1` 用 `--dart-define` 注入
-///   `XIUGOU_BUILD_TIME`（本地时间 `yyyy-MM-dd HH:mm:ss`）与 `XIUGOU_COMMIT`（短哈希，工作区有改动时带 `-dirty`）；
+///   `YINGSHI_BUILD_TIME`（本地时间 `yyyy-MM-dd HH:mm:ss`）与 `YINGSHI_COMMIT`（短哈希，工作区有改动时带 `-dirty`）；
 /// - 开发态（debug / profile，且不是 `flutter test`）编译期没注入时，现场读 `git` 补上，
 ///   时间显示为「开发版本」，不冒充某次构建；
 /// - 都拿不到时显示「未知」。
 abstract final class BuildInfo {
-  static const String _compiledTime = String.fromEnvironment('XIUGOU_BUILD_TIME');
-  static const String _compiledCommit = String.fromEnvironment('XIUGOU_COMMIT');
+  static const String _compiledTime = String.fromEnvironment('YINGSHI_BUILD_TIME');
+  static const String _compiledCommit = String.fromEnvironment('YINGSHI_COMMIT');
 
   static String? _devCommit;
   static bool _devResolved = false;

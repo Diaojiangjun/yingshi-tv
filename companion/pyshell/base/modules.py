@@ -132,15 +132,15 @@ class RuntimeModules:
     """No global module aliases or shared source-file cache are created."""
 
     def __init__(self):
-        site = os.environ.get("XIUGOU_SCRIPT_SITE_KEY", "")
+        site = os.environ.get("YINGSHI_SCRIPT_SITE_KEY", "")
         if not site.strip():
             raise RuntimeError("module site is not configured")
-        effective_entry = os.environ.get("XIUGOU_SCRIPT_ENTRY")
+        effective_entry = os.environ.get("YINGSHI_SCRIPT_ENTRY")
         self._entry = (_source(effective_entry) if effective_entry is not None else
-                       _entry(os.environ.get("XIUGOU_SCRIPT_API", ""),
-                              os.environ.get("XIUGOU_SCRIPT_BASE", "")))
+                       _entry(os.environ.get("YINGSHI_SCRIPT_API", ""),
+                              os.environ.get("YINGSHI_SCRIPT_BASE", "")))
         identity = hashlib.sha256((site + "\0" + self._entry).encode("utf-8")).hexdigest()[:24]
-        self._namespace = "_xiugou_modules_" + identity + "_" + uuid.uuid4().hex
+        self._namespace = "_yingshi_modules_" + identity + "_" + uuid.uuid4().hex
         self._package = ModuleType(self._namespace)
         self._declared = None
         self._modules = {}

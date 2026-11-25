@@ -99,10 +99,10 @@ class _EndpointNet:
 class AuthorGameDanmakuTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        source = Path(os.environ.get("XIUGOU_AUTHOR_GAME_PROTOCOL") or DEFAULT_AUTHOR)
+        source = Path(os.environ.get("YINGSHI_AUTHOR_GAME_PROTOCOL") or DEFAULT_AUTHOR)
         if not source.is_file():
-            raise unittest.SkipTest("author game protocol missing; set XIUGOU_AUTHOR_GAME_PROTOCOL")
-        spec = importlib.util.spec_from_file_location("xiugou_author_game_protocol_fixture", source)
+            raise unittest.SkipTest("author game protocol missing; set YINGSHI_AUTHOR_GAME_PROTOCOL")
+        spec = importlib.util.spec_from_file_location("yingshi_author_game_protocol_fixture", source)
         cls.author = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.author)
 

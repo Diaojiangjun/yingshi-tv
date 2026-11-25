@@ -1136,7 +1136,7 @@ class MpvPlayerEngine
     late final File file;
     try {
       final temp = await getTemporaryDirectory();
-      final dir = Directory(p.join(temp.path, 'xiugou_subtitles'));
+      final dir = Directory(p.join(temp.path, 'yingshi_subtitles'));
       if (!await dir.exists()) await dir.create(recursive: true);
       _pruneSubtitleCache(dir);
       file = File(p.join(dir.path,
