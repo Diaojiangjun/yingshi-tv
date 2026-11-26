@@ -92,7 +92,7 @@ class WebDavEntry {
   });
 }
 
-/// 只读 WebDAV 浏览；不自动跟随重定向，也不对根目录外的 href 发请求。
+/// 只读 WebDAV 浏览与媒体直链解析；不自动跟随重定向，也不对根目录外的 href 发请求。
 class WebDavRepository {
   final Dio _dio;
   final bool _ownsDio;
@@ -153,6 +153,73 @@ class WebDavRepository {
     }
   }
 
+  /// 起播前解析媒体直链。
+  ///
+  /// alist 等 WebDAV 服务常把媒体 302 到对象存储的签名地址，而 mpv 会把
+  /// `Authorization` 一起带到跳转目标；对象存储不认 WebDAV 凭据，会直接
+  /// 回 400 Bad Request（实测同一签名地址：带 Authorization=400，不带=206）。
+  /// 这里先替播放器完成跳转，跨主机时改用签名地址并丢掉凭据。
+  /// 预解析失败（弱网 / 超时）时退回原地址，不让这一步挡住播放。
+  Future<MediaPlaySpec> resolvePlaySpec(
+    WebDavConnection connection,
+    WebDavEntry entry,
+  ) async {
+    final spec = connection.playSpec(entry);
+    if (_disposed) throw StateError('WebDAV 连接已关闭');
+    late final Response<ResponseBody> response;
+    try {
+      response = await _withTransientRetry(() => _dio.requestUri<ResponseBody>(
+            entry.uri,
+            options: Options(
+              method: 'HEAD',
+              headers: connection.headers,
+              responseType: ResponseType.stream,
+              followRedirects: false,
+              validateStatus: (_) => true,
+            ),
+          ));
+    } on DioException catch (error, stack) {
+      // 直链解析只是优化：网络抖动时按原地址播放，不新增失败路径。
+      ErrorLog.instance.record(
+        'WebDAV',
+        '取媒体直链失败，改用原地址：${_describeDioFailure(error)}',
+        stack,
+      );
+      return spec;
+    }
+    await _discardBody(response);
+    final status = response.statusCode ?? 0;
+    if (status == 401 || status == 403) {
+      throw const FormatException('WebDAV 认证失败或无访问权限，请检查用户名和密码');
+    }
+    if (status >= 300 && status < 400) {
+      final location = response.headers.value('location')?.trim() ?? '';
+      if (location.isEmpty) {
+        throw const FormatException('WebDAV 服务返回重定向但没有目标地址');
+      }
+      final locationUri = Uri.tryParse(location);
+      if (locationUri == null) return spec;
+      final redirect = entry.uri.resolveUri(locationUri);
+      // 只有跨主机的安全 http(s) 目标才需要去掉凭据；
+      // 同源跳转（含 alist 自己的路径）继续用原地址，避免签名地址提前过期。
+      if (_isSafeRedirectTarget(redirect) &&
+          !_sameOrigin(entry.uri, redirect)) {
+        return MediaPlaySpec.vod(url: redirect.toString(), title: spec.title);
+      }
+      return spec;
+    }
+    if (status >= 400) {
+      throw FormatException('WebDAV 取媒体地址失败：HTTP $status');
+    }
+    return spec;
+  }
+
+  Future<void> _discardBody(Response<ResponseBody> response) async {
+    final body = response.data;
+    if (body == null) return;
+    await body.stream.listen((_) {}).cancel();
+  }
+
   /// PROPFIND 是只读请求：连接层失败（超时 / 被对端重置）重试一次，
   /// 弱网与 Cloudflare 边缘偶发重置时用户就不用自己再点一遍。
   Future<Response<ResponseBody>> _propfindWithRetry(
@@ -177,7 +244,10 @@ class WebDavRepository {
             validateStatus: (_) => true,
           ),
         );
+    return _withTransientRetry(send);
+  }
 
+  Future<T> _withTransientRetry<T>(Future<T> Function() send) async {
     try {
       return await send();
     } on DioException catch (error) {
@@ -265,6 +335,17 @@ class WebDavRepository {
     if (_ownsDio) _dio.close(force: true);
   }
 }
+
+bool _isSafeRedirectTarget(Uri uri) =>
+    const {'http', 'https'}.contains(uri.scheme) &&
+    uri.host.isNotEmpty &&
+    uri.userInfo.isEmpty &&
+    _safePath(uri);
+
+bool _sameOrigin(Uri left, Uri right) =>
+    left.scheme == right.scheme &&
+    left.host == right.host &&
+    left.port == right.port;
 
 /// 连接层偶发失败（握手 / DNS / 被重置），值得原样重试一次。
 bool _isTransientFailure(DioException error) {

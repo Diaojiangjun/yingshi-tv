@@ -222,17 +222,25 @@ class _WebDavBrowserDialogState extends State<WebDavBrowserDialog> {
     }
   }
 
-  void _select(WebDavEntry entry) {
+  Future<void> _select(WebDavEntry entry) async {
     final connection = _connection;
-    if (_busy || connection == null) return;
+    if (_busy || _closing || connection == null) return;
     if (entry.isDirectory) {
-      _load(connection, [..._trail, entry.uri]);
-    } else {
-      try {
-        Navigator.of(context).pop<MediaPlaySpec>(connection.playSpec(entry));
-      } catch (error) {
+      await _load(connection, [..._trail, entry.uri]);
+      return;
+    }
+    final generation = _generation;
+    setState(() => _busy = true);
+    try {
+      final spec = await _repository.resolvePlaySpec(connection, entry);
+      if (!mounted || _closing || generation != _generation) return;
+      Navigator.of(context).pop<MediaPlaySpec>(spec);
+    } catch (error) {
+      if (mounted && !_closing && generation == _generation) {
         setState(() => _error = pushErrorMessage(error));
       }
+    } finally {
+      if (mounted && generation == _generation) setState(() => _busy = false);
     }
   }
 
