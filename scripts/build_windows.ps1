@@ -29,6 +29,9 @@
     指向 APPDATA 里的安装位置。打开后要求 companion/dist 下三者齐备。
 .PARAMETER BuildConfigFile
     客户端编译配置路径。测试包和正式包同样要求 TMDB、弹幕和共享片段均已配置。
+.PARAMETER AllowEmptyClientConfig
+    允许不内置构建期配置（config/app.env 缺失或留空）：exe 里不编入 TMDB Key、
+    弹幕与共享片段地址，用户需在「设置」里自行填写。默认关闭——正式发布应带完整配置。
 #>
 
 param (
@@ -41,6 +44,7 @@ param (
     [Alias('LocalMdkPreview')][switch]$IncludeMdk = $false,
     [switch]$BundleJre = $false,
     [switch]$BundleRuntimes = $false,
+    [switch]$AllowEmptyClientConfig = $false,
     [string]$BuildConfigFile
 )
 
@@ -57,8 +61,16 @@ if ($IncludeMdk) {
 . (Join-Path $ScriptDir 'package_tree.ps1')
 . (Join-Path $ScriptDir 'client_build_config.ps1')
 if (!$BuildConfigFile) { $BuildConfigFile = Join-Path $ProjectRoot 'config/app.env' }
-$BuildConfigFile = (Resolve-Path -LiteralPath $BuildConfigFile).Path
-$clientConfig = Get-PackageClientConfig $BuildConfigFile
+$HasBuildConfig = Test-Path -LiteralPath $BuildConfigFile -PathType Leaf
+if ($HasBuildConfig) {
+    $BuildConfigFile = (Resolve-Path -LiteralPath $BuildConfigFile).Path
+    $clientConfig = Get-PackageClientConfig $BuildConfigFile -AllowEmpty:$AllowEmptyClientConfig
+} elseif ($AllowEmptyClientConfig) {
+    Write-Host "  [!] 未提供 config/app.env：本次发布不内置 TMDB / 弹幕 / 共享片段配置。" -ForegroundColor Yellow
+    $clientConfig = @{}
+} else {
+    throw 'Missing client build configuration file.'
+}
 $PowerShellExe = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
 
 # 版本号默认跟随 pubspec.yaml（开发版本真源）；显式传 -Version 时以参数为准。
@@ -178,7 +190,7 @@ try {
 $BuildArgs += "--dart-define=YINGSHI_BUILD_TIME=$BuildTime"
 if ($Commit) { $BuildArgs += "--dart-define=YINGSHI_COMMIT=$Commit" }
 Write-Host "      Build info: $BuildTime  $Commit" -ForegroundColor Gray
-$BuildArgs += "--dart-define-from-file=$BuildConfigFile"
+if ($HasBuildConfig) { $BuildArgs += "--dart-define-from-file=$BuildConfigFile" }
 & $FlutterCmd @BuildArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "flutter build windows --release failed."
@@ -517,6 +529,7 @@ if ($Artifacts.Count -gt 0) {
         if ($IncludeMdk) { $GateArgs += '-IncludeMdk' }
         if (-not $BundleJre) { $GateArgs += '-JreOnDemand' }
         if (-not $BundleRuntimes) { $GateArgs += '-RuntimesOnDemand' }
+        if ($AllowEmptyClientConfig) { $GateArgs += '-AllowEmptyClientConfig' }
         if ($SkipInstaller) { $GateArgs += "-SkipInstaller" }
         & $PowerShellExe @GateArgs
         if ($LASTEXITCODE -ne 0) {

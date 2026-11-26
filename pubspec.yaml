@@ -1,7 +1,7 @@
 name: yingshi_tv
 description: "影视 - Windows 桌面端本地播放器与信息聚合客户端（Flutter + JVM 解析层，不含任何内容源）"
 publish_to: "none"
-version: 1.2.0
+version: 1.2.1
 
 environment:
   sdk: ">=3.12.0 <4.0.0"

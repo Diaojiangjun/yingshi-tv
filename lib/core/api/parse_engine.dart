@@ -35,7 +35,7 @@ class ParseEngine {
           final targetUrl = '$parseApi$trimmed';
 
           final headers = <String, dynamic>{
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 yingshi-tv/1.2.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 yingshi-tv/1.2.1',
           };
           if (parseItem.header != null) {
             headers.addAll(parseItem.header!);

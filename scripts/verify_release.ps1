@@ -45,6 +45,7 @@ param(
     [Alias('LocalMdkPreview')][switch]$IncludeMdk,
     [switch]$JreOnDemand,
     [switch]$RuntimesOnDemand,
+    [switch]$AllowEmptyClientConfig,
     [string]$BuildConfigFile
 )
 
@@ -54,7 +55,14 @@ $ProjectRoot = (Resolve-Path "$ScriptDir/..").Path
 . (Join-Path $ScriptDir 'package_tree.ps1')
 . (Join-Path $ScriptDir 'client_build_config.ps1')
 if (!$BuildConfigFile) { $BuildConfigFile = Join-Path $ProjectRoot 'config/app.env' }
-$clientConfig = Get-PackageClientConfig (Resolve-Path -LiteralPath $BuildConfigFile).Path
+$HasBuildConfig = Test-Path -LiteralPath $BuildConfigFile -PathType Leaf
+if ($HasBuildConfig) {
+    $clientConfig = Get-PackageClientConfig (Resolve-Path -LiteralPath $BuildConfigFile).Path -AllowEmpty:$AllowEmptyClientConfig
+} elseif ($AllowEmptyClientConfig) {
+    $clientConfig = @{}
+} else {
+    throw 'Missing client build configuration file.'
+}
 . (Join-Path $ScriptDir 'release_test_helpers.ps1')
 if ($SkipZip -and $SkipInstaller) { throw 'At least one package must be verified.' }
 # /CURRENTUSER uses a separate HKCU registration; opt-in coexistence additionally
@@ -203,9 +211,13 @@ function Get-NormalizedVersion([string]$Raw) {
 function Get-RequiredEntries { Get-PackageRequiredEntries -IncludeMdk:$IncludeMdk -IncludeJre:(-not $JreOnDemand) -IncludeRuntimes:(-not $RuntimesOnDemand) }
 
 function Test-PackageLayout([string]$Scope, [string]$Root, [switch]$Installed) {
-    Invoke-Check $Scope '内置 TMDB、弹幕、共享片段配置' {
-        Assert-PackageClientConfig $clientConfig (Join-Path $Root 'data/app.so')
-        "已核对 $($clientConfig.Count) 个构建值（不输出内容）"
+    if ($clientConfig.Count -eq 0) {
+        Add-Result $Scope '内置 TMDB、弹幕、共享片段配置' $true '本次发布未内置（配置留空），由用户在设置中自行填写'
+    } else {
+        Invoke-Check $Scope '内置 TMDB、弹幕、共享片段配置' {
+            Assert-PackageClientConfig $clientConfig (Join-Path $Root 'data/app.so')
+            "已核对 $($clientConfig.Count) 个构建值（不输出内容）"
+        }
     }
     try {
         $count = Assert-PackageMatchesStage -StageDir $StagedAppDir -PackageDir $Root -Installed:$Installed -IncludeMdk:$IncludeMdk

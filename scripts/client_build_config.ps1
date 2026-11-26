@@ -1,7 +1,11 @@
-function Get-PackageClientConfig([string]$Path) {
+﻿function Get-PackageClientConfig([string]$Path, [switch]$AllowEmpty) {
     $keys = @('YINGSHI_TMDB_API_KEY', 'YINGSHI_DANMAKU_URL', 'YINGSHI_DANMAKU_TOKEN', 'YINGSHI_SEGMENTS_URL', 'YINGSHI_SEGMENTS_TOKEN')
     $optionalKeys = @('YINGSHI_DANMAKU_SECONDARY_URL')
-    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Missing client build configuration file.' }
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {
+        # -AllowEmpty：本次发布明确不内置构建期配置，缺少文件等同于空配置。
+        if ($AllowEmpty) { return @{} }
+        throw 'Missing client build configuration file.'
+    }
     $values = @{}
     foreach ($line in [IO.File]::ReadAllLines($Path)) {
         if ($line -notmatch '^\s*([A-Z_]+)\s*=\s*(.*?)\s*$') { continue }
@@ -12,10 +16,19 @@ function Get-PackageClientConfig([string]$Path) {
         elseif ($raw -match '^["'']') { throw "Invalid client configuration: $key" }
         else { $values[$key] = $raw.Split('#')[0].Trim() }
     }
-    foreach ($key in $keys) {
-        if ([string]::IsNullOrWhiteSpace($values[$key])) { throw "Missing client configuration: $key" }
+    if ($AllowEmpty) {
+        # 空值不编进 exe，也就不参与成品核对；只保留真正填了的键。
+        foreach ($key in @($values.Keys)) {
+            if ([string]::IsNullOrWhiteSpace($values[$key])) { $values.Remove($key) }
+        }
+    } else {
+        foreach ($key in $keys) {
+            if ([string]::IsNullOrWhiteSpace($values[$key])) { throw "Missing client configuration: $key" }
+        }
     }
-    if ($values.YINGSHI_TMDB_API_KEY -notmatch '^[0-9a-f]{32}$') { throw 'Invalid client configuration: YINGSHI_TMDB_API_KEY' }
+    if ($values.ContainsKey('YINGSHI_TMDB_API_KEY') -and $values.YINGSHI_TMDB_API_KEY -notmatch '^[0-9a-f]{32}$') {
+        throw 'Invalid client configuration: YINGSHI_TMDB_API_KEY'
+    }
     foreach ($key in $optionalKeys) {
         if ([string]::IsNullOrWhiteSpace($values[$key])) { $values.Remove($key) }
     }
