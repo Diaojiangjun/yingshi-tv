@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
+import '../diagnostics/error_log.dart';
 import '../net/http_client_factory.dart';
 import '../player/models/player_state.dart';
 import 'push_input_resolver.dart';
@@ -114,24 +116,7 @@ class WebDavRepository {
       throw const FormatException('不能访问选定 WebDAV 根目录之外的位置');
     }
     try {
-      final response = await _dio.requestUri<ResponseBody>(
-        target,
-        data: '<?xml version="1.0" encoding="UTF-8"?>'
-            '<d:propfind xmlns:d="DAV:"><d:prop>'
-            '<d:displayname/><d:resourcetype/><d:getcontentlength/>'
-            '<d:getcontenttype/></d:prop></d:propfind>',
-        options: Options(
-          method: 'PROPFIND',
-          headers: {
-            ...connection.headers,
-            'Depth': '1',
-            'Content-Type': 'application/xml; charset=utf-8',
-          },
-          responseType: ResponseType.stream,
-          followRedirects: false,
-          validateStatus: (_) => true,
-        ),
-      );
+      final response = await _propfindWithRetry(target, connection);
       final status = response.statusCode ?? 0;
       if (status != 200 && status != 207) {
         await response.data?.stream.listen((_) {}).cancel();
@@ -155,12 +140,52 @@ class WebDavRepository {
       }
       if (_disposed) throw StateError('WebDAV 连接已关闭');
       return _parse(utf8.decode(buffer.takeBytes()), connection, target);
-    } on DioException {
-      throw const FormatException('WebDAV 连接失败，请检查服务地址、证书和网络');
+    } on DioException catch (error, stack) {
+      // 只在连接层失败时把手原因抛给用户，并记进「错误日志」方便排查
+      // （403/404 等已在上面的状态码分支里处理过）。
+      final reason = _describeDioFailure(error);
+      ErrorLog.instance.record('WebDAV', reason, stack);
+      throw FormatException('WebDAV 连接失败：$reason');
     } on TimeoutException {
       throw const FormatException('WebDAV 请求超时，请检查网络后重试');
     } on XmlException {
       throw const FormatException('WebDAV 返回的 XML 无法解析');
+    }
+  }
+
+  /// PROPFIND 是只读请求：连接层失败（超时 / 被对端重置）重试一次，
+  /// 弱网与 Cloudflare 边缘偶发重置时用户就不用自己再点一遍。
+  Future<Response<ResponseBody>> _propfindWithRetry(
+    Uri target,
+    WebDavConnection connection,
+  ) async {
+    Future<Response<ResponseBody>> send() => _dio.requestUri<ResponseBody>(
+          target,
+          data: '<?xml version="1.0" encoding="UTF-8"?>'
+              '<d:propfind xmlns:d="DAV:"><d:prop>'
+              '<d:displayname/><d:resourcetype/><d:getcontentlength/>'
+              '<d:getcontenttype/></d:prop></d:propfind>',
+          options: Options(
+            method: 'PROPFIND',
+            headers: {
+              ...connection.headers,
+              'Depth': '1',
+              'Content-Type': 'application/xml; charset=utf-8',
+            },
+            responseType: ResponseType.stream,
+            followRedirects: false,
+            validateStatus: (_) => true,
+          ),
+        );
+
+    try {
+      return await send();
+    } on DioException catch (error) {
+      if (!_isTransientFailure(error)) rethrow;
+      if (_disposed) throw StateError('WebDAV 连接已关闭');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (_disposed) throw StateError('WebDAV 连接已关闭');
+      return send();
     }
   }
 
@@ -238,6 +263,52 @@ class WebDavRepository {
   void dispose() {
     _disposed = true;
     if (_ownsDio) _dio.close(force: true);
+  }
+}
+
+/// 连接层偶发失败（握手 / DNS / 被重置），值得原样重试一次。
+bool _isTransientFailure(DioException error) {
+  const transient = {
+    DioExceptionType.connectionTimeout,
+    DioExceptionType.connectionError,
+    DioExceptionType.unknown,
+  };
+  if (!transient.contains(error.type)) return false;
+  final inner = error.error;
+  // 证书问题重试也不会好，别浪费一次往返。
+  if (inner is HandshakeException || inner is TlsException) return false;
+  return true;
+}
+
+/// 把 Dio 的连接类异常翻译成一句能看懂的短原因。
+String _describeDioFailure(DioException failure) {
+  final inner = failure.error;
+  if (inner is HandshakeException || inner is TlsException) {
+    return 'TLS 握手失败（证书或协议不被支持）';
+  }
+  if (inner is SocketException) {
+    final osMessage = inner.osError?.message.trim() ?? '';
+    if (osMessage.isNotEmpty) return '无法建立连接（$osMessage）';
+    final own = inner.message.trim();
+    return own.isEmpty ? '无法建立连接' : '无法建立连接（$own）';
+  }
+  switch (failure.type) {
+    case DioExceptionType.connectionTimeout:
+      return '连接超时';
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+    case DioExceptionType.transformTimeout:
+      return '服务响应超时';
+    case DioExceptionType.badCertificate:
+      return '证书校验未通过';
+    case DioExceptionType.cancel:
+      return '请求已取消';
+    case DioExceptionType.badResponse:
+      return '服务返回异常状态';
+    case DioExceptionType.connectionError:
+    case DioExceptionType.unknown:
+      final detail = failure.message?.trim() ?? '';
+      return detail.isEmpty ? '网络异常' : '网络异常（$detail）';
   }
 }
 
