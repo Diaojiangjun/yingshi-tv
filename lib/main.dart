@@ -9,6 +9,7 @@ import 'core/companion/companion_process_manager.dart';
 import 'core/config/config_repository.dart';
 import 'core/config/models/builtin_sites.dart';
 import 'core/desktop/desktop_shell_bridge.dart';
+import 'core/drive/drive_webview_support.dart';
 import 'core/diagnostics/error_log.dart';
 import 'core/legal/agreement_providers.dart';
 import 'core/legal/agreement_store.dart';
@@ -27,6 +28,9 @@ import 'ui/theme/app_palette.dart';
 Future<void> main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    // 内置登录页（WebView2）的平台实现：生成的 dart_plugin_registrant 在部分
+    // 构建产物里没有生效，这里补一次，避免点「扫码登录」直接抛断言红屏。
+    ensureDriveWebViewPlatform();
     // ⑥ 内存批：海报 / 台标等网络图解码缓存默认上限 100MB，收紧到 48MB；
     // 超出按 LRU 淘汰、重复浏览会再解码，换取常驻内存下降。
     PaintingBinding.instance.imageCache.maximumSizeBytes = 48 << 20;

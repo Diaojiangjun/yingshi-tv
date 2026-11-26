@@ -13,6 +13,10 @@ FlutterWindow::~FlutterWindow() {
     webdav_secrets_channel_->SetMethodCallHandler(nullptr);
     webdav_secrets_channel_.reset();
   }
+  if (secrets_channel_) {
+    secrets_channel_->SetMethodCallHandler(nullptr);
+    secrets_channel_.reset();
+  }
   if (desktop_shell_channel_) {
     desktop_shell_channel_->SetMethodCallHandler(nullptr);
     desktop_shell_channel_.reset();
@@ -47,6 +51,8 @@ bool FlutterWindow::OnCreate() {
       RegisterProcessJobChannel(flutter_controller_->engine()->messenger());
   webdav_secrets_channel_ =
       RegisterWebDavSecretsChannel(flutter_controller_->engine()->messenger());
+  secrets_channel_ = RegisterSecretsChannel(
+      flutter_controller_->engine()->messenger(), "yingshi/secrets");
   fullscreen_ = std::make_unique<WindowFullscreen>(GetHandle());
   fullscreen_channel_ = RegisterWindowFullscreenChannel(
       flutter_controller_->engine()->messenger(), fullscreen_.get());
@@ -73,6 +79,10 @@ void FlutterWindow::OnDestroy() {
   if (webdav_secrets_channel_) {
     webdav_secrets_channel_->SetMethodCallHandler(nullptr);
     webdav_secrets_channel_.reset();
+  }
+  if (secrets_channel_) {
+    secrets_channel_->SetMethodCallHandler(nullptr);
+    secrets_channel_.reset();
   }
   process_job_channel_ = nullptr;
   fullscreen_channel_ = nullptr;

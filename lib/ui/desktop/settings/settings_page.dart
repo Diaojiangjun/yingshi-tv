@@ -63,10 +63,16 @@ import 'source_category_controls.dart';
 import 'source_history_table.dart';
 import 'tmdb_settings_card.dart';
 import '../keyboard/player_shortcuts.dart';
+import '../../../core/drive/drive_account_repository.dart';
+import '../../../core/player/models/player_state.dart';
+import '../../../core/push/webdav_profile_store.dart';
+import '../dialogs/webdav_browser_dialog.dart';
+import '../widgets/drive_accounts_panel.dart';
 import '../../../core/brand.dart';
 import '../../../core/config/models/desktop_window_config.dart';
 import '../../../core/desktop/desktop_shell_bridge.dart';
 
+part 'drive_panel.dart';
 part 'player_shortcuts_panel.dart';
 part 'external_player_panel.dart';
 part 'runtime_panel.dart';
@@ -76,6 +82,7 @@ enum SettingsSection {
   configSources,
   liveSources,
   general,
+  drive,
   appearance,
   player,
   runtime,
@@ -145,6 +152,12 @@ class SettingsPage extends StatefulWidget {
   /// 独立直播源（「直播源」分区）；缺省不显示该分区。
   final LiveRepository? liveRepository;
 
+  /// 网盘账号（「网盘与 WebDAV」分区）；缺省不显示该分区。
+  final DriveAccountRepository? driveAccounts;
+
+  /// WebDAV 里选中媒体后的播放回调；缺省只浏览不播放。
+  final Future<void> Function(MediaPlaySpec spec)? onPlayMedia;
+
   const SettingsPage({
     super.key,
     required this.configRepository,
@@ -169,6 +182,8 @@ class SettingsPage extends StatefulWidget {
     this.danmakuAvailable,
     this.companionSpiderApi,
     this.liveRepository,
+    this.driveAccounts,
+    this.onPlayMedia,
   });
 
   @override
@@ -281,6 +296,15 @@ class _SettingsPageState extends State<SettingsPage> {
                                   pickBackupOpenPath: widget.pickBackupOpenPath,
                                   companionSpiderApi: widget.companionSpiderApi,
                                 ),
+                              SettingsSection.drive => switch (
+                                    widget.driveAccounts) {
+                                  final accounts? => DriveSettingsPanel(
+                                      key: const ValueKey('settings-drive'),
+                                      repository: accounts,
+                                      onPlayMedia: widget.onPlayMedia,
+                                    ),
+                                  null => const SizedBox.shrink(),
+                                },
                               SettingsSection.appearance => AppearancePanel(
                                   key: const ValueKey('settings-appearance'),
                                   settingsRepository: widget.settingsRepository,
@@ -385,6 +409,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: () => _selectSection(SettingsSection.general),
                   ),
                   const SizedBox(height: 8),
+                  if (widget.driveAccounts != null) ...[
+                    _SectionTab(
+                      icon: Icons.cloud_sync_rounded,
+                      label: '网盘与 WebDAV',
+                      selected: _section == SettingsSection.drive,
+                      onTap: () => _selectSection(SettingsSection.drive),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   _SectionTab(
                     icon: Icons.image_rounded,
                     label: '外观',

@@ -44,6 +44,10 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       webdav_secrets_channel_;
 
+  // 网盘账号等其它本机凭据（同一套 DPAPI 实现，另一条通道名）。
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      secrets_channel_;
+
   // §52 一步式全屏；通道析构早于本对象（OnDestroy 里先清通道）。
   std::unique_ptr<WindowFullscreen> fullscreen_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>

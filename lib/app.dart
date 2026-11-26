@@ -53,6 +53,7 @@ import 'core/segments/segments_controller.dart';
 import 'core/subtitle/subtitle_models.dart';
 import 'core/subtitle/subtitle_query.dart';
 import 'core/player/models/player_settings.dart';
+import 'core/drive/drive_account_repository.dart';
 import 'core/player/models/player_state.dart';
 import 'core/player/hls_playlist_probe.dart';
 import 'core/player/mpv_player_engine.dart';
@@ -209,6 +210,14 @@ final appThemesProvider = Provider<({ThemeData light, ThemeData dark})>((ref) {
           .withAccent(accentColorsFor(accent, Brightness.dark)),
     ),
   );
+});
+
+/// 网盘账号（进程级单例）：内存缓存 + DPAPI 加密落盘 + 在线校验。
+///
+/// 设置页、后续的分享链接解析与蜘蛛注入共用同一份，避免各建一份缓存
+/// 导致「刚登录完另一个地方还显示未登录」。
+final driveAccountRepositoryProvider = Provider<DriveAccountRepository>((ref) {
+  return DriveAccountRepository();
 });
 
 /// 壁纸副本管理。像素探针依赖 `dart:ui`，因此在这里（UI 层）装配。
@@ -4421,6 +4430,14 @@ class YingshiTvApp extends ConsumerWidget {
                             dataBackupService:
                                 ref.read(dataBackupServiceProvider),
                             wallpaperStore: ref.read(wallpaperStoreProvider),
+                            driveAccounts:
+                                ref.read(driveAccountRepositoryProvider),
+                            onPlayMedia: (spec) async {
+                              ref
+                                  .read(settingsPageOpenProvider.notifier)
+                                  .state = false;
+                              await _launchPlayback(ref, spec);
+                            },
                             isPlaybackActive: () =>
                                 ref.read(activePlaySpecProvider) != null,
                             updateSection: (buildInfo) =>

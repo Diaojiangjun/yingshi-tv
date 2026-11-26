@@ -8,10 +8,9 @@
 #include "webdav_secrets.h"
 
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
-RegisterWebDavSecretsChannel(flutter::BinaryMessenger* messenger) {
+RegisterSecretsChannel(flutter::BinaryMessenger* messenger, const char* name) {
   auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-      messenger, "yingshi/webdav_secrets",
-      &flutter::StandardMethodCodec::GetInstance());
+      messenger, name, &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
@@ -40,4 +39,9 @@ RegisterWebDavSecretsChannel(flutter::BinaryMessenger* messenger) {
         result->Success(flutter::EncodableValue(std::move(*output)));
       });
   return channel;
+}
+
+std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+RegisterWebDavSecretsChannel(flutter::BinaryMessenger* messenger) {
+  return RegisterSecretsChannel(messenger, "yingshi/webdav_secrets");
 }

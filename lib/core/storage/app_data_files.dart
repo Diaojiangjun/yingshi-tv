@@ -75,6 +75,9 @@ const List<AppDataFile> appDataFiles = [
   AppDataFile('startup_preferences.json', AppDataCategory.preference),
   AppDataFile('webdav_connections.bin', AppDataCategory.credentials, sensitive: true),
   AppDataFile('webdav_connections.lock', AppDataCategory.credentials),
+  // 网盘账号（Cookie / Token）：同样只在本机可解，不随备份走。
+  AppDataFile('drive_accounts.bin', AppDataCategory.credentials, sensitive: true),
+  AppDataFile('drive_accounts.lock', AppDataCategory.credentials),
 ];
 
 /// 文件名集合，供临时文件基名白名单使用。

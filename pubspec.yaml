@@ -21,6 +21,11 @@ dependencies:
   # 官方 Material 页面、弹窗与内容过渡
   animations: 3.0.0
 
+  # 网盘账号：内置官方登录页扫码登录（Windows 走 WebView2）
+  flutter_inappwebview: ^6.1.5
+  # 直接引用 Windows 平台实现做启动兜底注册（见 core/drive/drive_webview_support.dart）
+  flutter_inappwebview_windows: ^0.6.0
+
   # 网络与数据持久化
   dio: ^5.4.3+1
   crypto: ^3.0.7
