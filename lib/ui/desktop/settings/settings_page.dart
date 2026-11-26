@@ -5370,6 +5370,13 @@ class _AppearancePanelState extends State<AppearancePanel> {
     }
     final applied = await DesktopShellBridge.instance
         .setTrayEnabled(enabled: true, tooltip: AppBrand.name);
+    if (applied) {
+      // 新图标常被 Windows 收进折叠区：不点破的话等于「开了但找不到」。
+      unawaited(DesktopShellBridge.instance.notifyTray(
+        title: AppBrand.name,
+        body: '托盘图标已启用。看不到就点任务栏的 ∧ 展开隐藏图标。',
+      ));
+    }
     _setMessage(applied ? '托盘图标已开启' : '托盘图标未能显示，请稍后重试',
         isError: !applied);
   }
@@ -5502,7 +5509,8 @@ class _DesktopBehaviorCard extends StatelessWidget {
             title: '系统托盘图标',
             description: '任务栏通知区常驻一个图标：左键点击唤回主界面，'
                 '右键可「显示主界面 / 退出」。开启后点窗口的 X 是收进托盘'
-                '（播放会暂停），要真正退出请用托盘右键菜单；关掉本项则 X 直接退出',
+                '（播放会暂停），要真正退出请用托盘右键菜单；关掉本项则 X 直接退出。'
+                '图标若在折叠区，点任务栏的 ∧ 展开即可看到',
             trailing: Switch(
               key: const ValueKey('setting-tray-enabled'),
               value: trayEnabled,
