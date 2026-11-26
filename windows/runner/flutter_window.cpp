@@ -13,6 +13,11 @@ FlutterWindow::~FlutterWindow() {
     webdav_secrets_channel_->SetMethodCallHandler(nullptr);
     webdav_secrets_channel_.reset();
   }
+  if (desktop_shell_channel_) {
+    desktop_shell_channel_->SetMethodCallHandler(nullptr);
+    desktop_shell_channel_.reset();
+  }
+  desktop_shell_.reset();
   // S48: safety net. ~unique_ptr does not null the pointer before deleting,
   // so messages arriving during teardown would reach a half-destroyed
   // controller; reset() nulls first, so MessageHandler sees nullptr.
@@ -45,6 +50,9 @@ bool FlutterWindow::OnCreate() {
   fullscreen_ = std::make_unique<WindowFullscreen>(GetHandle());
   fullscreen_channel_ = RegisterWindowFullscreenChannel(
       flutter_controller_->engine()->messenger(), fullscreen_.get());
+  desktop_shell_ = std::make_unique<DesktopShellAgent>(GetHandle());
+  desktop_shell_channel_ = RegisterDesktopShellChannel(
+      flutter_controller_->engine()->messenger(), desktop_shell_.get());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -68,6 +76,12 @@ void FlutterWindow::OnDestroy() {
   }
   process_job_channel_ = nullptr;
   fullscreen_channel_ = nullptr;
+  // 窗口销毁前必须摘掉托盘图标与热键，否则托盘区会留下一个点不动的幽灵图标。
+  if (desktop_shell_channel_) {
+    desktop_shell_channel_->SetMethodCallHandler(nullptr);
+    desktop_shell_channel_ = nullptr;
+  }
+  desktop_shell_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -82,6 +96,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // §52：全屏期间的 WM_NCCALCSIZE 必须先于 window_manager 插件处理。
   if (fullscreen_) {
     if (auto handled = fullscreen_->HandleMessage(message, wparam, lparam)) {
+      return *handled;
+    }
+  }
+
+  // 托盘回调、托盘菜单命令与 WM_HOTKEY 都是本窗口私有的消息号，
+  // 必须在交给 Flutter 之前拦下（插件不认识它们，会当成未知消息往下穿）。
+  if (desktop_shell_) {
+    if (auto handled = desktop_shell_->HandleMessage(message, wparam, lparam)) {
       return *handled;
     }
   }

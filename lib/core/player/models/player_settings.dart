@@ -104,6 +104,12 @@ class PlayerSettings {
   /// 关闭后光标在播放页始终可见。鼠标一动光标立即出现，与控制条显隐互不牵连。
   final bool autoHideCursor;
 
+  /// 播放 / 缓冲期间阻止系统待机与关屏（`SetThreadExecutionState`）。
+  ///
+  /// 默认开启：看完一集回来发现系统已经睡眠、进度停在半路，是最常见的投诉。
+  /// 想挂机听声音又允许熄屏时可关闭。
+  final bool keepAwake;
+
   /// 起播时补浏览器 UA / Referer（仅在站点没提供时）。
   ///
   /// 有些源站按 UA 拦非浏览器请求：清单只给一半、或直接断连（实测 py1080p 专线）。
@@ -146,6 +152,7 @@ class PlayerSettings {
     this.shortcuts = PlayerShortcutBindings.defaults,
     this.externalPlayer = ExternalPlayerSettings.defaults,
     this.autoHideCursor = true,
+    this.keepAwake = true,
     this.browserHeaders = true,
     this.autoDetectLiveDirectMode = true,
   });
@@ -267,6 +274,8 @@ class PlayerSettings {
       shortcuts: PlayerShortcutBindings.fromJson(json['shortcuts']),
       externalPlayer: ExternalPlayerSettings.fromJson(json['externalPlayer']),
       autoHideCursor: json['autoHideCursor'] != false,
+      // 缺字段按默认 true：老配置文件不该因为升级丢掉这个保护。
+      keepAwake: json['keepAwake'] != false,
       browserHeaders: json['browserHeaders'] != false,
       autoDetectLiveDirectMode: json['autoDetectLiveDirectMode'] != false,
     );
@@ -304,6 +313,7 @@ class PlayerSettings {
         'shortcuts': shortcuts.toJson(),
         'externalPlayer': externalPlayer.toJson(),
         'autoHideCursor': autoHideCursor,
+        'keepAwake': keepAwake,
         'browserHeaders': browserHeaders,
         'autoDetectLiveDirectMode': autoDetectLiveDirectMode,
       };
@@ -362,6 +372,7 @@ class PlayerSettings {
     PlayerShortcutBindings? shortcuts,
     ExternalPlayerSettings? externalPlayer,
     bool? autoHideCursor,
+    bool? keepAwake,
     bool? browserHeaders,
     bool? autoDetectLiveDirectMode,
   }) {
@@ -392,6 +403,7 @@ class PlayerSettings {
       shortcuts: shortcuts ?? this.shortcuts,
       externalPlayer: externalPlayer ?? this.externalPlayer,
       autoHideCursor: autoHideCursor ?? this.autoHideCursor,
+      keepAwake: keepAwake ?? this.keepAwake,
       browserHeaders: browserHeaders ?? this.browserHeaders,
       autoDetectLiveDirectMode:
           autoDetectLiveDirectMode ?? this.autoDetectLiveDirectMode,
@@ -427,6 +439,7 @@ class PlayerSettings {
       other.shortcuts == shortcuts &&
       other.externalPlayer == externalPlayer &&
       other.autoHideCursor == autoHideCursor &&
+      other.keepAwake == keepAwake &&
       other.browserHeaders == browserHeaders &&
       other.autoDetectLiveDirectMode == autoDetectLiveDirectMode;
 
@@ -434,5 +447,5 @@ class PlayerSettings {
   int get hashCode => Object.hashAll([hwdec, defaultVolume, defaultRate, audioChannels, audioDelayMs,
       toneMapping, scale, brightness, contrast, saturation, gamma, cacheSecs, hideWindowTitleBar,
       danmakuEnabled, danmaku, danmakuService, subtitleService, segmentsAutoApply, showMiniProgress, showResolution, autoLineSwitch, autoPlayNextEpisode, holdRate, shortcuts,
-      externalPlayer, autoHideCursor, browserHeaders, autoDetectLiveDirectMode]);
+      externalPlayer, autoHideCursor, keepAwake, browserHeaders, autoDetectLiveDirectMode]);
 }

@@ -64,6 +64,8 @@ import 'source_history_table.dart';
 import 'tmdb_settings_card.dart';
 import '../keyboard/player_shortcuts.dart';
 import '../../../core/brand.dart';
+import '../../../core/config/models/desktop_window_config.dart';
+import '../../../core/desktop/desktop_shell_bridge.dart';
 
 part 'player_shortcuts_panel.dart';
 part 'external_player_panel.dart';
@@ -282,6 +284,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               SettingsSection.appearance => AppearancePanel(
                                   key: const ValueKey('settings-appearance'),
                                   settingsRepository: widget.settingsRepository,
+                                  configRepository: widget.configRepository,
                                   wallpaperStore: widget.wallpaperStore ??
                                       WallpaperStore(
                                           probeSize: probeWallpaperImageSize),
@@ -3280,6 +3283,17 @@ class _PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                   ),
                   const _RowDivider(),
                   _SettingRow(
+                    title: '播放时阻止系统休眠',
+                    description: '播放与缓冲期间不让系统待机、不让屏幕关闭，'
+                        '暂停或播完立即恢复系统默认；关闭后按系统电源计划处理',
+                    trailing: Switch(
+                      key: const ValueKey('setting-keep-awake'),
+                      value: s.keepAwake,
+                      onChanged: (value) => _update(s.copyWith(keepAwake: value)),
+                    ),
+                  ),
+                  const _RowDivider(),
+                  _SettingRow(
                     title: '播放时补浏览器请求头',
                     description: '站点没给 UA/Referer 时补浏览器默认值；'
                         '有些源按 UA 拦截非浏览器请求（清单读一半就断）可开启。'
@@ -5223,12 +5237,14 @@ class _DataBackupCardState extends State<_DataBackupCard> {
 class AppearancePanel extends StatefulWidget {
   final SettingsRepository settingsRepository;
   final WallpaperStore wallpaperStore;
+  final ConfigRepository configRepository;
   final Future<String?> Function()? pickWallpaperPath;
 
   const AppearancePanel({
     super.key,
     required this.settingsRepository,
     required this.wallpaperStore,
+    required this.configRepository,
     this.pickWallpaperPath,
   });
 
@@ -5336,6 +5352,55 @@ class _AppearancePanelState extends State<AppearancePanel> {
     }
   }
 
+  /// 托盘图标：写回配置并立即让原生侧生效（不必重启）。
+  Future<void> _setTrayEnabled(bool value) async {
+    final repo = widget.configRepository;
+    try {
+      await repo.updateWindowConfig(
+          repo.currentWindowConfig.copyWith(trayEnabled: value));
+    } catch (error) {
+      _setMessage('保存托盘设置失败：$error', isError: true);
+      return;
+    }
+    if (!value) {
+      await DesktopShellBridge.instance
+          .setTrayEnabled(enabled: false, tooltip: AppBrand.name);
+      _setMessage('托盘图标已关闭');
+      return;
+    }
+    final applied = await DesktopShellBridge.instance
+        .setTrayEnabled(enabled: true, tooltip: AppBrand.name);
+    _setMessage(applied ? '托盘图标已开启' : '托盘图标未能显示，请稍后重试',
+        isError: !applied);
+  }
+
+  /// 老板键：组合键被其他程序占用时 `RegisterHotKey` 会失败，必须如实告知，
+  /// 否则用户按了没反应会以为软件坏了。
+  Future<void> _setBossKeyEnabled(bool value) async {
+    final repo = widget.configRepository;
+    try {
+      await repo.updateWindowConfig(
+          repo.currentWindowConfig.copyWith(bossKeyEnabled: value));
+    } catch (error) {
+      _setMessage('保存老板键设置失败：$error', isError: true);
+      return;
+    }
+    if (!value) {
+      await DesktopShellBridge.instance.setBossKeyEnabled(false);
+      _setMessage('老板键已关闭');
+      return;
+    }
+    final registration = await DesktopShellBridge.instance.setBossKeyEnabled(true);
+    if (registration.registered) {
+      // 首选键位被占用时会回退，提示必须写实际生效的那个。
+      _setMessage('老板键已开启：${registration.hotkey}');
+      return;
+    }
+    _setMessage(
+        '老板键注册失败（错误码 ${registration.error}），可能是权限或热键被系统占用',
+        isError: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return _PanelScaffold(
@@ -5376,6 +5441,21 @@ class _AppearancePanelState extends State<AppearancePanel> {
                         repo.appearancePreferences.withTmdb(next));
                   },
                 ),
+                const SizedBox(height: 16),
+                StreamBuilder<DesktopWindowConfig>(
+                  stream: widget.configRepository.windowConfigStream,
+                  initialData: widget.configRepository.currentWindowConfig,
+                  builder: (context, snapshot) {
+                    final window = snapshot.data ??
+                        widget.configRepository.currentWindowConfig;
+                    return _DesktopBehaviorCard(
+                      trayEnabled: window.trayEnabled,
+                      bossKeyEnabled: window.bossKeyEnabled,
+                      onTrayChanged: _setTrayEnabled,
+                      onBossKeyChanged: _setBossKeyEnabled,
+                    );
+                  },
+                ),
                 if (_message != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -5393,6 +5473,55 @@ class _AppearancePanelState extends State<AppearancePanel> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// 桌面行为：系统托盘与老板键。两项都落到原生侧（`desktop_shell_agent`），
+/// 切换后立即生效，不需要重启。
+class _DesktopBehaviorCard extends StatelessWidget {
+  final bool trayEnabled;
+  final bool bossKeyEnabled;
+  final ValueChanged<bool> onTrayChanged;
+  final ValueChanged<bool> onBossKeyChanged;
+
+  const _DesktopBehaviorCard({
+    required this.trayEnabled,
+    required this.bossKeyEnabled,
+    required this.onTrayChanged,
+    required this.onBossKeyChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _card(
+      context,
+      child: Column(
+        children: [
+          _SettingRow(
+            title: '系统托盘图标',
+            description: '在任务栏通知区常驻一个图标：左键点击唤回主界面，'
+                '右键可「显示主界面 / 退出」。关闭窗口仍是退出程序',
+            trailing: Switch(
+              key: const ValueKey('setting-tray-enabled'),
+              value: trayEnabled,
+              onChanged: onTrayChanged,
+            ),
+          ),
+          const _RowDivider(),
+          _SettingRow(
+            title: '老板键',
+            description: '按一下立刻隐藏窗口并暂停播放，再按恢复显示。'
+                '默认 Ctrl + Alt + Y；被其他程序占用时自动换用更冷门的组合，'
+                '开关打开后的提示会说明实际键位',
+            trailing: Switch(
+              key: const ValueKey('setting-boss-key-enabled'),
+              value: bossKeyEnabled,
+              onChanged: onBossKeyChanged,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

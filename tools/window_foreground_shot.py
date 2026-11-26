@@ -2,6 +2,7 @@
 import ctypes
 import ctypes.wintypes as wt
 import struct
+import os
 import sys
 import time
 
@@ -85,7 +86,8 @@ def save_rect(rect, path):
 
 
 if __name__ == "__main__":
-    title = sys.argv[1] if len(sys.argv) > 1 else "修狗TV"
+    # 默认取 APP_TITLE，与 app_tap.py 保持一致；改名后不必再回来改脚本。
+    title = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("APP_TITLE", "影视")
     out = sys.argv[2] if len(sys.argv) > 2 else "build/_fg.bmp"
     wins = find_window(title)
     if not wins:

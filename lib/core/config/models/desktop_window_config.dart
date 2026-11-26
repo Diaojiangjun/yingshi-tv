@@ -18,6 +18,13 @@ class DesktopWindowConfig {
 
   final String themeMode; // 'system' | 'dark' | 'light'
 
+  /// 任务栏旁显示托盘图标（左键唤回窗口，右键出菜单）。默认开启。
+  final bool trayEnabled;
+
+  /// 老板键 Ctrl + Alt + Y：一瞬间隐藏 / 唤回窗口。默认开启；
+  /// 组合键被其他程序占用时会注册失败，此时按键不生效。
+  final bool bossKeyEnabled;
+
   const DesktopWindowConfig({
     this.width = 1280.0,
     this.height = 720.0,
@@ -32,6 +39,8 @@ class DesktopWindowConfig {
     this.lastConfigUrl,
     this.depotPath = const [],
     this.themeMode = 'dark',
+    this.trayEnabled = true,
+    this.bossKeyEnabled = true,
   });
 
   factory DesktopWindowConfig.fromJson(Map<String, dynamic> json) {
@@ -49,6 +58,9 @@ class DesktopWindowConfig {
       lastConfigUrl: json['lastConfigUrl']?.toString(),
       depotPath: (json['depotPath'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
       themeMode: json['themeMode']?.toString() ?? 'dark',
+      // 缺字段按默认开启：老配置文件升级后也该有托盘与老板键。
+      trayEnabled: json['trayEnabled'] != false,
+      bossKeyEnabled: json['bossKeyEnabled'] != false,
     );
   }
 
@@ -66,6 +78,8 @@ class DesktopWindowConfig {
     if (lastConfigUrl != null) 'lastConfigUrl': lastConfigUrl,
     if (depotPath.isNotEmpty) 'depotPath': depotPath,
     'themeMode': themeMode,
+    'trayEnabled': trayEnabled,
+    'bossKeyEnabled': bossKeyEnabled,
   };
 
   DesktopWindowConfig copyWith({
@@ -83,6 +97,8 @@ class DesktopWindowConfig {
     bool clearLastConfigUrl = false,
     List<String>? depotPath,
     String? themeMode,
+    bool? trayEnabled,
+    bool? bossKeyEnabled,
   }) {
     return DesktopWindowConfig(
       width: width ?? this.width,
@@ -98,6 +114,8 @@ class DesktopWindowConfig {
       lastConfigUrl: clearLastConfigUrl ? null : lastConfigUrl ?? this.lastConfigUrl,
       depotPath: depotPath ?? this.depotPath,
       themeMode: themeMode ?? this.themeMode,
+      trayEnabled: trayEnabled ?? this.trayEnabled,
+      bossKeyEnabled: bossKeyEnabled ?? this.bossKeyEnabled,
     );
   }
 }

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "desktop_shell_agent.h"
 #include "native_playback_channel.h"
 #include "process_job.h"
 #include "webdav_secrets_channel.h"
@@ -47,6 +48,12 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<WindowFullscreen> fullscreen_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       fullscreen_channel_;
+
+  // 托盘 / 老板键 / 阻止休眠。同样在 OnDestroy 里先摘通道，再销毁实例，
+  // 否则析构期间的窗口消息会打到已失效的回调上。
+  std::unique_ptr<DesktopShellAgent> desktop_shell_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      desktop_shell_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
