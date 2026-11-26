@@ -220,7 +220,7 @@ function Test-PackageLayout([string]$Scope, [string]$Root, [switch]$Installed) {
         }
     }
     try {
-        $count = Assert-PackageMatchesStage -StageDir $StagedAppDir -PackageDir $Root -Installed:$Installed -IncludeMdk:$IncludeMdk
+        $count = Assert-PackageMatchesStage -StageDir $StagedAppDir -PackageDir $Root -Installed:$Installed -IncludeMdk:$IncludeMdk -IncludeJre:(-not $JreOnDemand) -IncludeRuntimes:(-not $RuntimesOnDemand)
         Add-Result $Scope 'Clean stage file set and SHA256' $true "$count application files match; no packaged profile/cache/log"
     } catch {
         Add-Result $Scope 'Clean stage file set and SHA256' $false $_.Exception.Message
@@ -499,7 +499,7 @@ try {
     }
     $cleanReference = Get-PackageSelection -SourceDir $StagedAppDir -RejectExcluded
     $IncludeMdk = $IncludeMdk -or (Test-Path -LiteralPath (Join-Path $cleanReference.Root 'mdk') -PathType Container)
-    Assert-PackageRuntimeFiles $cleanReference -IncludeMdk:$IncludeMdk
+    Assert-PackageRuntimeFiles $cleanReference -IncludeMdk:$IncludeMdk -IncludeJre:(-not $JreOnDemand) -IncludeRuntimes:(-not $RuntimesOnDemand)
     $StagedAppDir = $cleanReference.Root
     $testEnvironment = New-ReleaseTestEnvironment -TestRoot (Join-Path $SmokeRoot 'environment')
     foreach ($name in $testEnvironment.Keys) {
