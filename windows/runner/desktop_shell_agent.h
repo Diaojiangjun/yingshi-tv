@@ -45,6 +45,11 @@ class DesktopShellAgent {
   bool SetTrayEnabled(bool enabled, const std::wstring& tooltip);
   bool tray_enabled() const { return tray_added_; }
 
+  /// 弹一条托盘气泡（收进托盘后的「还在后台运行」提示）。
+  ///
+  /// 只做提示，不抢焦点、不需要点击；托盘图标未注册时直接返回 false。
+  bool ShowTrayBalloon(const std::wstring& title, const std::wstring& body);
+
   /// 注册 / 注销老板键。
   ///
   /// 首选 Ctrl + Alt + Y；被其他程序占用时按候选列表依次回退，保证用户总能

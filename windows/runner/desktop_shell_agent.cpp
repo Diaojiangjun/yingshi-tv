@@ -35,6 +35,27 @@ std::string ToUtf8(const std::wstring& text) {
   return out;
 }
 
+std::wstring ToWide(const std::string& text) {
+  if (text.empty()) return {};
+  const int size = ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+                                        static_cast<int>(text.size()), nullptr, 0);
+  if (size <= 0) return {};
+  std::wstring out(static_cast<size_t>(size), L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+                        static_cast<int>(text.size()), out.data(), size);
+  return out;
+}
+
+/// 从方法参数里取 UTF-8 字符串；缺失或类型不符返回空串。
+std::wstring ReadWideString(const flutter::EncodableMap* args, const char* key) {
+  if (args == nullptr) return {};
+  const auto it = args->find(flutter::EncodableValue(key));
+  if (it == args->end()) return {};
+  const auto* text = std::get_if<std::string>(&it->second);
+  if (text == nullptr) return {};
+  return ToWide(*text);
+}
+
 }  // namespace
 
 DesktopShellAgent::DesktopShellAgent(HWND window) : window_(window) {}
@@ -128,6 +149,22 @@ bool DesktopShellAgent::SetTrayEnabled(bool enabled, const std::wstring& tooltip
   ::Shell_NotifyIconW(NIM_SETVERSION, &nid);
   tray_added_ = true;
   return true;
+}
+
+bool DesktopShellAgent::ShowTrayBalloon(const std::wstring& title,
+                                        const std::wstring& body) {
+  // 只有图标在托盘上时气泡才有归属，否则什么都不显示（不报错，属正常降级）。
+  if (window_ == nullptr || !tray_added_) return false;
+  NOTIFYICONDATAW nid{};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = window_;
+  nid.uID = kTrayIconId;
+  nid.uFlags = NIF_INFO;
+  nid.dwInfoFlags = NIIF_INFO;
+  wcsncpy_s(nid.szInfoTitle, _countof(nid.szInfoTitle), title.c_str(),
+            _TRUNCATE);
+  wcsncpy_s(nid.szInfo, _countof(nid.szInfo), body.c_str(), _TRUNCATE);
+  return ::Shell_NotifyIconW(NIM_MODIFY, &nid) != FALSE;
 }
 
 BossKeyRegistration DesktopShellAgent::SetBossKey(bool enabled) {
@@ -316,20 +353,18 @@ RegisterDesktopShellChannel(flutter::BinaryMessenger* messenger,
             if (it != args->end()) {
               if (const auto* text = std::get_if<std::string>(&it->second)) {
                 // MethodChannel 的 string 是 UTF-8。
-                const int size = ::MultiByteToWideChar(
-                    CP_UTF8, 0, text->c_str(), static_cast<int>(text->size()),
-                    nullptr, 0);
-                if (size > 0) {
-                  tooltip.resize(static_cast<size_t>(size));
-                  ::MultiByteToWideChar(CP_UTF8, 0, text->c_str(),
-                                        static_cast<int>(text->size()),
-                                        tooltip.data(), size);
-                }
+                tooltip = ToWide(*text);
               }
             }
           }
           result->Success(flutter::EncodableValue(
               agent->SetTrayEnabled(*value, tooltip)));
+          return;
+        }
+
+        if (call.method_name() == "notifyTray") {
+          result->Success(flutter::EncodableValue(agent->ShowTrayBalloon(
+              ReadWideString(args, "title"), ReadWideString(args, "body"))));
           return;
         }
 

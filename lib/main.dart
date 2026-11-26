@@ -140,6 +140,18 @@ Future<void> main() async {
     desktopShell.onExitRequested = () => unawaited(windowManager.close());
     // 老板键只把窗口藏起来，音频还在继续播放，由这里补上暂停。
     desktopShell.onHiddenByBossKey = () => unawaited(playerEngine.pause());
+    // 点 X 收进托盘（窗口不可见）后：同样要停声，并第一次提示「还在后台运行」，
+    // 否则用户会以为程序关掉了、声音是别的软件在放。
+    var trayHintShown = false;
+    windowManager.onHiddenToTray = () {
+      unawaited(playerEngine.pause());
+      if (trayHintShown) return;
+      trayHintShown = true;
+      unawaited(desktopShell.notifyTray(
+        title: AppBrand.name,
+        body: '已收进托盘继续运行。左键点击图标恢复窗口，右键菜单可退出。',
+      ));
+    };
     final windowPreferences = configRepository.currentWindowConfig;
     unawaited(desktopShell
         .applyWindowPreferences(

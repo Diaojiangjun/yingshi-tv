@@ -5500,8 +5500,9 @@ class _DesktopBehaviorCard extends StatelessWidget {
         children: [
           _SettingRow(
             title: '系统托盘图标',
-            description: '在任务栏通知区常驻一个图标：左键点击唤回主界面，'
-                '右键可「显示主界面 / 退出」。关闭窗口仍是退出程序',
+            description: '任务栏通知区常驻一个图标：左键点击唤回主界面，'
+                '右键可「显示主界面 / 退出」。开启后点窗口的 X 是收进托盘'
+                '（播放会暂停），要真正退出请用托盘右键菜单；关掉本项则 X 直接退出',
             trailing: Switch(
               key: const ValueKey('setting-tray-enabled'),
               value: trayEnabled,

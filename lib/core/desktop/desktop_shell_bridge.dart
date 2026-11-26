@@ -83,6 +83,18 @@ class DesktopShellBridge {
     return applied ?? false;
   }
 
+  /// 弹一条托盘气泡。图标不在托盘上时返回 false（不报错）。
+  Future<bool> notifyTray({
+    required String title,
+    required String body,
+  }) async {
+    final applied = await _invoke<bool>(
+      'notifyTray',
+      {'title': title, 'body': body},
+    );
+    return applied ?? false;
+  }
+
   /// 注册 / 注销老板键。首选 Ctrl + Alt + Y，被占用时自动回退到候选组合键。
   Future<BossKeyRegistration> setBossKeyEnabled(bool enabled) async {
     final reply = await _invoke<Map<Object?, Object?>>(

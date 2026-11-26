@@ -33,6 +33,20 @@ class DesktopWindowManager with WindowListener {
   /// 退出播放页时由播放器 `dispose` 复位。
   final ValueNotifier<bool> isImmersiveNotifier = ValueNotifier<bool>(false);
 
+  /// 点关闭按钮时是否「收进托盘」而不是退出程序。
+  ///
+  /// 跟随「系统托盘图标」开关（[ConfigRepository.windowConfigStream]）：托盘关掉
+  /// 后 X 必须恢复成直接退出，否则会出现「点了 X 窗口没了、托盘里又没有图标」
+  /// 的彻底失联状态。
+  bool get hideOnClose => _hideOnClose;
+  bool _hideOnClose = false;
+
+  /// 窗口真的被收进托盘之后回调（此时窗口已不可见）。
+  ///
+  /// 调用方在这里暂停播放并给一次「还在后台运行」的提示——窗口消失后声音
+  /// 还在放，用户只会以为程序出了问题。
+  VoidCallback? onHiddenToTray;
+
 
   /// PiP 小窗尺寸（16:9）。
   static const Size pipWindowSize = Size(400, 225);
@@ -77,6 +91,8 @@ class DesktopWindowManager with WindowListener {
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
     await windowManager.setPreventClose(true);
+    // 托盘开关决定 X 的行为：启动时就位，避免「上一次开着托盘、这次点 X 直接退出」。
+    _hideOnClose = _configRepository.currentWindowConfig.trayEnabled;
 
     // §47 启动不显示页面热修：已保存的几何若是最小化占位 / 屏幕外坐标，先清洗再用。
     final initialConfig = WindowGeometryGuard.sanitizeWindowGeometry(
@@ -170,6 +186,7 @@ class DesktopWindowManager with WindowListener {
     if (isAlwaysOnTopNotifier.value != config.alwaysOnTop) {
       isAlwaysOnTopNotifier.value = config.alwaysOnTop;
     }
+    _hideOnClose = config.trayEnabled;
   }
 
   /// 切换全屏播放状态
@@ -338,6 +355,25 @@ class DesktopWindowManager with WindowListener {
     }
   }
 
+  /// 收进系统托盘：落盘几何后隐藏窗口，进程与播放器都还在。
+  ///
+  /// 隐藏前先写几何——隐藏后部分窗口状态（最大化、尺寸）读取会变味，
+  /// 也会让下次启动还原成上一次真正可见时的样子。
+  Future<void> _hideToTray() async {
+    if (_closing != null) return;
+    _debounceSaveTimer?.cancel();
+    await _flushPersistWindowGeometry();
+    try {
+      await windowManager.hide();
+    } catch (error) {
+      // 隐藏失败就退回真正的关闭：绝不能留下「窗口还在、却当它已关上」的状态。
+      debugPrint('[yingshi-tv] 收进托盘失败，按正常退出处理：$error');
+      await close();
+      return;
+    }
+    onHiddenToTray?.call();
+  }
+
   // --- WindowListener 回调处理 ---
 
   @override
@@ -364,6 +400,14 @@ class DesktopWindowManager with WindowListener {
 
   @override
   void onWindowClose() {
+    // 托盘开着时 X 只收进托盘；退出统一走托盘菜单（原生回调 trayCommand=exit
+    // 会直接调 close()，不经过这里）。
+    if (_hideOnClose) {
+      unawaited(_hideToTray().catchError((Object error, StackTrace stack) {
+        debugPrint('[yingshi-tv] hide to tray failed: $error\n$stack');
+      }));
+      return;
+    }
     unawaited(close().catchError((Object error, StackTrace stack) {
       debugPrint('[yingshi-tv] close failed; window kept open: $error\n$stack');
     }));
