@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/player/models/player_state.dart';
 import '../../../core/push/push_input_resolver.dart';
+import '../../../core/push/webdav_browse_origin.dart';
 import '../../../core/push/webdav_profile_store.dart';
 import '../../../core/push/webdav_repository.dart';
 import '../../../core/storage/data_restore_guard.dart';
@@ -11,7 +12,20 @@ import 'app_dialog.dart';
 class WebDavBrowserDialog extends StatefulWidget {
   final WebDavRepository? repository;
   final WebDavProfileStore? profileStore;
-  const WebDavBrowserDialog({super.key, this.repository, this.profileStore});
+
+  /// 退出播放器后重开时用来恢复连接与所在目录；为 null 时按常规进入。
+  final WebDavBrowseOrigin? restoreOrigin;
+
+  /// 选中媒体起播时上报浏览快照，退出播放器后据此回到原目录。
+  final ValueChanged<WebDavBrowseOrigin>? onPlaybackOrigin;
+
+  const WebDavBrowserDialog({
+    super.key,
+    this.repository,
+    this.profileStore,
+    this.restoreOrigin,
+    this.onPlaybackOrigin,
+  });
 
   @override
   State<WebDavBrowserDialog> createState() => _WebDavBrowserDialogState();
@@ -43,6 +57,12 @@ class _WebDavBrowserDialogState extends State<WebDavBrowserDialog> {
     super.initState();
     _repository = widget.repository ?? WebDavRepository();
     _store = widget.profileStore ?? WebDavProfileStore();
+    final restore = widget.restoreOrigin;
+    if (restore != null) {
+      _url.text = restore.url;
+      _username.text = restore.username;
+      _password.text = restore.password;
+    }
     _readProfiles();
   }
 
@@ -60,6 +80,25 @@ class _WebDavBrowserDialogState extends State<WebDavBrowserDialog> {
       }
     } finally {
       if (mounted) setState(() => _readingProfiles = false);
+    }
+    final restore = widget.restoreOrigin;
+    if (restore != null && mounted) await _restoreBrowse(restore);
+  }
+
+  /// 按快照重新连接并进入起播时所在目录；失败时保留在表单让用户重试。
+  Future<void> _restoreBrowse(WebDavBrowseOrigin origin) async {
+    if (_closing) return;
+    try {
+      final profile = WebDavProfile.create(
+        origin.url,
+        username: origin.username,
+        password: origin.password,
+      );
+      final connection = profile.connect();
+      final trail = origin.trail.isEmpty ? [connection.root] : origin.trail;
+      await _load(connection, trail);
+    } catch (_) {
+      // 恢复失败不弹错：连接表单已回填，用户可直接点「连接并浏览」。
     }
   }
 
@@ -234,6 +273,15 @@ class _WebDavBrowserDialogState extends State<WebDavBrowserDialog> {
     try {
       final spec = await _repository.resolvePlaySpec(connection, entry);
       if (!mounted || _closing || generation != _generation) return;
+      widget.onPlaybackOrigin?.call(
+        WebDavBrowseOrigin(
+          url: _url.text.trim(),
+          username: _username.text.trim(),
+          password: _password.text,
+          trail: List<Uri>.from(_trail),
+          playUrl: spec.url,
+        ),
+      );
       Navigator.of(context).pop<MediaPlaySpec>(spec);
     } catch (error) {
       if (mounted && !_closing && generation == _generation) {
@@ -324,6 +372,7 @@ class _WebDavBrowserDialogState extends State<WebDavBrowserDialog> {
                             ),
                             const SizedBox(height: 6),
                             TextField(
+                              key: const ValueKey('webdav-url'),
                               controller: _url,
                               enabled: !_busy,
                               onChanged: _invalidate,

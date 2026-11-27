@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/player/models/player_state.dart';
 import '../../../core/push/push_input_resolver.dart';
+import '../../../core/push/webdav_browse_origin.dart';
 import '../../../core/push/webdav_profile_store.dart';
 import '../../../core/push/webdav_repository.dart';
 import '../../theme/app_palette.dart';
@@ -21,6 +22,9 @@ class PushStreamDialog extends StatefulWidget {
   final WebDavRepository? webDavRepository;
   final WebDavProfileStore? webDavProfileStore;
 
+  /// WebDAV 里选中媒体时上报浏览快照，退出播放器后回到原目录。
+  final ValueChanged<WebDavBrowseOrigin>? onPlaybackOrigin;
+
   const PushStreamDialog({
     super.key,
     required this.onPlayPush,
@@ -29,6 +33,7 @@ class PushStreamDialog extends StatefulWidget {
     this.pickMediaFiles,
     this.webDavRepository,
     this.webDavProfileStore,
+    this.onPlaybackOrigin,
   });
 
   @override
@@ -169,6 +174,7 @@ class _PushStreamDialogState extends State<PushStreamDialog> {
           builder: (_) => WebDavBrowserDialog(
             repository: widget.webDavRepository,
             profileStore: widget.webDavProfileStore,
+            onPlaybackOrigin: widget.onPlaybackOrigin,
           ),
         );
         if (!mounted || _closing || spec == null) return;

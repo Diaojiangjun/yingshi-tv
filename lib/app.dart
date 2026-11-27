@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ui/desktop/dialogs/cancellable_load_dialog.dart';
 import 'ui/desktop/dialogs/app_dialog.dart';
 import 'ui/desktop/dialogs/config_auth_dialog.dart';
+import 'ui/desktop/dialogs/webdav_browser_dialog.dart';
 import 'ui/desktop/widgets/app_motion.dart';
 import 'core/api/cms_json_api.dart';
 import 'core/api/douban_repository.dart';
@@ -54,6 +55,7 @@ import 'core/subtitle/subtitle_models.dart';
 import 'core/subtitle/subtitle_query.dart';
 import 'core/player/models/player_settings.dart';
 import 'core/drive/drive_account_repository.dart';
+import 'core/push/webdav_browse_origin.dart';
 import 'core/player/models/player_state.dart';
 import 'core/player/hls_playlist_probe.dart';
 import 'core/player/mpv_player_engine.dart';
@@ -247,6 +249,10 @@ final startupEntryProvider = Provider<StartupEntry>((ref) => StartupEntry.vod);
 
 /// 设置中心是否打开（独立全屏页，覆盖主视图与播放器）
 final settingsPageOpenProvider = StateProvider<bool>((ref) => false);
+
+/// 设置页打开时的初始分区；恢复 WebDAV 浏览时切到「网盘与 WebDAV」。
+final settingsInitialSectionProvider =
+    StateProvider<SettingsSection>((ref) => SettingsSection.configSources);
 
 // --- 配置源徽标与切换（方案 B · Phase 1）---
 
@@ -4414,6 +4420,8 @@ class YingshiTvApp extends ConsumerWidget {
                     showSettings: showSettings,
                     settingsView: showSettings
                         ? SettingsPage(
+                            initialSection:
+                                ref.watch(settingsInitialSectionProvider),
                             companionSpiderApi:
                                 ref.read(siteApiProvider).companionSpiderApi,
                             liveRepository: ref.read(liveRepositoryProvider),
@@ -4438,6 +4446,9 @@ class YingshiTvApp extends ConsumerWidget {
                                   .state = false;
                               await _launchPlayback(ref, spec);
                             },
+                            onWebDavPlaybackOrigin: (origin) => ref
+                                .read(webDavBrowseOriginProvider.notifier)
+                                .state = origin,
                             isPlaybackActive: () =>
                                 ref.read(activePlaySpecProvider) != null,
                             updateSection: (buildInfo) =>
@@ -5295,6 +5306,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   /// 副本只供详情弹窗判定当前集，不参与播放器逻辑。
   PlaybackSession? _lastPlayedSession;
   bool _restoringDetailDialog = false;
+  bool _restoringWebDavBrowser = false;
   WidgetBuilder? _cinematicPage;
   LocalHistoryEntry? _detailHistory;
   TmdbCardPreview? _cardPreview;
@@ -6762,6 +6774,45 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     }
   }
 
+  /// 播放器退出后恢复 WebDAV 浏览弹窗到起播前的目录。
+  /// 只对「从 WebDAV 弹窗起播」的会话生效；其它来源快照为空，行为不变。
+  /// [closedSpec] 是刚关闭的播放规格，用于核对来源（换源后的地址可能已变，
+  /// 但只要仍在同一次 WebDAV 会话里就照常恢复）。
+  Future<void> _restoreWebDavBrowser(MediaPlaySpec? closedSpec) async {
+    final origin = ref.read(webDavBrowseOriginProvider);
+    if (origin == null || _restoringWebDavBrowser) return;
+    if (closedSpec == null || ref.read(activePlaySpecProvider) != null) return;
+    // 起播失败时快照可能残留：只有这次关闭的确实是那份快照对应的播放才恢复，
+    // 否则丢弃，避免下次从别处播放退出后误弹 WebDAV 浏览器。
+    if (closedSpec.url != origin.playUrl) {
+      ref.read(webDavBrowseOriginProvider.notifier).state = null;
+      return;
+    }
+    // 一次性消费：无论能否重开，都不让同一份快照复活第二次。
+    ref.read(webDavBrowseOriginProvider.notifier).state = null;
+    _restoringWebDavBrowser = true;
+    try {
+      // 等播放器层先完成一次重建，避免与「隐藏播放器」抢同一帧
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      ref.read(settingsInitialSectionProvider.notifier).state =
+          SettingsSection.drive;
+      ref.read(settingsPageOpenProvider.notifier).state = true;
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      await showAppDialog<MediaPlaySpec>(
+        context: context,
+        builder: (_) => WebDavBrowserDialog(
+          restoreOrigin: origin,
+          onPlaybackOrigin: (next) =>
+              ref.read(webDavBrowseOriginProvider.notifier).state = next,
+        ),
+      );
+    } finally {
+      _restoringWebDavBrowser = false;
+    }
+  }
+
   /// 详情页选集播放（薄封装）：立意图 → 解析 → 启动，见 [startEpisodePlaybackWithIntent]。
   /// 管线与播放内切集共用（顶层 `_startEpisodePlayback` / `_switchEpisode`）。
   Future<void> _startPlayEpisode(VodItem item, EpisodeSelection selection,
@@ -7048,6 +7099,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           ref.read(playbackIntentProvider.notifier).state = null;
           return _launchPlayback(ref, spec);
         },
+        onPlaybackOrigin: (origin) => ref
+            .read(webDavBrowseOriginProvider.notifier)
+            .state = origin,
       ),
     );
   }
@@ -7183,6 +7237,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       if (previous != null && next == null) {
         _recordStartupEntry(StartupEntry.vod);
         _restorePlaybackOriginDetail();
+        unawaited(_restoreWebDavBrowser(previous));
         // ⑤-2 冷启动直播直连：离开播放器后恢复被推迟的主视图加载
         if (_startupLiveEntryPending) {
           _startupLiveEntryPending = false;

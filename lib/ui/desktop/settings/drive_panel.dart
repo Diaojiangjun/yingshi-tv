@@ -9,12 +9,16 @@ class DriveSettingsPanel extends StatefulWidget {
     super.key,
     required this.repository,
     this.onPlayMedia,
+    this.onPlaybackOrigin,
   });
 
   final DriveAccountRepository repository;
 
   /// WebDAV 里选中媒体后的播放回调；缺省只浏览不播放。
   final Future<void> Function(MediaPlaySpec spec)? onPlayMedia;
+
+  /// WebDAV 里选中媒体时上报浏览快照，退出播放器后回到原目录。
+  final ValueChanged<WebDavBrowseOrigin>? onPlaybackOrigin;
 
   @override
   State<DriveSettingsPanel> createState() => _DriveSettingsPanelState();
@@ -59,7 +63,9 @@ class _DriveSettingsPanelState extends State<DriveSettingsPanel> {
   Future<void> _openWebDav() async {
     final spec = await showAppDialog<MediaPlaySpec>(
       context: context,
-      builder: (_) => const WebDavBrowserDialog(),
+      builder: (_) => WebDavBrowserDialog(
+        onPlaybackOrigin: widget.onPlaybackOrigin,
+      ),
     );
     await _readWebDavProfiles();
     if (spec == null || !mounted) return;

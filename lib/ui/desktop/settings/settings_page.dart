@@ -64,6 +64,7 @@ import 'source_history_table.dart';
 import 'tmdb_settings_card.dart';
 import '../keyboard/player_shortcuts.dart';
 import '../../../core/drive/drive_account_repository.dart';
+import '../../../core/push/webdav_browse_origin.dart';
 import '../../../core/player/models/player_state.dart';
 import '../../../core/push/webdav_profile_store.dart';
 import '../dialogs/webdav_browser_dialog.dart';
@@ -158,6 +159,9 @@ class SettingsPage extends StatefulWidget {
   /// WebDAV 里选中媒体后的播放回调；缺省只浏览不播放。
   final Future<void> Function(MediaPlaySpec spec)? onPlayMedia;
 
+  /// WebDAV 起播时上报浏览快照，退出播放器后回到原目录。
+  final ValueChanged<WebDavBrowseOrigin>? onWebDavPlaybackOrigin;
+
   const SettingsPage({
     super.key,
     required this.configRepository,
@@ -184,6 +188,7 @@ class SettingsPage extends StatefulWidget {
     this.liveRepository,
     this.driveAccounts,
     this.onPlayMedia,
+    this.onWebDavPlaybackOrigin,
   });
 
   @override
@@ -302,6 +307,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                       key: const ValueKey('settings-drive'),
                                       repository: accounts,
                                       onPlayMedia: widget.onPlayMedia,
+                                      onPlaybackOrigin:
+                                          widget.onWebDavPlaybackOrigin,
                                     ),
                                   null => const SizedBox.shrink(),
                                 },
