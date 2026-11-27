@@ -1,6 +1,6 @@
 ; Script generated for YingshiTV Windows x64 Installer
 #ifndef AppVersion
-  #define AppVersion "1.2.1"
+  #define AppVersion "1.2.2"
 #endif
 #ifndef SourceDir
   #error SourceDir must be the clean application stage created by scripts/package_tree.ps1

@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/平台-Windows%2010%2F11%20x64-0078D4" alt="平台">
-  <img src="https://img.shields.io/badge/版本-1.2.1-2ea44f" alt="版本">
+  <img src="https://img.shields.io/badge/版本-1.2.2-2ea44f" alt="版本">
   <img src="https://img.shields.io/badge/许可证-GPL--3.0-blue" alt="许可证">
   <a href="https://linux.do" target="_blank">
     <img src="https://img.shields.io/badge/社区-LINUXDO-blue" alt="社区">
@@ -118,7 +118,7 @@
 ### 首页
 
 <p align="center">
-  <img src="assets/snapshot/home.png?v=1.2.1" alt="影视 首页：左侧导航、顶部搜索与海报网格" width="900">
+  <img src="assets/snapshot/home.png?v=1.2.2" alt="影视 首页：左侧导航、顶部搜索与海报网格" width="900">
 </p>
 
 <p align="center">左侧导航 + 顶部搜索 + 站点分类横栏 + 海报网格；站点与分类都能一键切换。</p>
@@ -134,7 +134,7 @@
 ### 设置
 
 <p align="center">
-  <img src="assets/snapshot/settings.png?v=1.2.1" alt="影视 设置" width="900">
+  <img src="assets/snapshot/settings.png?v=1.2.2" alt="影视 设置" width="900">
 </p>
 
 <p align="center">主题与壁纸、播放器、数据目录、站点自检与备份恢复集中在这里。</p>
