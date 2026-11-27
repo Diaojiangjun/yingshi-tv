@@ -27,6 +27,7 @@ class DriveSettingsPanel extends StatefulWidget {
 class _DriveSettingsPanelState extends State<DriveSettingsPanel> {
   List<WebDavProfile> _webDavProfiles = const <WebDavProfile>[];
   bool _webDavReadable = true;
+  bool _showHelp = false;
 
   @override
   void initState() {
@@ -63,9 +64,8 @@ class _DriveSettingsPanelState extends State<DriveSettingsPanel> {
   Future<void> _openWebDav() async {
     final spec = await showAppDialog<MediaPlaySpec>(
       context: context,
-      builder: (_) => WebDavBrowserDialog(
-        onPlaybackOrigin: widget.onPlaybackOrigin,
-      ),
+      builder: (_) =>
+          WebDavBrowserDialog(onPlaybackOrigin: widget.onPlaybackOrigin),
     );
     await _readWebDavProfiles();
     if (spec == null || !mounted) return;
@@ -92,58 +92,123 @@ class _DriveSettingsPanelState extends State<DriveSettingsPanel> {
           ),
           const SizedBox(height: 12),
         ],
+        const _DriveSectionLabel('网盘账号'),
         DriveAccountsPanel(repository: widget.repository),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+        const _DriveSectionLabel('服务器'),
         Container(
           decoration: BoxDecoration(
             color: palette.card,
             borderRadius: BorderRadius.circular(AppRadii.md),
             border: Border.all(color: palette.border),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
-            leading: Icon(
-              Icons.folder_open_rounded,
-              size: 20,
-              color: palette.accentInk,
-            ),
-            title: Text(
-              'WebDAV',
-              style: TextStyle(
-                fontSize: AppType.label,
-                fontWeight: FontWeight.w600,
-                color: palette.textTitle,
+          child: Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
+              leading: Icon(
+                Icons.folder_open_rounded,
+                size: 20,
+                color: palette.accentInk,
+              ),
+              title: Text(
+                'WebDAV',
+                style: TextStyle(
+                  fontSize: AppType.label,
+                  fontWeight: FontWeight.w600,
+                  color: palette.textTitle,
+                ),
+              ),
+              subtitle: Text(
+                _webDavReadable
+                    ? '${_webDavProfiles.length} 个已保存服务器 · 浏览并按需播放'
+                    : '已保存的连接无法读取，可重新添加',
+                style: TextStyle(
+                  fontSize: AppType.caption,
+                  color: palette.textSub,
+                ),
+              ),
+              trailing: OutlinedButton(
+                key: const ValueKey('settings-webdav-open'),
+                style: _outlinedStyle(context),
+                onPressed: _openWebDav,
+                child: const Text('管理 / 浏览'),
               ),
             ),
-            subtitle: Text(
-              _webDavReadable
-                  ? '${_webDavProfiles.length} 个已保存服务器 · 浏览并按需播放'
-                  : '已保存的连接无法读取，可重新添加',
+          ),
+        ),
+        const SizedBox(height: 10),
+        _DriveHelpNote(
+          expanded: _showHelp,
+          onToggle: () => setState(() => _showHelp = !_showHelp),
+        ),
+      ],
+    );
+  }
+}
+
+class _DriveSectionLabel extends StatelessWidget {
+  const _DriveSectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: AppType.caption,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.6,
+          color: palette.textSub,
+        ),
+      ),
+    );
+  }
+}
+
+class _DriveHelpNote extends StatelessWidget {
+  const _DriveHelpNote({required this.expanded, required this.onToggle});
+
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextButton.icon(
+          onPressed: onToggle,
+          icon: Icon(
+            Icons.help_outline_rounded,
+            size: 16,
+            color: palette.textSub,
+          ),
+          label: Text(
+            expanded ? '收起登录说明' : '登录与凭据说明',
+            style: TextStyle(fontSize: AppType.caption, color: palette.textSub),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
+            child: Text(
+              '扫码登录使用系统 WebView2 打开网盘官方登录页，登录成功后自动读取 Cookie。'
+              '手动粘贴适用于需要短信验证、或扫码页打不开的情况。'
+              '凭据不会上传到任何服务器，也不会写入日志；退出应用后仍然保留，'
+              '可在对应网盘上点「清除」删除。',
               style: TextStyle(
                 fontSize: AppType.caption,
                 color: palette.textSub,
+                height: 1.6,
               ),
             ),
-            trailing: OutlinedButton(
-              key: const ValueKey('settings-webdav-open'),
-              style: _outlinedStyle(context),
-              onPressed: _openWebDav,
-              child: const Text('管理 / 浏览'),
-            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          '扫码登录使用系统 WebView2 打开网盘官方登录页，登录成功后自动读取 Cookie。'
-          '手动粘贴适用于需要短信验证、或扫码页打不开的情况。'
-          '凭据不会上传到任何服务器，也不会写入日志；退出应用后仍然保留，'
-          '可在对应网盘上点「清除」删除。',
-          style: TextStyle(
-            fontSize: AppType.caption,
-            color: palette.textSub,
-            height: 1.6,
-          ),
-        ),
       ],
     );
   }

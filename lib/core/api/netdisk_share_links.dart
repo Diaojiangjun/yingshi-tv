@@ -12,7 +12,9 @@ class NetdiskShareLink {
 
   @override
   bool operator ==(Object other) =>
-      other is NetdiskShareLink && other.provider == provider && other.url == url;
+      other is NetdiskShareLink &&
+      other.provider == provider &&
+      other.url == url;
 
   @override
   int get hashCode => Object.hash(provider, url);
@@ -40,6 +42,8 @@ const List<(String, String)> _providers = [
   ('123912.com', '123 云盘'),
   ('123592.com', '123 云盘'),
   ('pan.xunlei.com', '迅雷云盘'),
+  ('guangyapan.com', '光鸭云盘'),
+  ('guangyapan.cn', '光鸭云盘'),
   ('caiyun.139.com', '移动云盘'),
   ('yun.139.com', '移动云盘'),
 ];
@@ -52,7 +56,9 @@ const List<(String, String)> _providers = [
 final RegExp _linkPattern = RegExp(
   r'(?<![\w.\-])(?:https?://)?((?:[\w-]+\.)*(?:'
   '${_providers.map((p) => RegExp.escape(p.$1)).join('|')}'
-  r'))(?::\d+)?((?:[/?](?:#/|[^\s#$"' "'" r'<>，。；、！？（）【】「」《》])*)?)',
+  r'))(?::\d+)?((?:[/?](?:#/|[^\s#$"'
+  "'"
+  r'<>，。；、！？（）【】「」《》])*)?)',
   caseSensitive: false,
 );
 
@@ -86,7 +92,9 @@ List<NetdiskShareLink> extractNetdiskShareLinks(VodDetail detail) {
     if (item.content != null) item.content!,
     if (item.remarks != null) item.remarks!,
   ];
-  return _dedupe([for (final text in texts) ...extractNetdiskShareLinksFromText(text)]);
+  return _dedupe([
+    for (final text in texts) ...extractNetdiskShareLinksFromText(text),
+  ]);
 }
 
 String? _providerOf(String host) {
@@ -99,10 +107,16 @@ String? _providerOf(String host) {
 /// 去重：同一链接只留一次；同一分享既有带参数版本又有裸链接时只留带参数的（保留提取码）。
 List<NetdiskShareLink> _dedupe(List<NetdiskShareLink> links) {
   final seen = <String>{};
-  final unique = [for (final link in links) if (seen.add(link.url)) link];
+  final unique = [
+    for (final link in links)
+      if (seen.add(link.url)) link,
+  ];
   return [
     for (final link in unique)
-      if (!unique.any((other) => other.url != link.url && other.url.startsWith('${link.url}?')))
+      if (!unique.any(
+        (other) =>
+            other.url != link.url && other.url.startsWith('${link.url}?'),
+      ))
         link,
   ];
 }

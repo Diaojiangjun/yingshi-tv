@@ -9,6 +9,9 @@ import '../companion/companion_process_manager.dart';
 import '../diagnostics/error_log.dart';
 import '../companion/companion_spider_api.dart';
 import '../config/models/vod_config.dart';
+import '../drive/drive_spider_env.dart';
+import '../drive/drive_spider_ext.dart';
+import '../drive/netdisk_share_resolver.dart';
 import '../live/live_script_catalog.dart';
 import 'cms_json_api.dart';
 import 'models/vod_models.dart';
@@ -24,13 +27,9 @@ class PrewarmStatus {
 
   static const PrewarmStatus idle = PrewarmStatus._(false, false, '');
 
-  const PrewarmStatus.running(this.message)
-      : running = true,
-        failed = false;
+  const PrewarmStatus.running(this.message) : running = true, failed = false;
 
-  const PrewarmStatus.failed(this.message)
-      : running = false,
-        failed = true;
+  const PrewarmStatus.failed(this.message) : running = false, failed = true;
 }
 
 /// 统一站源请求调度与分发 API (SiteApi)
@@ -48,16 +47,48 @@ class SiteApi {
   final bool Function()? selfCheckEnabled;
 
   /// 首次启动预热状态的对外窗口（UI 顶部提示条监听它）。
-  final ValueNotifier<PrewarmStatus> prewarm = ValueNotifier(PrewarmStatus.idle);
+  final ValueNotifier<PrewarmStatus> prewarm = ValueNotifier(
+    PrewarmStatus.idle,
+  );
+
+  /// 当前可注入 Spider `ext` 的网盘凭据（provider → Cookie / Token）。
+  final Map<String, String> Function()? driveCredentials;
+
+  /// 夸克 / UC / 百度分享解链器；为空时不做本机解链。
+  final NetdiskShareResolver? netdiskShareResolver;
 
   SiteApi({
     CmsJsonApi? cmsApi,
     CompanionSpiderApi? companionSpiderApi,
     CompanionProcessManager? companionManager,
     this.selfCheckEnabled,
-  })  : cmsApi = cmsApi ?? CmsJsonApi(),
-        companionManager = companionManager ?? CompanionProcessManager(),
-        companionSpiderApi = companionSpiderApi ?? CompanionSpiderApi(processManager: companionManager);
+    this.driveCredentials,
+    this.netdiskShareResolver,
+  }) : cmsApi = cmsApi ?? CmsJsonApi(),
+       companionManager = companionManager ?? CompanionProcessManager(),
+       companionSpiderApi =
+           companionSpiderApi ??
+           CompanionSpiderApi(processManager: companionManager);
+
+  Site _withDriveCredentials(Site site) {
+    final credentials = driveCredentials?.call() ?? const <String, String>{};
+    if (credentials.isEmpty) return site;
+    final enriched = enrichDriveSpiderExt(site.ext, credentials);
+    _syncCloudDrive(enriched, credentials);
+    if (enriched == (site.ext ?? '')) return site;
+    return site.copyWith(ext: enriched);
+  }
+
+  /// Cloud-drive 类加固蜘蛛从本机文件读 `quarkCookie` 等字段。
+  void _syncCloudDrive(String? ext, Map<String, String> credentials) {
+    final state = companionManager.stateDirectory;
+    if (state == null) return;
+    syncCloudDriveFile(
+      ext: ext,
+      credentials: credentials,
+      filesDir: '${state.path}${Platform.pathSeparator}files',
+    );
+  }
 
   /// 预热诊断跟随当前站源服务目录，
   /// 便于在虚拟机/用户机上直接把文件回传（不依赖界面能否打开）。
@@ -68,8 +99,11 @@ class SiteApi {
       if (!dir.existsSync()) dir.createSync(recursive: true);
       final f = File('${dir.path}/prewarm.log');
       final stamp = DateTime.now().toIso8601String();
-      f.writeAsStringSync('[$stamp] $line${String.fromCharCode(10)}',
-          mode: FileMode.append, flush: true);
+      f.writeAsStringSync(
+        '[$stamp] $line${String.fromCharCode(10)}',
+        mode: FileMode.append,
+        flush: true,
+      );
     } catch (_) {
       // 诊断失败不影响主流程
     }
@@ -81,11 +115,15 @@ class SiteApi {
   /// 如果等用户第一次点详情/播放才做，必然踩超时或报错——表现出来就是
   /// 「必须先做一次全局搜索，站点才被激活」。这里在配置加载完就把它做掉。
   int _prewarmRun = 0;
+
   /// 是否已经自动预热过（每进程一次；手动「重试」用 force 绕过）。
   bool _prewarmAttempted = false;
 
-  Future<void> prewarmCompanionJars(List<Site> sites,
-      {int limit = 1, bool force = false}) async {
+  Future<void> prewarmCompanionJars(
+    List<Site> sites, {
+    int limit = 1,
+    bool force = false,
+  }) async {
     // 已有一次预热在跑就不重复（启动触发 + 配置加载触发可能同时到）。
     if (prewarm.value.running) return;
     // 每个进程只自动预热一次：loadSiteData 会在切站 / 换分类 / 刷新时反复调用，
@@ -123,7 +161,8 @@ class SiteApi {
         final ready = await _ensureCompanionReady(site);
         if (!ready) {
           startFailed = true;
-          final why = '伴随服务未能启动（site=${site.key}）'
+          final why =
+              '伴随服务未能启动（site=${site.key}）'
               '｜原因=${companionManager.lastError.isEmpty ? '(空)' : companionManager.lastError}'
               '｜java=${companionManager.resolvedJavaPath ?? '(未解析到)'}';
           ErrorLog.instance.record('预热', why);
@@ -131,10 +170,14 @@ class SiteApi {
         } else {
           startFailed = false;
           // 使用对齐的初始化预算：服务端 90 秒，客户端 105 秒，超时仍按未完成处理。
-          anyOk = await companionSpiderApi.loadSpider(site);
+          anyOk = await companionSpiderApi.loadSpider(
+            _withDriveCredentials(site),
+          );
           if (!anyOk) {
-            ErrorLog.instance.record('预热',
-                '加载未完成（site=${site.key}, api=${site.api}, jar=${site.jar}）');
+            ErrorLog.instance.record(
+              '预热',
+              '加载未完成（site=${site.key}, api=${site.api}, jar=${site.jar}）',
+            );
           }
         }
         if (!anyOk && attempt == 0) {
@@ -161,7 +204,11 @@ class SiteApi {
       final started = await companionManager.start();
       if (started && companionManager.isRunning) {
         // 新进程默认关闭自检：按当前设置补一次下发，失败不影响主流程。
-        unawaited(companionSpiderApi.configureSelfCheck(selfCheckEnabled?.call() ?? false));
+        unawaited(
+          companionSpiderApi.configureSelfCheck(
+            selfCheckEnabled?.call() ?? false,
+          ),
+        );
         return true;
       }
     } catch (_) {}
@@ -204,13 +251,15 @@ class SiteApi {
     await _waitForSpiderReset();
     final generation = _scriptGeneration;
     if (!await _ensureCompanionReady(site)) {
-      throw StateError(companionUnavailableText(source.name, companionManager.status));
+      throw StateError(
+        companionUnavailableText(source.name, companionManager.status),
+      );
     }
     if (generation != _scriptGeneration) {
       throw StateError('直播源已更新，请重新加载');
     }
     final result = await companionSpiderApi.fetchLiveContent(
-      site,
+      _withDriveCredentials(site),
       url: source.url,
       timeout: Duration(seconds: (source.timeout ?? 60).clamp(1, 90)),
     );
@@ -225,12 +274,18 @@ class SiteApi {
     if (site.usesCompanion) {
       final ready = await _ensureCompanionReady(site);
       if (ready) {
-        return companionSpiderApi.fetchHome(site, filter: filter);
+        return companionSpiderApi.fetchHome(
+          _withDriveCredentials(site),
+          filter: filter,
+        );
       }
     }
-    return _cmsFallback(site, () => site.type == 4
-        ? cmsApi.fetchType4Home(site, filter: filter)
-        : cmsApi.fetchHome(site.api, site: site));
+    return _cmsFallback(
+      site,
+      () => site.type == 4
+          ? cmsApi.fetchType4Home(site, filter: filter)
+          : cmsApi.fetchHome(site.api, site: site),
+    );
   }
 
   /// 爬虫类站源在伴随服务没就绪时会退到 CMS 通道（个别站的 ext 里带 HTTP 端点，CMS 能直连）。
@@ -241,7 +296,9 @@ class SiteApi {
       return await call();
     } on UnsupportedError {
       if (!site.usesCompanion) rethrow;
-      throw UnsupportedError(companionUnavailableText(site.name, companionManager.status));
+      throw UnsupportedError(
+        companionUnavailableText(site.name, companionManager.status),
+      );
     }
   }
 
@@ -249,28 +306,39 @@ class SiteApi {
   ///
   /// [extend] 为筛选条件（为空不下发）；[cancelToken] 取消后在途请求被真正中止，
   /// 返回空结果——调用方须自行判断结果是否仍有效，不能把它当作「真的没数据」。
-  Future<VodPageResult> fetchCategory(Site site,
-      {required String categoryId,
-      int page = 1,
-      bool filter = true,
-      Map<String, String> extend = const {},
-      SearchCancelToken? cancelToken}) async {
+  Future<VodPageResult> fetchCategory(
+    Site site, {
+    required String categoryId,
+    int page = 1,
+    bool filter = true,
+    Map<String, String> extend = const {},
+    SearchCancelToken? cancelToken,
+  }) async {
     if (cancelToken?.isCancelled ?? false) return const VodPageResult.empty();
     if (site.usesCompanion) {
       final ready = await _ensureCompanionReady(site);
       if (ready) {
-        return companionSpiderApi.fetchCategory(site,
-            categoryId: categoryId,
-            page: page,
-            filter: filter,
-            extend: extend,
-            cancelToken: cancelToken);
+        return companionSpiderApi.fetchCategory(
+          _withDriveCredentials(site),
+          categoryId: categoryId,
+          page: page,
+          filter: filter,
+          extend: extend,
+          cancelToken: cancelToken,
+        );
       }
     }
     return _cmsFallback(
-        site,
-        () => cmsApi.fetchCategory(site.api, categoryId,
-            page: page, site: site, extend: extend, cancelToken: cancelToken));
+      site,
+      () => cmsApi.fetchCategory(
+        site.api,
+        categoryId,
+        page: page,
+        site: site,
+        extend: extend,
+        cancelToken: cancelToken,
+      ),
+    );
   }
 
   /// 获取视频详情
@@ -278,18 +346,26 @@ class SiteApi {
     if (site.usesCompanion) {
       final ready = await _ensureCompanionReady(site);
       if (ready) {
-        return companionSpiderApi.fetchDetail(site, vodId: vodId);
+        return companionSpiderApi.fetchDetail(
+          _withDriveCredentials(site),
+          vodId: vodId,
+        );
       }
     }
-    return _cmsFallback(site, () => cmsApi.fetchDetail(site.api, vodId, site: site));
+    return _cmsFallback(
+      site,
+      () => cmsApi.fetchDetail(site.api, vodId, site: site),
+    );
   }
 
   /// 站源搜索
-  Future<VodPageResult> search(Site site,
-      {required String keyword,
-      int page = 1,
-      bool quick = false,
-      SearchCancelToken? cancelToken}) async {
+  Future<VodPageResult> search(
+    Site site, {
+    required String keyword,
+    int page = 1,
+    bool quick = false,
+    SearchCancelToken? cancelToken,
+  }) async {
     if (cancelToken?.isCancelled ?? false) {
       return const VodPageResult.empty();
     }
@@ -300,15 +376,32 @@ class SiteApi {
       }
       if (ready) {
         return companionSpiderApi.search(
-          site, keyword: keyword, page: page, quick: quick, cancelToken: cancelToken,
+          _withDriveCredentials(site),
+          keyword: keyword,
+          page: page,
+          quick: quick,
+          cancelToken: cancelToken,
         );
       }
     }
-    return _cmsFallback(site, () => site.type == 4
-        ? cmsApi.searchType4(site, keyword, page: page, quick: quick,
-            cancelToken: cancelToken)
-        : cmsApi.search(site.api, keyword, page: page, site: site,
-            cancelToken: cancelToken));
+    return _cmsFallback(
+      site,
+      () => site.type == 4
+          ? cmsApi.searchType4(
+              site,
+              keyword,
+              page: page,
+              quick: quick,
+              cancelToken: cancelToken,
+            )
+          : cmsApi.search(
+              site.api,
+              keyword,
+              page: page,
+              site: site,
+              cancelToken: cancelToken,
+            ),
+    );
   }
 
   /// parse=1 时判断地址本身是否已是媒体直链：
@@ -316,36 +409,83 @@ class SiteApi {
   /// （解析页常见 `?url=xxx.m3u8`）。`.ts` 分片不算可独立播放的媒体。
   static bool isDirectMediaPath(String url) {
     final uri = Uri.tryParse(url.trim());
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
       return false;
     }
     final path = uri.path.toLowerCase();
     const extensions = [
-      '.m3u8', '.mp4', '.flv', '.mkv', '.webm', '.mov', '.mpd',
-      '.mp3', '.m4a', '.aac', '.flac',
+      '.m3u8',
+      '.mp4',
+      '.flv',
+      '.mkv',
+      '.webm',
+      '.mov',
+      '.mpd',
+      '.mp3',
+      '.m4a',
+      '.aac',
+      '.flac',
     ];
     return extensions.any(path.endsWith);
   }
 
   /// 统一点播解析入口；记忆的档名不存在时默认第一档，其余档位保持未解析。
-  Future<MediaPlaySpec> resolvePlayback(Site? site, {
+  Future<MediaPlaySpec> resolvePlayback(
+    Site? site, {
     required String id,
     required String flag,
     required ParseEngine parseEngine,
     List<Parse> parses = const [],
     String? preferredQualityName,
+    String episodeName = '',
   }) async {
+    // 集地址本身是网盘分享、或线路名 + 集参数能定位到网盘分享时，
+    // 先走本机免转存解链，不交给站源猜测（站源没登录态时只会回「未扫码登录」）。
+    final shareResolver = netdiskShareResolver;
+    if (shareResolver != null && shareResolver.looksLikeShare(id, flag: flag)) {
+      final link = await shareResolver.resolve(
+        id,
+        flag: flag,
+        episodeName: episodeName,
+      );
+      if (!link.ok || link.url.isEmpty) {
+        throw FormatException('网盘解链失败：${link.reason}');
+      }
+      // 直链优先交给 companion 的分块代理：mpv 首次探测不带 Range 时，
+      // 夸克等 CDN 可能回 HLS 清单，直接播放会报「无法识别文件格式」。
+      final proxied = await companionSpiderApi.registerNetdiskProxy(
+        link.url,
+        link.headers,
+      );
+      final headers = proxied == null
+          ? _mergePlaybackHeaders([site?.header, link.headers])
+          : const <String, String>{};
+      return MediaPlaySpec(
+        url: proxied ?? link.url,
+        headers: headers.isEmpty ? null : headers,
+        title: episodeName.isEmpty ? null : episodeName,
+      );
+    }
     if (site == null || (site.type != 4 && !site.usesCompanion)) {
       final prefix = site?.playUrl?.trim() ?? '';
       if (prefix.startsWith('json:')) {
-        final resolved = await parseEngine.parseSiteJson(prefix, id, requestHeaders: site?.header);
+        final resolved = await parseEngine.parseSiteJson(
+          prefix,
+          id,
+          requestHeaders: site?.header,
+        );
         return MediaPlaySpec(
           url: resolved.url,
           headers: _mergePlaybackHeaders([site?.header, resolved.headers]),
         );
       }
       final resolved = await parseEngine.parse(id, flag: flag, parses: parses);
-      return MediaPlaySpec(url: resolved.url, headers: resolved.headers ?? site?.header);
+      return MediaPlaySpec(
+        url: resolved.url,
+        headers: resolved.headers ?? site?.header,
+      );
     }
     final SpiderPlayResult result;
     if (site.type == 4) {
@@ -354,26 +494,44 @@ class SiteApi {
       if (!await _ensureCompanionReady(site)) {
         throw const FormatException('Companion 服务不可用');
       }
-      result = await companionSpiderApi.fetchPlayResult(site, flag: flag, id: id);
+      result = await companionSpiderApi.fetchPlayResult(
+        _withDriveCredentials(site),
+        flag: flag,
+        id: id,
+      );
     }
     final hasQualities = result.qualities.length > 1;
     final sourceQualities = hasQualities
         ? result.qualities
-        : [PlaybackQuality(name: '默认', url: result.url, needsParse: result.needsParse)];
+        : [
+            PlaybackQuality(
+              name: '默认',
+              url: result.url,
+              needsParse: result.needsParse,
+            ),
+          ];
     final qualities = [
       for (final quality in sourceQualities)
         PlaybackQuality(
           name: quality.name,
           url: quality.url,
-          headers: _mergePlaybackHeaders([site.header, result.headers, quality.headers]),
+          headers: _mergePlaybackHeaders([
+            site.header,
+            result.headers,
+            quality.headers,
+          ]),
           needsParse: quality.needsParse,
         ),
     ];
     final preferredIndex = preferredQualityName == null
         ? -1
-        : qualities.indexWhere((quality) => quality.name == preferredQualityName);
-    final defaultIndex = result.qualityIndex >= 0 && result.qualityIndex < qualities.length
-        ? result.qualityIndex : 0;
+        : qualities.indexWhere(
+            (quality) => quality.name == preferredQualityName,
+          );
+    final defaultIndex =
+        result.qualityIndex >= 0 && result.qualityIndex < qualities.length
+        ? result.qualityIndex
+        : 0;
     final index = preferredIndex < 0 ? defaultIndex : preferredIndex;
     final selected = await _resolveSpiderQuality(
       qualities[index],
@@ -386,20 +544,26 @@ class SiteApi {
     return MediaPlaySpec(
       url: selected.url,
       headers: selected.headers.isEmpty ? null : selected.headers,
-      qualities: hasQualities ? List<PlaybackQuality>.unmodifiable(qualities) : const [],
+      qualities: hasQualities
+          ? List<PlaybackQuality>.unmodifiable(qualities)
+          : const [],
       qualityIndex: index,
       liveDanmakuSources: result.liveDanmakuSources,
       subtitles: result.subtitles,
-      mode: result.liveDanmakuSources.isEmpty ? PlaybackMode.vod : PlaybackMode.live,
+      mode: result.liveDanmakuSources.isEmpty
+          ? PlaybackMode.vod
+          : PlaybackMode.live,
       modeSource: result.liveDanmakuSources.isEmpty
-          ? PlaybackModeSource.defaultMode : PlaybackModeSource.defaultLive,
+          ? PlaybackModeSource.defaultMode
+          : PlaybackModeSource.defaultLive,
       startPosition: result.liveDanmakuSources.isEmpty ? null : Duration.zero,
     );
   }
 
   /// 仅解析所选档，不重新请求 playerContent；失败时原 [spec] 保持不变。
   /// 返回值保留会话元数据，并缓存成功档位的解析地址与请求头。
-  Future<MediaPlaySpec> resolveQuality(MediaPlaySpec spec, {
+  Future<MediaPlaySpec> resolveQuality(
+    MediaPlaySpec spec, {
     required int index,
     required String flag,
     required ParseEngine parseEngine,
@@ -422,20 +586,29 @@ class SiteApi {
     );
   }
 
-  Future<PlaybackQuality> _resolveSpiderQuality(PlaybackQuality quality, {
+  Future<PlaybackQuality> _resolveSpiderQuality(
+    PlaybackQuality quality, {
     required String flag,
     required ParseEngine parseEngine,
     required List<Parse> parses,
     String? siteKey,
   }) async {
     final resolved = quality.needsParse && !isDirectMediaPath(quality.url)
-        ? await parseEngine.parse(quality.url, flag: flag, parses: parses, requireResolved: true)
+        ? await parseEngine.parse(
+            quality.url,
+            flag: flag,
+            parses: parses,
+            requireResolved: true,
+          )
         : MediaPlaySpec(url: quality.url);
     final uri = Uri.tryParse(resolved.url);
-    if (uri == null || !['http', 'https', 'rtmp', 'rtsp', 'file'].contains(uri.scheme) ||
+    if (uri == null ||
+        !['http', 'https', 'rtmp', 'rtsp', 'file'].contains(uri.scheme) ||
         (uri.scheme != 'file' && uri.host.isEmpty)) {
-      debugPrint('--> [播放地址无效] site=${siteKey ?? '(清晰度切换)'} flag=$flag needsParse=${quality.needsParse} '
-          'scheme=${uri?.scheme} host=${uri?.host} len=${resolved.url.length}');
+      debugPrint(
+        '--> [播放地址无效] site=${siteKey ?? '(清晰度切换)'} flag=$flag needsParse=${quality.needsParse} '
+        'scheme=${uri?.scheme} host=${uri?.host} len=${resolved.url.length}',
+      );
       throw const FormatException('Spider 未返回有效媒体地址');
     }
     return PlaybackQuality(
@@ -446,12 +619,15 @@ class SiteApi {
   }
 
   static Map<String, String> _mergePlaybackHeaders(
-      Iterable<Map<String, String>?> layers) {
+    Iterable<Map<String, String>?> layers,
+  ) {
     final headers = <String, String>{};
     for (final layer in layers) {
       if (layer == null) continue;
       for (final entry in layer.entries) {
-        headers.removeWhere((key, _) => key.toLowerCase() == entry.key.toLowerCase());
+        headers.removeWhere(
+          (key, _) => key.toLowerCase() == entry.key.toLowerCase(),
+        );
         headers[entry.key] = entry.value;
       }
     }
@@ -464,11 +640,18 @@ class SiteApi {
     if (!await _ensureCompanionReady(site)) {
       throw const FormatException('Companion 服务不可用');
     }
-    return companionSpiderApi.performAction(site, action);
+    return companionSpiderApi.performAction(
+      _withDriveCredentials(site),
+      action,
+    );
   }
 
   /// 仅获取地址的兼容入口，不用于应用选集播放。
-  Future<String> fetchPlayUrl(Site site, {required String flag, required String id}) async {
+  Future<String> fetchPlayUrl(
+    Site site, {
+    required String flag,
+    required String id,
+  }) async {
     if (site.type == 4) {
       return (await cmsApi.fetchPlayResult(site, flag: flag, id: id)).url;
     }
@@ -476,6 +659,10 @@ class SiteApi {
     if (!await _ensureCompanionReady(site)) {
       throw const FormatException('Companion 服务不可用');
     }
-    return companionSpiderApi.fetchPlayUrl(site, flag: flag, id: id);
+    return companionSpiderApi.fetchPlayUrl(
+      _withDriveCredentials(site),
+      flag: flag,
+      id: id,
+    );
   }
 }

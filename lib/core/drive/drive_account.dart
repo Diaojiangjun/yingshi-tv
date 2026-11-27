@@ -32,6 +32,12 @@ class DriveAccount {
     _ => null,
   };
 
+  /// 服务端已确认处于访客态（未登录 / 会话失效）。
+  ///
+  /// 与 [valid] 的区别：`valid == false` 只说明这次校验失败，[isGuest] 是持久化的
+  /// 明确结论，注入蜘蛛时应跳过；哔哩哔哩属于可选增强，不参与该过滤。
+  bool get isGuest => extra['guest'] == 'true';
+
   int get checkedAt => int.tryParse(extra['checkedAt'] ?? '') ?? 0;
 
   DriveAccount copyWith({

@@ -62,7 +62,7 @@ class DriveProbe {
         message: provider.usesToken ? 'Token 为空' : 'Cookie 为空',
       );
     }
-    if (provider.usesToken) {
+    if (provider.usesToken && provider.id != 'aliyun') {
       return DriveProbeResult(
         provider: provider.id,
         valid: null,
@@ -79,6 +79,7 @@ class DriveProbe {
         'baidu' => await _checkBaidu(client, value),
         '115' => await _check115(client, value),
         'bili' => await _checkBili(client, value),
+        'aliyun' => await _checkAliyun(client, value),
         _ => DriveProbeResult(
           provider: provider.id,
           valid: null,
@@ -89,6 +90,90 @@ class DriveProbe {
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// 阿里云盘：refresh_token 换 access_token 成功即视为登录有效。
+  ///
+  /// 不把「取不到昵称」当失败：账号信息接口偶发风控，只要 token 能换到
+  /// access_token，分享解链就能用；只有明确的 401/403 才判失效。
+  Future<DriveProbeResult> _checkAliyun(
+    HttpClient client,
+    String credential,
+  ) async {
+    var refreshToken = credential;
+    var accessToken = '';
+    if (credential.startsWith('{') && credential.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(credential);
+        if (decoded is Map) {
+          refreshToken = (decoded['refresh_token'] ?? '').toString().trim();
+          accessToken = (decoded['access_token'] ?? '').toString().trim();
+        }
+      } catch (_) {
+        // 保留原样，按 refresh_token 尝试。
+      }
+    }
+    var refreshed = false;
+    if (refreshToken.isNotEmpty) {
+      try {
+        final res = await _request(
+          client,
+          'https://auth.alipan.com/v2/account/token',
+          method: 'POST',
+          headers: <String, String>{
+            HttpHeaders.userAgentHeader: _browserUa,
+            HttpHeaders.contentTypeHeader: 'application/json',
+            HttpHeaders.acceptHeader: 'application/json',
+          },
+          body: jsonEncode(<String, Object?>{
+            'refresh_token': refreshToken,
+            'grant_type': 'refresh_token',
+          }),
+        );
+        final token = '${res.json['access_token'] ?? ''}'.trim();
+        if (token.isNotEmpty) {
+          accessToken = token;
+          refreshed = true;
+        }
+      } catch (_) {
+        // 网络异常：交给下面的账号信息请求再判一次。
+      }
+    }
+    if (accessToken.isEmpty) accessToken = credential;
+
+    final res = await _request(
+      client,
+      'https://api.alipan.com/adrive/v1/user/get',
+      headers: <String, String>{
+        HttpHeaders.userAgentHeader: _browserUa,
+        HttpHeaders.acceptHeader: 'application/json',
+        'Authorization': 'Bearer $accessToken',
+        'X-Canary': 'client=web,app=share,version=v2.3.1',
+      },
+    );
+    final data = res.json['data'];
+    final name = data is Map
+        ? (data['name'] ??
+                  data['nick_name'] ??
+                  data['nickName'] ??
+                  data['user_name'] ??
+                  '')
+              .toString()
+              .trim()
+        : '';
+    final valid = refreshed || (res.status == 200 && data is Map);
+    final expired = res.status == 401 || res.status == 403;
+    return DriveProbeResult(
+      provider: 'aliyun',
+      valid: valid ? true : (expired ? false : null),
+      username: valid ? name : '',
+      credential: credential,
+      message: valid
+          ? '登录有效'
+          : expired
+          ? 'Token 无效或已过期'
+          : '校验接口返回异常（HTTP ${res.status}）',
+    );
   }
 
   Future<DriveProbeResult> _checkQuark(HttpClient client, String cookie) async {

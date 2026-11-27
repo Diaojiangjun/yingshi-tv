@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/player/models/player_state.dart';
@@ -9,6 +11,14 @@ import '../widgets/app_message.dart';
 import '../widgets/focus_ring.dart';
 import 'playback_source_nav.dart';
 import 'player_source_switch_actions.dart';
+
+/// 播放失败面板里的网盘登录入口。
+class PlayerDriveLoginNav {
+  const PlayerDriveLoginNav({required this.label, required this.onLogin});
+
+  final String label;
+  final Future<void> Function() onLogin;
+}
 
 /// 播放失败面板（④ 直播播放报错诊断闭环）。
 ///
@@ -28,6 +38,7 @@ class PlaybackErrorPanel extends StatefulWidget {
   final List<String> engineLogs;
   final PlayerSourceSwitchNav? sourceSwitchNav;
   final PlayerExternalNav? externalNav;
+  final PlayerDriveLoginNav? driveLoginNav;
   final VoidCallback? onOpenChannelList;
   final VoidCallback? onOpenEpisodeList;
 
@@ -38,6 +49,7 @@ class PlaybackErrorPanel extends StatefulWidget {
     required this.engineLogs,
     this.sourceSwitchNav,
     this.externalNav,
+    this.driveLoginNav,
     this.onOpenChannelList,
     this.onOpenEpisodeList,
   });
@@ -81,97 +93,116 @@ class _PlaybackErrorPanelState extends State<PlaybackErrorPanel> {
       liveRegion: true,
       child: SingleChildScrollView(
         child: Container(
-        width: 480,
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        decoration: BoxDecoration(
-          color: palette.playerChrome,
-          borderRadius: BorderRadius.circular(AppRadii.sm),
-          border: Border.all(color: palette.danger.withValues(alpha: 0.5)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.error_outline_rounded,
-                    size: 20, color: palette.danger),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    friendlyPlaybackError(widget.rawError),
-                    style: TextStyle(
-                        color: palette.playerText, fontSize: AppType.label),
+          width: 480,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: palette.playerChrome,
+            borderRadius: BorderRadius.circular(AppRadii.sm),
+            border: Border.all(color: palette.danger.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 20,
+                    color: palette.danger,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.xs,
-              children: [
-                if (widget.onOpenEpisodeList != null)
-                  _PanelTextButton(
-                    icon: Icons.video_library_rounded,
-                    label: '选线路与选集',
-                    onPressed: widget.onOpenEpisodeList!,
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      friendlyPlaybackError(widget.rawError),
+                      style: TextStyle(
+                        color: palette.playerText,
+                        fontSize: AppType.label,
+                      ),
+                    ),
                   ),
-                if (externalNav != null)
-                  _PanelTextButton(
-                    key: const ValueKey('playback-error-external'),
-                    icon: Icons.open_in_new_rounded,
-                    label: externalNav.busy ? '正在打开外部播放器…' : '外部播放器',
-                    busy: externalNav.busy,
-                    onPressed: externalNav.enabled && !externalNav.busy
-                        ? _launchExternalPlayer
-                        : null,
-                  ),
-                if (widget.onOpenChannelList != null)
-                  _PanelTextButton(
-                    key: const ValueKey('playback-error-channels'),
-                    icon: Icons.playlist_play_rounded,
-                    label: '选台',
-                    onPressed: widget.onOpenChannelList!,
-                  ),
-                _PanelTextButton(
-                  icon: _expanded
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded,
-                  label: '详情',
-                  onPressed: _toggleExpanded,
-                ),
-                _PanelTextButton(
-                  icon: Icons.copy_rounded,
-                  label: '复制诊断',
-                  onPressed: _copyDiagnostics,
-                ),
-              ],
-            ),
-            if (externalStatus != null && externalStatus.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
-                  externalStatus,
-                  style: TextStyle(
-                    color: palette.playerText.withValues(alpha: 0.7),
-                    fontSize: AppType.caption,
-                  ),
-                ),
+                ],
               ),
-            if (widget.sourceSwitchNav != null)
-              PlayerSourceSwitchActions(nav: widget.sourceSwitchNav!, onPlayerChrome: true),
-            AnimatedSize(
-              duration: AppMotion.enter,
-              curve: AppMotion.ease,
-              alignment: Alignment.topCenter,
-              child:
-                  _expanded ? _buildDetails(context) : const SizedBox.shrink(),
-            ),
-          ],
-        ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  if (widget.onOpenEpisodeList != null)
+                    _PanelTextButton(
+                      icon: Icons.video_library_rounded,
+                      label: '选线路与选集',
+                      onPressed: widget.onOpenEpisodeList!,
+                    ),
+                  if (widget.driveLoginNav != null)
+                    _PanelTextButton(
+                      key: const ValueKey('playback-error-drive-login'),
+                      icon: Icons.cloud_outlined,
+                      label: widget.driveLoginNav!.label,
+                      onPressed: () =>
+                          unawaited(widget.driveLoginNav!.onLogin()),
+                    ),
+                  if (externalNav != null)
+                    _PanelTextButton(
+                      key: const ValueKey('playback-error-external'),
+                      icon: Icons.open_in_new_rounded,
+                      label: externalNav.busy ? '正在打开外部播放器…' : '外部播放器',
+                      busy: externalNav.busy,
+                      onPressed: externalNav.enabled && !externalNav.busy
+                          ? _launchExternalPlayer
+                          : null,
+                    ),
+                  if (widget.onOpenChannelList != null)
+                    _PanelTextButton(
+                      key: const ValueKey('playback-error-channels'),
+                      icon: Icons.playlist_play_rounded,
+                      label: '选台',
+                      onPressed: widget.onOpenChannelList!,
+                    ),
+                  _PanelTextButton(
+                    icon: _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    label: '详情',
+                    onPressed: _toggleExpanded,
+                  ),
+                  _PanelTextButton(
+                    icon: Icons.copy_rounded,
+                    label: '复制诊断',
+                    onPressed: _copyDiagnostics,
+                  ),
+                ],
+              ),
+              if (externalStatus != null && externalStatus.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
+                  child: Text(
+                    externalStatus,
+                    style: TextStyle(
+                      color: palette.playerText.withValues(alpha: 0.7),
+                      fontSize: AppType.caption,
+                    ),
+                  ),
+                ),
+              if (widget.sourceSwitchNav != null)
+                PlayerSourceSwitchActions(
+                  nav: widget.sourceSwitchNav!,
+                  onPlayerChrome: true,
+                ),
+              AnimatedSize(
+                duration: AppMotion.enter,
+                curve: AppMotion.ease,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? _buildDetails(context)
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -207,14 +238,21 @@ class _PlaybackErrorPanelState extends State<PlaybackErrorPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DetailRow(
-                  label: '原始错误', value: _rawErrorText(), palette: palette),
+                label: '原始错误',
+                value: _rawErrorText(),
+                palette: palette,
+              ),
               _DetailRow(
-                  label: '地址', value: maskedUrl ?? '(无)', palette: palette),
+                label: '地址',
+                value: maskedUrl ?? '(无)',
+                palette: palette,
+              ),
               _DetailRow(label: '请求头', value: headerText, palette: palette),
               _DetailRow(
-                  label: '引擎日志（最近 ${logs.length} 条）',
-                  value: logText,
-                  palette: palette),
+                label: '引擎日志（最近 ${logs.length} 条）',
+                value: logText,
+                palette: palette,
+              ),
             ],
           ),
         ),
@@ -241,8 +279,11 @@ class _DetailRow extends StatelessWidget {
   final String value;
   final AppPalette palette;
 
-  const _DetailRow(
-      {required this.label, required this.value, required this.palette});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    required this.palette,
+  });
 
   @override
   Widget build(BuildContext context) {

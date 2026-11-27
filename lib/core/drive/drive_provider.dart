@@ -1,7 +1,7 @@
 /// 网盘商元数据。
 ///
 /// [DriveProvider.id] 同时是蜘蛛 `ext` 里的注入键（与 TVBox 生态一致）：
-/// `quark` / `uc` / `baidu` / `115` / `bili` / `thunder` / `guangya`。
+/// `quark` / `uc` / `baidu` / `115` / `aliyun` / `bili` / `thunder` / `guangya`。
 ///
 /// 本文件不依赖 `dart:io`，只放常量与查询函数，便于在纯 Dart 测试里引用。
 library;
@@ -117,6 +117,20 @@ const List<DriveProvider> driveProviders = <DriveProvider>[
       'https://proapi.115.com',
     ],
     note: '需要短信验证时请改用「手动 Cookie」',
+  ),
+  DriveProvider(
+    id: 'aliyun',
+    name: '阿里云盘',
+    cookieHost: 'alipan.com',
+    authNames: <String>['refresh_token', 'access_token'],
+    loginUrl: 'https://www.alipan.com/',
+    cookieScopes: <String>[
+      'https://www.alipan.com',
+      'https://api.alipan.com',
+      'https://auth.alipan.com',
+    ],
+    kind: DriveCredentialKind.token,
+    note: '粘贴 refresh_token；分享解链时自动换取 access_token',
   ),
   DriveProvider(
     id: 'bili',

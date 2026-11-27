@@ -9,34 +9,43 @@ class PlaybackSourceChange {
   final String statusText;
 }
 
-final playbackSourceChangeProvider =
-    StateProvider<PlaybackSourceChange?>((ref) => null);
+final playbackSourceChangeProvider = StateProvider<PlaybackSourceChange?>(
+  (ref) => null,
+);
 
-final _sourceRecoverySnapshotProvider =
-    StateProvider<_SourcePlaybackSnapshot?>((ref) {
-  ref.watch(activePlaySpecProvider);
-  return null;
-});
+final _sourceRecoverySnapshotProvider = StateProvider<_SourcePlaybackSnapshot?>(
+  (ref) {
+    ref.watch(activePlaySpecProvider);
+    return null;
+  },
+);
 
 /// Preferences live only as long as the current configuration, keyed by site.
-final playbackQualityPreferencesProvider =
-    StateProvider<Map<String, String>>((ref) {
+final playbackQualityPreferencesProvider = StateProvider<Map<String, String>>((
+  ref,
+) {
   ref.watch(vodConfigProvider);
   return const {};
 });
 
 final switchPlaybackQualityProvider = Provider<Future<void> Function(int)>(
-    (ref) => (index) => _switchPlaybackQuality(ref, index));
+  (ref) =>
+      (index) => _switchPlaybackQuality(ref, index),
+);
 
 final switchLiveLineProvider = Provider<Future<void> Function(int)>(
-    (ref) => (index) => _switchLiveLine(ref, index));
+  (ref) =>
+      (index) => _switchLiveLine(ref, index),
+);
 
-typedef PlaybackSourceChooser = Future<CrossSiteCandidate?> Function(
-    List<CrossSiteCandidate> candidates);
+typedef PlaybackSourceChooser =
+    Future<CrossSiteCandidate?> Function(List<CrossSiteCandidate> candidates);
 
 final switchPlaybackSourceProvider =
     Provider<Future<void> Function(PlaybackSourceChooser)>(
-        (ref) => (choose) => _switchPlaybackSource(ref, choose));
+      (ref) =>
+          (choose) => _switchPlaybackSource(ref, choose),
+    );
 
 bool _sourceChangeBlocked(Ref ref) =>
     ref.read(playbackSourceChangeProvider) != null ||
@@ -46,10 +55,10 @@ bool _sourceChangeBlocked(Ref ref) =>
 
 class _SourceChangeOwner {
   _SourceChangeOwner(this.ref, this.kind)
-      : epoch = ++_playbackSessionEpoch,
-        config = ref.read(configRepositoryProvider).currentVodConfig,
-        siteKey = ref.read(configRepositoryProvider).selectedSite?.key,
-        cancelToken = SearchCancelToken() {
+    : epoch = ++_playbackSessionEpoch,
+      config = ref.read(configRepositoryProvider).currentVodConfig,
+      siteKey = ref.read(configRepositoryProvider).selectedSite?.key,
+      cancelToken = SearchCancelToken() {
     ref.read(playbackSourceChangeProvider.notifier).state =
         PlaybackSourceChange(kind, cancelToken, '正在查找…');
     final autoLine = ref.read(autoLineSwitchProvider);
@@ -93,7 +102,9 @@ class _SourceChangeOwner {
       !_disposed &&
       epoch == _playbackSessionEpoch &&
       identical(
-          ref.read(playbackSourceChangeProvider)?.cancelToken, cancelToken);
+        ref.read(playbackSourceChangeProvider)?.cancelToken,
+        cancelToken,
+      );
   bool get isCurrent =>
       ownsPlayback &&
       !cancelToken.isCancelled &&
@@ -129,7 +140,9 @@ class _SourceChangeOwner {
     final owned = ownsPlayback;
     _closeSubscriptions();
     if (identical(
-        ref.read(playbackSourceChangeProvider)?.cancelToken, cancelToken)) {
+      ref.read(playbackSourceChangeProvider)?.cancelToken,
+      cancelToken,
+    )) {
       ref.read(playbackSourceChangeProvider.notifier).state = null;
     }
     _disposed = true;
@@ -150,7 +163,9 @@ void _armSourceSession(Ref ref) {
       ref.read(activePlaySpecProvider)?.isLive != false) {
     return;
   }
-  ref.read(autoLineSwitchProvider).arm(
+  ref
+      .read(autoLineSwitchProvider)
+      .arm(
         sources: session.sources,
         currentSourceIndex: session.sourceIndex,
         currentSourceName: session.sourceName,
@@ -169,14 +184,16 @@ class _SourcePlaybackSnapshot {
       _SourcePlaybackSnapshot._(ref);
 
   _SourcePlaybackSnapshot._(Ref ref)
-      : spec = ref.read(activePlaySpecProvider),
-        liveCatalog = _LiveCatalogPlaybackSnapshot(
-            ref.read(activePlaySpecProvider), ref.read(liveRuntimeProvider)),
-        recordId = ref.read(playbackHistoryTrackerProvider).activeRecordId,
-        position = ref.read(playerEngineProvider).position,
-        rate = ref.read(playerEngineProvider).rate,
-        volume = ref.read(playerEngineProvider).volume,
-        paused = _sourceIsPaused(ref.read(playerEngineProvider));
+    : spec = ref.read(activePlaySpecProvider),
+      liveCatalog = _LiveCatalogPlaybackSnapshot(
+        ref.read(activePlaySpecProvider),
+        ref.read(liveRuntimeProvider),
+      ),
+      recordId = ref.read(playbackHistoryTrackerProvider).activeRecordId,
+      position = ref.read(playerEngineProvider).position,
+      rate = ref.read(playerEngineProvider).rate,
+      volume = ref.read(playerEngineProvider).volume,
+      paused = _sourceIsPaused(ref.read(playerEngineProvider));
 
   final MediaPlaySpec? spec;
   final _LiveCatalogPlaybackSnapshot liveCatalog;
@@ -186,8 +203,11 @@ class _SourcePlaybackSnapshot {
   final double volume;
   final bool paused;
 
-  Future<void> open(MpvPlayerEngine engine, MediaPlaySpec target,
-      {required bool Function() ownsPlayback}) async {
+  Future<void> open(
+    MpvPlayerEngine engine,
+    MediaPlaySpec target, {
+    required bool Function() ownsPlayback,
+  }) async {
     if (!ownsPlayback()) throw const PlaybackSourceCancelled();
     if (engine.runtimeType == MpvPlayerEngine) {
       await engine.switchSource(target);
@@ -215,15 +235,18 @@ class _SourcePlaybackSnapshot {
       return;
     }
     final rollback = original.copyWith(
-        startPosition: original.isLive ? Duration.zero : position);
+      startPosition: original.isLive ? Duration.zero : position,
+    );
     try {
       await PlaybackSourceLoader(
-              engine: engine,
-              open: (s) =>
-                  open(engine, s, ownsPlayback: () => owner.ownsPlayback))
-          .load(rollback, isCurrent: () => owner.ownsPlayback);
+        engine: engine,
+        open: (s) => open(engine, s, ownsPlayback: () => owner.ownsPlayback),
+      ).load(rollback, isCurrent: () => owner.ownsPlayback);
       if (!owner.ownsPlayback) return;
-      final committed = liveCatalog.rebase(rollback, ref.read(liveRuntimeProvider));
+      final committed = liveCatalog.rebase(
+        rollback,
+        ref.read(liveRuntimeProvider),
+      );
       ref.read(liveRuntimeProvider.notifier).state = committed.runtime;
       ref.read(activePlaySpecProvider.notifier).state = committed.spec;
       resumeTracking(ref);
@@ -237,29 +260,36 @@ class _SourcePlaybackSnapshot {
     }
   }
 
-  void resumeTracking(Ref ref) =>
-      ref.read(playbackHistoryTrackerProvider).track(recordId,
-          flushPrevious: false,
-          baseline: position,
-          floor: position > Duration.zero ? position : null);
+  void resumeTracking(Ref ref) => ref
+      .read(playbackHistoryTrackerProvider)
+      .track(
+        recordId,
+        flushPrevious: false,
+        baseline: position,
+        floor: position > Duration.zero ? position : null,
+      );
 }
 
 bool _sourceIsPaused(MpvPlayerEngine engine) =>
     engine.runtimeType == MpvPlayerEngine
-        ? engine.isPlaybackPaused
-        : engine.status == PlaybackStatus.paused;
+    ? engine.isPlaybackPaused
+    : engine.status == PlaybackStatus.paused;
 
 Future<void> _switchLiveLine(Ref ref, int index) async {
   final previous = ref.read(activePlaySpecProvider);
   final runtime = ref.read(liveRuntimeProvider);
   final session = ref.read(activePlaybackSessionProvider);
-  if (_sourceChangeBlocked(ref) || previous == null ||
-      index < 0 || index >= previous.qualities.length ||
+  if (_sourceChangeBlocked(ref) ||
+      previous == null ||
+      index < 0 ||
+      index >= previous.qualities.length ||
       index == previous.qualityIndex) {
     return;
   }
-  final scriptedRoom = previous.isLive &&
-      previous.liveDanmakuSources.isNotEmpty && session != null;
+  final scriptedRoom =
+      previous.isLive &&
+      previous.liveDanmakuSources.isNotEmpty &&
+      session != null;
   if (!scriptedRoom && _livePlayingIndex(previous, runtime) < 0) return;
   final owner = _SourceChangeOwner(ref, PlaybackSourceChangeKind.quality);
   final selected = previous.qualities[index];
@@ -268,11 +298,18 @@ Future<void> _switchLiveLine(Ref ref, int index) async {
   try {
     owner.status('正在切换到${selected.name}…');
     var target = scriptedRoom
-        ? await owner.wait(ref.read(siteApiProvider).resolveQuality(previous,
-            index: index,
-            flag: session.sourceName,
-            parseEngine: ref.read(parseEngineProvider),
-            parses: owner.config.parses).timeout(const Duration(seconds: 20)))
+        ? await owner.wait(
+            ref
+                .read(siteApiProvider)
+                .resolveQuality(
+                  previous,
+                  index: index,
+                  flag: session.sourceName,
+                  parseEngine: ref.read(parseEngineProvider),
+                  parses: owner.config.parses,
+                )
+                .timeout(const Duration(seconds: 20)),
+          )
         : previous.copyWith(
             url: selected.url,
             headers: selected.headers,
@@ -281,16 +318,20 @@ Future<void> _switchLiveLine(Ref ref, int index) async {
     if (!owner.isCurrent) return;
     snapshot = _SourcePlaybackSnapshot(ref);
     target = target.copyWith(
-        startPosition: target.isLive ? Duration.zero : snapshot.position);
+      startPosition: target.isLive ? Duration.zero : snapshot.position,
+    );
     final engine = ref.read(playerEngineProvider);
     opened = true;
     await PlaybackSourceLoader(
       engine: engine,
-      open: (spec) => snapshot!.open(engine, spec,
-          ownsPlayback: () => owner.ownsPlayback),
+      open: (spec) =>
+          snapshot!.open(engine, spec, ownsPlayback: () => owner.ownsPlayback),
     ).load(target, isCurrent: () => owner.isCurrent);
     if (!owner.isCurrent) throw const PlaybackSourceCancelled();
-    final committed = snapshot.liveCatalog.rebase(target, ref.read(liveRuntimeProvider));
+    final committed = snapshot.liveCatalog.rebase(
+      target,
+      ref.read(liveRuntimeProvider),
+    );
     ref.read(liveRuntimeProvider.notifier).state = committed.runtime;
     ref.read(activePlaySpecProvider.notifier).state = committed.spec;
     ref.read(lineSwitchNoticeProvider.notifier).state = '已切换到${selected.name}';
@@ -324,13 +365,17 @@ Future<void> _switchPlaybackQuality(Ref ref, int index) async {
   var opened = false;
   try {
     owner.status('正在切换到$name…');
-    var target = await owner.wait(api
-        .resolveQuality(previous,
+    var target = await owner.wait(
+      api
+          .resolveQuality(
+            previous,
             index: index,
             flag: session.sourceName,
             parseEngine: ref.read(parseEngineProvider),
-            parses: owner.config.parses)
-        .timeout(const Duration(seconds: 20)));
+            parses: owner.config.parses,
+          )
+          .timeout(const Duration(seconds: 20)),
+    );
     if (!owner.isCurrent) return;
     snapshot = _SourcePlaybackSnapshot(ref);
     final tracker = ref.read(playbackHistoryTrackerProvider);
@@ -340,23 +385,29 @@ Future<void> _switchPlaybackQuality(Ref ref, int index) async {
     target = target.copyWith(startPosition: snapshot.position);
     final engine = ref.read(playerEngineProvider);
     final loader = PlaybackSourceLoader(
-        engine: engine,
-        open: (s) =>
-            snapshot!.open(engine, s, ownsPlayback: () => owner.ownsPlayback));
+      engine: engine,
+      open: (s) =>
+          snapshot!.open(engine, s, ownsPlayback: () => owner.ownsPlayback),
+    );
     opened = true;
     try {
       await loader.load(target, isCurrent: () => owner.isCurrent);
     } catch (error) {
       if (!owner.isCurrent || !isExpiredPlaybackUrl(error)) rethrow;
       owner.status('地址已过期，正在刷新$name…');
-      target = await owner.wait(api
-          .resolvePlayback(session.site,
+      target = await owner.wait(
+        api
+            .resolvePlayback(
+              session.site,
               id: session.episodes[session.index].url,
               flag: session.sourceName,
+              episodeName: session.episodes[session.index].name,
               preferredQualityName: name,
               parseEngine: ref.read(parseEngineProvider),
-              parses: owner.config.parses)
-          .timeout(const Duration(seconds: 20)));
+              parses: owner.config.parses,
+            )
+            .timeout(const Duration(seconds: 20)),
+      );
       // A removed quality must not silently become a different selection.
       if (target.qualities.isEmpty ||
           target.qualities[target.qualityIndex].name != name) {
@@ -364,7 +415,9 @@ Future<void> _switchPlaybackQuality(Ref ref, int index) async {
       }
       if (!owner.isCurrent) throw const PlaybackSourceCancelled();
       target = target.copyWith(
-          title: previous.title, startPosition: snapshot.position);
+        title: previous.title,
+        startPosition: snapshot.position,
+      );
       await loader.load(target, isCurrent: () => owner.isCurrent);
     }
     if (!owner.isCurrent) throw const PlaybackSourceCancelled();
@@ -379,10 +432,16 @@ Future<void> _switchPlaybackQuality(Ref ref, int index) async {
     }
     final recordId = snapshot.recordId;
     if (recordId != null) {
-      unawaited(ref.read(configRepositoryProvider).updateHistorySource(recordId,
-          sourceName: session.sourceName,
-          playUrl: target.url,
-          episodeUrl: session.episodes[session.index].url));
+      unawaited(
+        ref
+            .read(configRepositoryProvider)
+            .updateHistorySource(
+              recordId,
+              sourceName: session.sourceName,
+              playUrl: target.url,
+              episodeUrl: session.episodes[session.index].url,
+            ),
+      );
     }
     ref.read(lineSwitchNoticeProvider.notifier).state = '已切换到$name';
   } catch (error) {
@@ -401,27 +460,32 @@ PlaybackSession? _sourceSearchContext(Ref ref) {
   if (ref.read(playbackIntentProvider)?.isFailed == true && pending != null) {
     final selection = pending.selection;
     return PlaybackSession(
-        item: pending.item,
-        sourceName: selection.sourceName,
-        episodes: selection.episodes,
-        index: selection.index,
-        site: pending.site ?? ref.read(configRepositoryProvider).selectedSite,
-        sources: selection.sources,
-        sourceIndex: selection.sourceIndex);
+      item: pending.item,
+      sourceName: selection.sourceName,
+      episodes: selection.episodes,
+      index: selection.index,
+      site: pending.site ?? ref.read(configRepositoryProvider).selectedSite,
+      sources: selection.sources,
+      sourceIndex: selection.sourceIndex,
+    );
   }
   return ref.read(activePlaybackSessionProvider);
 }
 
 Future<void> _switchPlaybackSource(
-    Ref ref, PlaybackSourceChooser choose) async {
+  Ref ref,
+  PlaybackSourceChooser choose,
+) async {
   if (_sourceChangeBlocked(ref)) return;
   final session = _sourceSearchContext(ref);
   if (session == null ||
       session.site == null ||
       session.episodes.isEmpty ||
       ref.read(liveRuntimeProvider) != null &&
-          _isLivePage(ref.read(activePlaySpecProvider),
-              ref.read(liveRuntimeProvider))) {
+          _isLivePage(
+            ref.read(activePlaySpecProvider),
+            ref.read(liveRuntimeProvider),
+          )) {
     return;
   }
   final owner = _SourceChangeOwner(ref, PlaybackSourceChangeKind.source);
@@ -429,26 +493,30 @@ Future<void> _switchPlaybackSource(
   var opened = false;
   try {
     owner.status('正在其他站点查找同片同集…');
-    final result = await CrossSiteSearchService(
-            searchEngine: ref.read(searchEngineProvider),
-            siteApi: ref.read(siteApiProvider))
-        .search(
-            target: CrossSiteTarget(
-                item: session.item,
-                episodeName: session.episodes[session.index].name,
-                episodeCount: session.episodes.length,
-                siteKey: session.site!.key),
-            sites: owner.config.sites,
-            cancelToken: owner.cancelToken);
+    final result =
+        await CrossSiteSearchService(
+          searchEngine: ref.read(searchEngineProvider),
+          siteApi: ref.read(siteApiProvider),
+        ).search(
+          target: CrossSiteTarget(
+            item: session.item,
+            episodeName: session.episodes[session.index].name,
+            episodeCount: session.episodes.length,
+            siteKey: session.site!.key,
+          ),
+          sites: owner.config.sites,
+          cancelToken: owner.cancelToken,
+        );
     if (!owner.isCurrent) return;
     final candidates = result.candidates;
     if (candidates.isEmpty) {
-      ref.read(lineSwitchNoticeProvider.notifier).state =
-          result.status == CrossSiteSearchStatus.timedOut
-              ? '查找超时，当前播放已保留，请稍后重试'
-              : result.status == CrossSiteSearchStatus.failed
-                  ? '站点查找失败，当前播放已保留'
-                  : '没有找到可信的同片同集，当前播放已保留';
+      ref
+          .read(lineSwitchNoticeProvider.notifier)
+          .state = result.status == CrossSiteSearchStatus.timedOut
+          ? '查找超时，当前播放已保留，请稍后重试'
+          : result.status == CrossSiteSearchStatus.failed
+          ? '站点查找失败，当前播放已保留'
+          : '没有找到可信的同片同集，当前播放已保留';
       return;
     }
     CrossSiteCandidate? candidate;
@@ -466,27 +534,36 @@ Future<void> _switchPlaybackSource(
     }
     if (!owner.isCurrent || candidate == null) return;
     owner.status('正在解析${candidate.site.name}…');
-    var target = await owner.wait(ref
-        .read(siteApiProvider)
-        .resolvePlayback(candidate.site,
+    var target = await owner.wait(
+      ref
+          .read(siteApiProvider)
+          .resolvePlayback(
+            candidate.site,
             id: candidate.episodeMatch.episode.url,
             flag: candidate.source.name,
-            preferredQualityName: ref
-                .read(playbackQualityPreferencesProvider)[candidate.site.key],
+            episodeName: candidate.episodeMatch.episode.name,
+            preferredQualityName: ref.read(
+              playbackQualityPreferencesProvider,
+            )[candidate.site.key],
             parseEngine: ref.read(parseEngineProvider),
-            parses: owner.config.parses)
-        .timeout(const Duration(seconds: 20)));
+            parses: owner.config.parses,
+          )
+          .timeout(const Duration(seconds: 20)),
+    );
     if (!owner.isCurrent) return;
     snapshot = _SourcePlaybackSnapshot(ref);
     // An unrelated old video can still sit behind an initial preparation error.
     // Only carry the actual target's playhead into the new site.
-    final continuing =
-        identical(session, ref.read(activePlaybackSessionProvider));
+    final continuing = identical(
+      session,
+      ref.read(activePlaybackSessionProvider),
+    );
     final position = continuing ? snapshot.position : Duration.zero;
     target = target.copyWith(
-        title:
-            '${candidate.item.name} - ${candidate.episodeName} (${candidate.source.name})',
-        startPosition: position);
+      title:
+          '${candidate.item.name} - ${candidate.episodeName} (${candidate.source.name})',
+      startPosition: position,
+    );
     final tracker = ref.read(playbackHistoryTrackerProvider);
     await tracker.flush();
     if (!owner.isCurrent) return;
@@ -495,51 +572,55 @@ Future<void> _switchPlaybackSource(
     final engine = ref.read(playerEngineProvider);
     opened = true;
     await PlaybackSourceLoader(
-            engine: engine,
-            open: (s) => snapshot!
-                .open(engine, s, ownsPlayback: () => owner.ownsPlayback))
-        .load(target, isCurrent: () => owner.isCurrent);
+      engine: engine,
+      open: (s) =>
+          snapshot!.open(engine, s, ownsPlayback: () => owner.ownsPlayback),
+    ).load(target, isCurrent: () => owner.isCurrent);
     if (!owner.isCurrent) throw const PlaybackSourceCancelled();
     final item = candidate.item;
     final recordId =
         '${candidate.site.key}::${HistoryRecord.buildId(item.id, candidate.episodeName)}';
     final record = HistoryRecord(
-        id: recordId,
-        vodId: item.id,
-        vodName: item.name,
-        vodPic: item.pic,
-        episodeName: candidate.episodeName,
-        sourceName: candidate.source.name,
-        playUrl: target.url,
-        episodeUrl: candidate.episodeMatch.episode.url,
-        siteKey: candidate.site.key,
-        siteName: candidate.site.name,
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        positionMs: position.inMilliseconds,
-        durationMs: engine.duration.inMilliseconds);
+      id: recordId,
+      vodId: item.id,
+      vodName: item.name,
+      vodPic: item.pic,
+      episodeName: candidate.episodeName,
+      sourceName: candidate.source.name,
+      playUrl: target.url,
+      episodeUrl: candidate.episodeMatch.episode.url,
+      siteKey: candidate.site.key,
+      siteName: candidate.site.name,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      positionMs: position.inMilliseconds,
+      durationMs: engine.duration.inMilliseconds,
+    );
     // addHistory updates memory synchronously. A disk error cannot undo a
     // successful media load or turn a candidate into a false playback failure.
-    unawaited(ref
-        .read(configRepositoryProvider)
-        .addHistory(record)
-        .catchError((Object _) {}));
+    unawaited(
+      ref
+          .read(configRepositoryProvider)
+          .addHistory(record)
+          .catchError((Object _) {}),
+    );
     ref.read(activePlaySpecProvider.notifier).state = target;
     ref.read(activePlaybackSessionProvider.notifier).state = PlaybackSession(
-        item: item,
-        sourceName: candidate.source.name,
-        episodes: candidate.source.episodes,
-        index: candidate.episodeMatch.episodeIndex,
-        site: candidate.site,
-        sources: candidate.detail.sources,
-        sourceIndex: candidate.sourceIndex,
-        triedLines: {
-          lineSwitchKey(candidate.sourceIndex, candidate.source.name)
-        });
+      item: item,
+      sourceName: candidate.source.name,
+      episodes: candidate.source.episodes,
+      index: candidate.episodeMatch.episodeIndex,
+      site: candidate.site,
+      sources: candidate.detail.sources,
+      sourceIndex: candidate.sourceIndex,
+      triedLines: {lineSwitchKey(candidate.sourceIndex, candidate.source.name)},
+    );
     ref.read(episodeBrowseSourceIndexProvider.notifier).state = null;
-    tracker.track(recordId,
-        flushPrevious: false,
-        baseline: position,
-        floor: position > Duration.zero ? position : null);
+    tracker.track(
+      recordId,
+      flushPrevious: false,
+      baseline: position,
+      floor: position > Duration.zero ? position : null,
+    );
     _playPreparationEpoch++;
     ref.read(pendingPlayProvider.notifier).state = null;
     ref.read(playbackIntentProvider.notifier).state = null;
@@ -556,34 +637,43 @@ Future<void> _switchPlaybackSource(
   }
 }
 
-Future<CrossSiteCandidate?> _choosePlaybackSource(BuildContext context,
-    WidgetRef ref, List<CrossSiteCandidate> candidates) async {
+Future<CrossSiteCandidate?> _choosePlaybackSource(
+  BuildContext context,
+  WidgetRef ref,
+  List<CrossSiteCandidate> candidates,
+) async {
   final token = ref.read(playbackSourceChangeProvider)?.cancelToken;
   final navigator = Navigator.of(context, rootNavigator: true);
   final route = AppDialogRoute<CrossSiteCandidate>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-            title: const Text('选择播放来源'),
-            content: SizedBox(
-                width: 440,
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  for (final candidate in candidates)
-                    ListTile(
-                      title: Text(
-                          '${candidate.site.name} · ${candidate.item.name}'),
-                      subtitle: Text(
-                          '${candidate.source.name} · ${candidate.episodeName}'
-                          '${candidate.item.year?.isNotEmpty == true ? ' · ${candidate.item.year}' : ''}'
-                          '\n${candidate.confidence == CrossSiteConfidence.high ? '匹配度高' : '请确认同片同集'}'),
-                      onTap: () => Navigator.of(dialogContext).pop(candidate),
-                    ),
-                ])),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('取消'))
-            ],
-          ));
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('选择播放来源'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final candidate in candidates)
+              ListTile(
+                title: Text('${candidate.site.name} · ${candidate.item.name}'),
+                subtitle: Text(
+                  '${candidate.source.name} · ${candidate.episodeName}'
+                  '${candidate.item.year?.isNotEmpty == true ? ' · ${candidate.item.year}' : ''}'
+                  '\n${candidate.confidence == CrossSiteConfidence.high ? '匹配度高' : '请确认同片同集'}',
+                ),
+                onTap: () => Navigator.of(dialogContext).pop(candidate),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
   token?.onCancel(() {
     if (route.isActive) navigator.removeRoute(route);
   });

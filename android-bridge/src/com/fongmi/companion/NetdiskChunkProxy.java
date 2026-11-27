@@ -4,6 +4,7 @@ import com.github.catvod.utils.DebugLog;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -70,13 +71,18 @@ public final class NetdiskChunkProxy implements HttpHandler {
         return t;
     });
 
-    /** 一条登记的直链。total / rangeOk 由首次探测填充。 */
+    /** 一条登记的直链。total / rangeOk / skip 由首次探测填充。 */
     static final class Entry {
         final String url;
         final Map<String, String> headers;
         long total = -1;
         String contentType;
         Boolean rangeOk;
+        /**
+         * 伪装文件头字节数（如 `<PNG 签名>+MP4`）：播放器看到图片签名会当成图片/清单解析失败。
+         * 代理对外表现为去掉这 {@code skip} 字节后的纯媒体流。
+         */
+        long skip = 0;
 
         Entry(String url, Map<String, String> headers) {
             this.url = url;
@@ -321,7 +327,8 @@ public final class NetdiskChunkProxy implements HttpHandler {
         }
 
         private byte[] fetch() throws IOException {
-            HttpURLConnection conn = open(entry, "bytes=" + from + "-" + to);
+            HttpURLConnection conn = open(
+                    entry, "bytes=" + (from + entry.skip) + "-" + (to + entry.skip));
             connection = conn;
             boolean complete = false;
             try {
@@ -353,10 +360,10 @@ public final class NetdiskChunkProxy implements HttpHandler {
             var match = CONTENT_RANGE.matcher(contentRange == null ? "" : contentRange.trim());
             try {
                 if (match.matches()
-                        && Long.parseLong(match.group(1)) == from
-                        && Long.parseLong(match.group(2)) == to
+                        && Long.parseLong(match.group(1)) == from + entry.skip
+                        && Long.parseLong(match.group(2)) == to + entry.skip
                         && ("*".equals(match.group(3))
-                            || Long.parseLong(match.group(3)) == entry.total)) {
+                            || Long.parseLong(match.group(3)) == entry.total + entry.skip)) {
                     return;
                 }
             } catch (NumberFormatException ignored) {
@@ -388,31 +395,84 @@ public final class NetdiskChunkProxy implements HttpHandler {
         }
     }
 
-    /** 首次访问时用 bytes=0-0 探测：拿总长、类型，确认上游支持 Range。 */
+    /** 首次访问时用 bytes=0-4095 探测：拿总长、类型、Range 支持，并识别伪装文件头。 */
     private static void probe(Entry entry) throws IOException {
         synchronized (entry) {
             if (entry.rangeOk != null) return;
-            HttpURLConnection conn = open(entry, "bytes=0-0");
+            HttpURLConnection conn = open(entry, "bytes=0-4095");
             try {
                 int code = conn.getResponseCode();
                 String contentRange = conn.getHeaderField("Content-Range");
                 long total = parseTotal(contentRange);
                 if (code == 206 && total > 0) {
-                    entry.total = total;
                     entry.rangeOk = true;
+                    byte[] head = readUpTo(conn.getInputStream(), 4096);
+                    entry.skip = disguisePrefix(head);
+                    entry.total = total - entry.skip;
+                    entry.contentType = mediaType(conn.getContentType(), head, entry.skip);
                 } else if (code == 200) {
                     entry.total = conn.getContentLengthLong();
                     entry.rangeOk = false;
+                    entry.contentType = conn.getContentType();
                 } else {
                     throw new UpstreamStatus(code);
                 }
-                entry.contentType = conn.getContentType();
-                drain(conn);
             } catch (IOException e) {
                 conn.disconnect();
                 throw e;
             }
         }
+    }
+
+    private static byte[] readUpTo(InputStream in, int max) throws IOException {
+        try (InputStream src = in; ByteArrayOutputStream out = new ByteArrayOutputStream(max)) {
+            byte[] buf = new byte[1024];
+            int n;
+            while (out.size() < max
+                    && (n = src.read(buf, 0, Math.min(buf.length, max - out.size()))) != -1) {
+                out.write(buf, 0, n);
+            }
+            return out.toByteArray();
+        }
+    }
+
+    /**
+     * 识别「图片签名 + 媒体文件」的伪装头，返回真实媒体起始偏移。
+     *
+     * <p>实测（夸克分享 2026-11）：文件前 8 字节是 PNG 签名
+     * {@code 89 50 4E 47 0D 0A 1A 0A}，紧接着才是 MP4 的 {@code ftyp} box。
+     * 播放器看到 PNG 签名会走图片/清单解析，报「Failed to recognize file format」，
+     * 所以代理把它剥掉，对外只暴露后面的纯媒体流。
+     */
+    private static long disguisePrefix(byte[] b) {
+        if (b == null || b.length < 16) return 0;
+        boolean image = (b[0] == (byte) 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G')
+                || (b[0] == (byte) 0xFF && b[1] == (byte) 0xD8 && b[2] == (byte) 0xFF)
+                || (b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8')
+                || (b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F');
+        if (!image) return 0;
+        for (int i = 4; i + 4 <= b.length; i++) {
+            if (b[i] == 'f' && b[i + 1] == 't' && b[i + 2] == 'y' && b[i + 3] == 'p') {
+                long skip = i - 4L;
+                if (skip > 0 && skip <= 4096) return skip;
+            }
+            if (b[i] == 0x1a && b[i + 1] == 0x45
+                    && b[i + 2] == (byte) 0xdf && b[i + 3] == (byte) 0xa3) {
+                if (i > 0 && i <= 4096) return i;
+            }
+        }
+        return 0;
+    }
+
+    /** 去掉伪装头后按真实容器给 Content-Type，避免播放器继续按 octet-stream 嗅探。 */
+    private static String mediaType(String type, byte[] head, long skip) {
+        if (skip <= 0 || skip >= head.length) return type;
+        int at = (int) skip;
+        if (at + 4 <= head.length && head[at] == 0x1a && head[at + 1] == 0x45
+                && head[at + 2] == (byte) 0xdf && head[at + 3] == (byte) 0xa3) {
+            return "video/x-matroska";
+        }
+        return "video/mp4";
     }
 
     static long parseTotal(String contentRange) {
@@ -428,7 +488,11 @@ public final class NetdiskChunkProxy implements HttpHandler {
 
     /** 上游不支持 Range：单连接透传，把播放器的 Range 原样转发。 */
     private static void passthrough(HttpExchange exchange, Entry entry, boolean head) throws IOException {
-        HttpURLConnection conn = open(entry, exchange.getRequestHeaders().getFirst("Range"));
+        String range = exchange.getRequestHeaders().getFirst("Range");
+        // 播放器首次探测通常不带 Range；部分网盘 CDN 对这种请求回 HLS 清单。
+        // 这里强制按 Range 取文件本体，回给播放器的仍是上游状态码与响应头。
+        if (range == null || range.trim().isEmpty()) range = "bytes=0-";
+        HttpURLConnection conn = open(entry, range);
         try {
             int code = conn.getResponseCode();
             var out = exchange.getResponseHeaders();

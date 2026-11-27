@@ -69,10 +69,10 @@ const double _controlHitSize = 36;
 
 /// 画面缩放模式 → 视频纹理适配方式（比例强制由 mpv `video-aspect-override` 负责）。
 BoxFit videoFitForScale(String scale) => switch (scale) {
-      'fill' => BoxFit.fill,
-      'crop' => BoxFit.cover,
-      _ => BoxFit.contain,
-    };
+  'fill' => BoxFit.fill,
+  'crop' => BoxFit.cover,
+  _ => BoxFit.contain,
+};
 
 /// §43 弹幕视图模型（由宿主装配：加载 / 缓存 / 取消都在宿主的 [DanmakuController]）。
 class PlayerDanmakuNav {
@@ -257,7 +257,7 @@ class PlayerSubtitleTracksNav {
 
   /// 把下载好的字幕挂到当前会话；返回是否成功。
   final Future<bool> Function(SubtitleFile file, {required int session})?
-      onApplyOnline;
+  onApplyOnline;
 
   const PlayerSubtitleTracksNav({
     required List<TrackInfo> Function() readTracks,
@@ -354,42 +354,44 @@ class PlayerLineNav {
   PlayerAudioTracksNav audio,
   PlayerSubtitleTracksNav subtitle,
   PlayerVideoTracksNav video,
-}) buildPlayerTrackNavs(
+})
+buildPlayerTrackNavs(
   MpvPlayerEngine engine, {
   SubtitleFilePicker? filePicker,
   SubtitleQuery Function()? readOnlineQuery,
-}) =>
-    (
-      audio: PlayerAudioTracksNav(
-        readTracks: () => engine.audioTracks,
-        tracksStream: engine.audioTracksStream,
-        onSelect: engine.selectAudioTrack,
-      ),
-      subtitle: PlayerSubtitleTracksNav(
-        readTracks: () => engine.subtitleTracks,
-        tracksStream: engine.subtitleTracksStream,
-        onSelect: engine.selectSubtitleTrack,
-        onDisable: engine.disableSubtitle,
-        readSession: () => engine.subtitleSession,
-        canScale: () => engine.canScaleSubtitle,
-        readScale: () => engine.subtitleScale,
-        onSetScale: engine.setSubtitleScale,
-        onLoadLocal: engine.loadLocalSubtitle,
-        filePicker: filePicker,
-        readOnlineQuery: readOnlineQuery,
-        onApplyOnline: readOnlineQuery == null
-            ? null
-            : (file, {required int session}) =>
-                engine.loadSubtitleBytes(file.bytes, file.fileName,
-                    session: session),
-      ),
-      video: PlayerVideoTracksNav(
-        tracks: engine.videoTracks,
-        tracksStream: engine.videoTracksStream,
-        onSelect: engine.selectVideoTrack,
-        isDisabled: engine.isVideoDisabled,
-      ),
-    );
+}) => (
+  audio: PlayerAudioTracksNav(
+    readTracks: () => engine.audioTracks,
+    tracksStream: engine.audioTracksStream,
+    onSelect: engine.selectAudioTrack,
+  ),
+  subtitle: PlayerSubtitleTracksNav(
+    readTracks: () => engine.subtitleTracks,
+    tracksStream: engine.subtitleTracksStream,
+    onSelect: engine.selectSubtitleTrack,
+    onDisable: engine.disableSubtitle,
+    readSession: () => engine.subtitleSession,
+    canScale: () => engine.canScaleSubtitle,
+    readScale: () => engine.subtitleScale,
+    onSetScale: engine.setSubtitleScale,
+    onLoadLocal: engine.loadLocalSubtitle,
+    filePicker: filePicker,
+    readOnlineQuery: readOnlineQuery,
+    onApplyOnline: readOnlineQuery == null
+        ? null
+        : (file, {required int session}) => engine.loadSubtitleBytes(
+            file.bytes,
+            file.fileName,
+            session: session,
+          ),
+  ),
+  video: PlayerVideoTracksNav(
+    tracks: engine.videoTracks,
+    tracksStream: engine.videoTracksStream,
+    onSelect: engine.selectVideoTrack,
+    isDisabled: engine.isVideoDisabled,
+  ),
+);
 
 /// 「一起看」（局域网同步观看）的入口视图模型。
 ///
@@ -444,6 +446,10 @@ class DesktopVideoPlayer extends StatefulWidget {
 
   /// 播放内刷新视图模型；为空时不显示「刷新」。
   final PlayerRefreshNav? refreshNav;
+
+  /// 播放失败时按错误文案装配网盘登录入口；为空表示不提供。
+  final ({String label, Future<bool> Function() login})? Function(String?)?
+  driveLoginNavBuilder;
 
   /// 播放内片头 / 片尾视图模型；为空时不显示这两个入口（直播 / 推送 / 续播）。
   final PlayerSkipNav? skipNav;
@@ -583,6 +589,7 @@ class DesktopVideoPlayer extends StatefulWidget {
     this.episodeNav,
     this.episodeListNav,
     this.refreshNav,
+    this.driveLoginNavBuilder,
     this.skipNav,
     this.replayNav,
     this.playerInfoLabel,
@@ -697,9 +704,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   /// 底栏焦点跟踪：键盘焦点落在控制条内时暂停自动隐藏，
   /// 避免焦点控件被滑出屏幕（WCAG 2.2 focus-not-obscured）。
   final FocusNode _bottomBarFocusNode = FocusNode(
-      debugLabel: 'PlayerBottomBar',
-      skipTraversal: true,
-      canRequestFocus: false);
+    debugLabel: 'PlayerBottomBar',
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
   bool _bottomBarHasFocus = false;
 
   double _dragSeekPositionMs = -1.0;
@@ -720,7 +728,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   /// 主快进键临时倍速；进入长按前的倍速，松开 / 失焦时还原。
   late final HoldToSpeedGesture _holdGesture = HoldToSpeedGesture(
     getBinding: () => widget.shortcuts.primarySeekForward,
-    isEnabled: () => !_isLiveMode && !_usingEmbedded && !_drawerOrPanelOpen && !_hasEditableFocus,
+    isEnabled: () =>
+        !_isLiveMode &&
+        !_usingEmbedded &&
+        !_drawerOrPanelOpen &&
+        !_hasEditableFocus,
     onTap: () => _handleSeek(const Duration(seconds: 10)),
     onHoldStart: _startHoldRate,
     onHoldEnd: _endHoldRate,
@@ -736,7 +748,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   bool get _usingEmbedded => widget.embeddedPlayback?.value != null;
 
   bool get _isDraggingSeek => _dragSeekPositionMs >= 0;
-  bool get _hasPlaybackError => widget.playerEngine.status == PlaybackStatus.error;
+  bool get _hasPlaybackError =>
+      widget.playerEngine.status == PlaybackStatus.error;
   bool get _canShowSourceActions =>
       !_isLiveMode &&
       widget.liveChannels == null &&
@@ -839,8 +852,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     widget.onHoldBaseRateChanged?.call(_rateBeforeHold);
     final rate = widget.holdRate;
     widget.playerEngine.setRate(rate);
-    _osdController.show(Icons.fast_forward_rounded, '${_rateLabel(rate)}x ▶▶',
-        persistent: true);
+    _osdController.show(
+      Icons.fast_forward_rounded,
+      '${_rateLabel(rate)}x ▶▶',
+      persistent: true,
+    );
   }
 
   void _endHoldRate() {
@@ -921,8 +937,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     _channelWheelBurst?.cancel();
     _syncImmersive(false);
     widget.windowManager.isPipNotifier.removeListener(_onPipChanged);
-    widget.windowManager.isImmersiveNotifier
-        .removeListener(_onImmersiveChanged);
+    widget.windowManager.isImmersiveNotifier.removeListener(
+      _onImmersiveChanged,
+    );
     _bottomBarFocusNode.removeListener(_onBottomBarFocusChanged);
     _bottomBarFocusNode.dispose();
     _focusNode.dispose();
@@ -981,7 +998,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
   void _commitSeek(double value) {
     if (!_isLiveMode) {
-      unawaited(widget.playerEngine.seek(Duration(milliseconds: value.toInt())));
+      unawaited(
+        widget.playerEngine.seek(Duration(milliseconds: value.toInt())),
+      );
     }
     setState(() => _dragSeekPositionMs = -1.0);
     _startHideTimer();
@@ -1017,7 +1036,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     }
     final size = context.size;
     if (size == null) return;
-    final inZone = _pointerOnPill ||
+    final inZone =
+        _pointerOnPill ||
         localPosition.dy <= _topChromeZone ||
         localPosition.dy >= size.height - _bottomChromeHeight;
     if (inZone) {
@@ -1125,8 +1145,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     }
     final curPos = widget.playerEngine.position;
     final dur = widget.playerEngine.duration;
-    final targetMs = (curPos.inMilliseconds + delta.inMilliseconds)
-        .clamp(0, dur.inMilliseconds);
+    final targetMs = (curPos.inMilliseconds + delta.inMilliseconds).clamp(
+      0,
+      dur.inMilliseconds,
+    );
     final targetDuration = Duration(milliseconds: targetMs);
     widget.playerEngine.seek(targetDuration);
 
@@ -1170,7 +1192,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       final restoreVol = _lastUnmutedVolume > 0 ? _lastUnmutedVolume : 100.0;
       widget.playerEngine.setVolume(restoreVol);
       _osdController.show(
-          Icons.volume_up_rounded, '音量: ${restoreVol.toInt()}%');
+        Icons.volume_up_rounded,
+        '音量: ${restoreVol.toInt()}%',
+      );
       _commitVolume(restoreVol);
     }
     _onUserActivity();
@@ -1246,9 +1270,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     final position = event.localPosition;
     final mid = size.width / 2;
     final up = event.scrollDelta.dy < 0;
-    final channelZone = (widget.liveChannels?.length ?? 0) > 1 &&
+    final channelZone =
+        (widget.liveChannels?.length ?? 0) > 1 &&
         !widget.windowManager.isPipNotifier.value &&
-        position.dx >= size.width / 4 && position.dx <= mid;
+        position.dx >= size.width / 4 &&
+        position.dx <= mid;
     if (!channelZone) {
       if (position.dx >= mid) _handleVolumeAdjust(up ? 5.0 : -5.0);
       return;
@@ -1257,7 +1283,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         event.scrollDelta.dy.abs() <= event.scrollDelta.dx.abs() ||
         position.dy <= _topChromeZone ||
         position.dy >= size.height - _bottomChromeHeight ||
-        _drawerOrPanelOpen || _sourceBusy || widget.preparing != null) {
+        _drawerOrPanelOpen ||
+        _sourceBusy ||
+        widget.preparing != null) {
       return;
     }
     final step = up ? widget.onLivePrev : widget.onLiveNext;
@@ -1266,8 +1294,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     final repeated = _channelWheelBurst != null && _channelWheelUp == up;
     _channelWheelBurst?.cancel();
     _channelWheelUp = up;
-    _channelWheelBurst = Timer(const Duration(milliseconds: 220),
-        () => _channelWheelBurst = null);
+    _channelWheelBurst = Timer(
+      const Duration(milliseconds: 220),
+      () => _channelWheelBurst = null,
+    );
     if (!repeated) step();
   }
 
@@ -1280,15 +1310,18 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     // 滑条两端让出 overlay 半径（24px）后线性映射；中点 ≈ 时长一半。
     const inset = 24.0;
     final track = (width - inset * 2).clamp(1.0, double.infinity);
-    final fraction =
-        ((details.localPosition.dx - inset) / track).clamp(0.0, 1.0);
+    final fraction = ((details.localPosition.dx - inset) / track).clamp(
+      0.0,
+      1.0,
+    );
     final clickedMs = (fraction * durMs).round();
     final at = _formatDuration(Duration(milliseconds: clickedMs));
     final choice = await showMenu<int>(
       context: context,
       color: context.palette.raised,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.md)),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
       position: RelativeRect.fromLTRB(
         details.globalPosition.dx,
         details.globalPosition.dy,
@@ -1452,13 +1485,28 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           if (snapshot.data != PlaybackStatus.error) {
             return const SizedBox.shrink();
           }
+          final rawError = engine.currentError;
+          final drive = widget.driveLoginNavBuilder?.call(rawError);
+          final driveNav = drive == null
+              ? null
+              : PlayerDriveLoginNav(
+                  label: drive.label,
+                  onLogin: () async {
+                    final ok = await drive.login();
+                    if (ok && context.mounted) widget.refreshNav?.onRefresh();
+                  },
+                );
           return PlaybackErrorPanel(
-            rawError: engine.currentError,
+            rawError: rawError,
             spec: engine.currentSpec,
             engineLogs: engine.recentPlayerLogs,
             externalNav: _canShowExternalPlayer ? widget.externalNav : null,
-            sourceSwitchNav: _canShowSourceActions ? widget.sourceSwitchNav : null,
-            onOpenEpisodeList: _canShowSourceActions &&
+            sourceSwitchNav: _canShowSourceActions
+                ? widget.sourceSwitchNav
+                : null,
+            driveLoginNav: driveNav,
+            onOpenEpisodeList:
+                _canShowSourceActions &&
                     widget.episodeListNav?.switching == false
                 ? _toggleEpisodeDrawer
                 : null,
@@ -1484,7 +1532,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       initialData: widget.playerEngine.dimensions,
       builder: (context, snapshot) {
         final dimensions = snapshot.data;
-        if (dimensions == null || dimensions.width <= 0 || dimensions.height <= 0) {
+        if (dimensions == null ||
+            dimensions.width <= 0 ||
+            dimensions.height <= 0) {
           return const SizedBox.shrink();
         }
         return Semantics(
@@ -1531,13 +1581,15 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       child: Actions(
         actions: {
           PlayPauseIntent: CallbackAction<PlayPauseIntent>(
-              onInvoke: (_) => _togglePlayPause()),
+            onInvoke: (_) => _togglePlayPause(),
+          ),
           SeekIntent: CallbackAction<SeekIntent>(
             onInvoke: (i) {
               // ⑤-3 直播：←/→ 切台（点播仍为快退 / 快进）
               if (widget.playerEngine.currentSpec?.isLive == true) {
-                final callback =
-                    i.delta.isNegative ? widget.onLivePrev : widget.onLiveNext;
+                final callback = i.delta.isNegative
+                    ? widget.onLivePrev
+                    : widget.onLiveNext;
                 if (callback != null) {
                   callback();
                   return null;
@@ -1548,16 +1600,19 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
             },
           ),
           VolumeIntent: CallbackAction<VolumeIntent>(
-              onInvoke: (i) => _handleVolumeAdjust(i.delta)),
+            onInvoke: (i) => _handleVolumeAdjust(i.delta),
+          ),
           ToggleMuteIntent: CallbackAction<ToggleMuteIntent>(
-              onInvoke: (_) => _handleToggleMute()),
+            onInvoke: (_) => _handleToggleMute(),
+          ),
           ToggleFullscreenIntent: CallbackAction<ToggleFullscreenIntent>(
             onInvoke: (_) {
               final manager = widget.windowManager;
               if (manager.isPipNotifier.value) {
                 // 小窗内 F / F11：先还原再全屏，避免「小窗全屏」怪状态。
                 unawaited(
-                    manager.exitPip().then((_) => manager.toggleFullScreen()));
+                  manager.exitPip().then((_) => manager.toggleFullScreen()),
+                );
                 _osdController.show(Icons.fullscreen_rounded, '还原并全屏');
                 return null;
               }
@@ -1567,16 +1622,20 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
             },
           ),
           ExitFullscreenIntent: CallbackAction<ExitFullscreenIntent>(
-              onInvoke: (_) => _handleExit()),
+            onInvoke: (_) => _handleExit(),
+          ),
           RateAdjustIntent: CallbackAction<RateAdjustIntent>(
             onInvoke: (i) => _handleRateAdjust(i.delta, reset: i.reset),
           ),
           PrevEpisodeIntent: CallbackAction<PrevEpisodeIntent>(
-              onInvoke: (_) => _handlePrevEpisode()),
+            onInvoke: (_) => _handlePrevEpisode(),
+          ),
           NextEpisodeIntent: CallbackAction<NextEpisodeIntent>(
-              onInvoke: (_) => _handleNextEpisode()),
+            onInvoke: (_) => _handleNextEpisode(),
+          ),
           ToggleDanmakuIntent: CallbackAction<ToggleDanmakuIntent>(
-              onInvoke: (_) => _handleToggleDanmaku()),
+            onInvoke: (_) => _handleToggleDanmaku(),
+          ),
         },
         child: Focus(
           focusNode: _focusNode,
@@ -1590,304 +1649,350 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 ? SystemMouseCursors.basic
                 : SystemMouseCursors.none,
             // 直播频道抽屉包住整层，画在顶栏 / 时间轴工具栏之上（见 _wrapLiveLayer）。
-            child: _wrapLiveLayer(Stack(
-              children: [
-                // 1. MPV 原生 Direct3D 11 视频渲染表面
-                //    双击切全屏只挂在这一层：控制条不参与双击判定，连点按钮不会误切全屏。
-                Positioned.fill(
-                  // §43 层级（2026-10-27 验收反馈）：弹幕在视频之上、选集抽屉之下——
-                  // 抽屉打开时盖住弹幕，而不是弹幕从抽屉上飘过去。
-                  child: _wrapEpisodeLayer(Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      LayoutBuilder(
-                        builder: (context, constraints) => Listener(
-                          onPointerSignal: (event) => _handleSurfacePointerSignal(
-                              event, constraints.biggest),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _handleSurfaceTap,
-                            // PiP：按住画面拖动小窗（原生拖拽）；拖拽与点击由手势
-                            // 竞技场区分，不影响单击播放/暂停。
-                            onPanStart: pip
-                                ? (_) => unawaited(
-                                    widget.windowManager.startDragging())
-                                : null,
-                            onDoubleTap: _handleSurfaceDoubleTap,
-                            child: session != null
-                                ? _embeddedVideo(session)
-                                : widget.videoSurface ?? Video(
-                                    controller: widget.playerEngine.videoController,
-                                    controls: NoVideoControls,
-                                    fit: videoFitForScale(widget.scale),
+            child: _wrapLiveLayer(
+              Stack(
+                children: [
+                  // 1. MPV 原生 Direct3D 11 视频渲染表面
+                  //    双击切全屏只挂在这一层：控制条不参与双击判定，连点按钮不会误切全屏。
+                  Positioned.fill(
+                    // §43 层级（2026-10-27 验收反馈）：弹幕在视频之上、选集抽屉之下——
+                    // 抽屉打开时盖住弹幕，而不是弹幕从抽屉上飘过去。
+                    child: _wrapEpisodeLayer(
+                      Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          LayoutBuilder(
+                            builder: (context, constraints) => Listener(
+                              onPointerSignal: (event) =>
+                                  _handleSurfacePointerSignal(
+                                    event,
+                                    constraints.biggest,
                                   ),
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _handleSurfaceTap,
+                                // PiP：按住画面拖动小窗（原生拖拽）；拖拽与点击由手势
+                                // 竞技场区分，不影响单击播放/暂停。
+                                onPanStart: pip
+                                    ? (_) => unawaited(
+                                        widget.windowManager.startDragging(),
+                                      )
+                                    : null,
+                                onDoubleTap: _handleSurfaceDoubleTap,
+                                child: session != null
+                                    ? _embeddedVideo(session)
+                                    : widget.videoSurface ??
+                                          Video(
+                                            controller: widget
+                                                .playerEngine
+                                                .videoController,
+                                            controls: NoVideoControls,
+                                            fit: videoFitForScale(widget.scale),
+                                          ),
+                              ),
+                            ),
                           ),
-                        ),
+                          if (widget.showResolution && widget.preparing == null)
+                            Positioned(
+                              left: 16,
+                              top: _chromeVisible && !pip ? 62 : 12,
+                              child: IgnorePointer(
+                                child: _buildResolutionBadge(),
+                              ),
+                            ),
+                          // 弹幕和错误提示都在抽屉之下，不能拦截遮罩上的点击。
+                          if (_hasDanmaku)
+                            Positioned.fill(
+                              child: _buildDanmakuLayer(pip: pip),
+                            ),
+                          _buildPlaybackStatus(pip: pip),
+                        ],
                       ),
-                      if (widget.showResolution && widget.preparing == null)
-                        Positioned(
-                          left: 16,
-                          top: _chromeVisible && !pip ? 62 : 12,
-                          child: IgnorePointer(child: _buildResolutionBadge()),
-                        ),
-                      // 弹幕和错误提示都在抽屉之下，不能拦截遮罩上的点击。
-                      if (_hasDanmaku)
-                        Positioned.fill(child: _buildDanmakuLayer(pip: pip)),
-                      _buildPlaybackStatus(pip: pip),
-                    ],
-                  )),
-                ),
-
-                // 3. 屏幕实时交互浮层提示 (OSD)
-                Positioned.fill(
-                  child: PlayerOsdOverlay(controller: _osdController),
-                ),
-
-                // 4. 顶部半透明渐变控制条
-                // §39：准备态期间顶栏常驻（否则返回按钮会随自动隐藏一起消失，
-                // 而整屏准备浮层又挡住返回，用户就彻底没有出口了）。
-                AnimatedPositioned(
-                  duration: _chromeMotion(context, visible: _chromeVisible),
-                  top: _chromeVisible && !pip ? 0 : -60,
-                  height: MediaTitleBar.height,
-                  left: 0,
-                  right: 0,
-                  child: Overlay.wrap(
-                    clipBehavior: Clip.none,
-                    child: MediaTitleBar(
-                      key: const ValueKey('player-top-bar'),
-                      scope: 'player',
-                      title: widget.playerEngine.currentSpec?.title ?? '',
-                      windowManager: _immersive ? widget.windowManager : null,
-                      backKey: canCancelPrepare
-                          ? const ValueKey('player-back-cancel') : null,
-                      backTooltip: '${canCancelPrepare ? '取消并返回' : '返回'} (${_shortcutLabel(PlayerShortcutAction.exitFullscreen)})',
-                      onBack: canCancelPrepare
-                          ? widget.onCancelPrepare : widget.onBack,
-                      leadingAccessory: widget.playbackModeNav == null
-                          ? null
-                          : PlaybackModeBadge(
-                              nav: widget.playbackModeNav!,
-                              onMenuOpenChanged: _handleSourceMenuOpen,
-                            ),
-                      actions: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _chromeBadge.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(AppRadii.xs),
-                          ),
-                          child: const Text(
-                            'HW: D3D11',
-                            style: TextStyle(
-                              color: _chromeInk,
-                              fontSize: AppType.caption,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
-                ),
 
-                // 5. 底栏隐藏时的常驻细进度线（贴窗口底、不可点击；无时长时不可见）
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _buildMiniProgressLine(context),
-                ),
+                  // 3. 屏幕实时交互浮层提示 (OSD)
+                  Positioned.fill(
+                    child: PlayerOsdOverlay(controller: _osdController),
+                  ),
 
-                // 6. 底部播放控制面板
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: AnimatedSlide(
+                  // 4. 顶部半透明渐变控制条
+                  // §39：准备态期间顶栏常驻（否则返回按钮会随自动隐藏一起消失，
+                  // 而整屏准备浮层又挡住返回，用户就彻底没有出口了）。
+                  AnimatedPositioned(
                     duration: _chromeMotion(context, visible: _chromeVisible),
-                    // 按自身高度完整出屏，兼容按钮换行和文字缩放。
-                    offset: _chromeVisible ? Offset.zero : const Offset(0, 1),
-                    child: Focus(
-                      key: _bottomBarLayoutKey,
-                      focusNode: _bottomBarFocusNode,
-                      // 纯焦点信号监听，不进语义树（避免改变逐帧语义增量）。
-                      includeSemantics: false,
-                      child: pip
-                          ? _buildPipCompactBar()
-                          : Container(
-                              key: const ValueKey('player-bottom-bar'),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: [_chromeScrim, _chromeScrimFade],
-                                ),
+                    top: _chromeVisible && !pip ? 0 : -60,
+                    height: MediaTitleBar.height,
+                    left: 0,
+                    right: 0,
+                    child: Overlay.wrap(
+                      clipBehavior: Clip.none,
+                      child: MediaTitleBar(
+                        key: const ValueKey('player-top-bar'),
+                        scope: 'player',
+                        title: widget.playerEngine.currentSpec?.title ?? '',
+                        windowManager: _immersive ? widget.windowManager : null,
+                        backKey: canCancelPrepare
+                            ? const ValueKey('player-back-cancel')
+                            : null,
+                        backTooltip:
+                            '${canCancelPrepare ? '取消并返回' : '返回'} (${_shortcutLabel(PlayerShortcutAction.exitFullscreen)})',
+                        onBack: canCancelPrepare
+                            ? widget.onCancelPrepare
+                            : widget.onBack,
+                        leadingAccessory: widget.playbackModeNav == null
+                            ? null
+                            : PlaybackModeBadge(
+                                nav: widget.playbackModeNav!,
+                                onMenuOpenChanged: _handleSourceMenuOpen,
                               ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // 进度条行：进度条 + 时间（时间固定在右端）
-                                  Row(
-                                    children: [
-                                      // 本地 Overlay：滑条语义节点随底栏整体出屏 / 恢复。
-                                      Expanded(
-                                        child: LayoutBuilder(
-                                          builder: (context, constraints) =>
-                                              GestureDetector(
-                                            // 时间轴右键：在点击处设置片头 / 片尾，或清除。
-                                            onSecondaryTapUp: (details) =>
-                                                _showTimelineMenu(details,
-                                                    constraints.maxWidth),
-                                            child: Overlay.wrap(
-                                              alwaysSizeToContent: true,
-                                              clipBehavior: Clip.none,
-                                              child: _buildProgressBar(),
-                                            ),
+                        actions: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _chromeBadge.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(AppRadii.xs),
+                            ),
+                            child: const Text(
+                              'HW: D3D11',
+                              style: TextStyle(
+                                color: _chromeInk,
+                                fontSize: AppType.caption,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 5. 底栏隐藏时的常驻细进度线（贴窗口底、不可点击；无时长时不可见）
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _buildMiniProgressLine(context),
+                  ),
+
+                  // 6. 底部播放控制面板
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnimatedSlide(
+                      duration: _chromeMotion(context, visible: _chromeVisible),
+                      // 按自身高度完整出屏，兼容按钮换行和文字缩放。
+                      offset: _chromeVisible ? Offset.zero : const Offset(0, 1),
+                      child: Focus(
+                        key: _bottomBarLayoutKey,
+                        focusNode: _bottomBarFocusNode,
+                        // 纯焦点信号监听，不进语义树（避免改变逐帧语义增量）。
+                        includeSemantics: false,
+                        child: pip
+                            ? _buildPipCompactBar()
+                            : Container(
+                                key: const ValueKey('player-bottom-bar'),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [_chromeScrim, _chromeScrimFade],
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // 进度条行：进度条 + 时间（时间固定在右端）
+                                    Row(
+                                      children: [
+                                        // 本地 Overlay：滑条语义节点随底栏整体出屏 / 恢复。
+                                        Expanded(
+                                          child: LayoutBuilder(
+                                            builder: (context, constraints) =>
+                                                GestureDetector(
+                                                  // 时间轴右键：在点击处设置片头 / 片尾，或清除。
+                                                  onSecondaryTapUp: (details) =>
+                                                      _showTimelineMenu(
+                                                        details,
+                                                        constraints.maxWidth,
+                                                      ),
+                                                  child: Overlay.wrap(
+                                                    alwaysSizeToContent: true,
+                                                    clipBehavior: Clip.none,
+                                                    child: _buildProgressBar(),
+                                                  ),
+                                                ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      _buildTimeLabel(),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  // 空间不足时右侧组换行，所有按钮仍可直接点击。
-                                  Overlay.wrap(
-                                    alwaysSizeToContent: true,
-                                    clipBehavior: Clip.none,
-                                    child: OverflowBar(
-                                      alignment: MainAxisAlignment.spaceBetween,
-                                      overflowAlignment: OverflowBarAlignment.end,
-                                      children: [
-                                        _buildControlGroup([
-                                          _buildPlayPauseButton(),
-                                          if (widget.episodeListNav != null)
-                                            _buildEpisodeButton(
-                                              enabled: !widget
-                                                  .episodeListNav!.switching,
-                                              icon: Icons.playlist_play_rounded,
-                                              tooltip: '选集',
-                                              onPressed: _toggleEpisodeDrawer,
-                                            ),
-                                          if (widget.episodeNav != null) ...[
-                                            _buildEpisodeButton(
-                                              enabled: widget.episodeNav!.canPrev &&
-                                                  !widget.episodeNav!.switching,
-                                              icon: Icons.skip_previous_rounded,
-                                              tooltip: '上一集 (${_shortcutLabel(PlayerShortcutAction.previousEpisode)})',
-                                              onPressed: _handlePrevEpisode,
-                                            ),
-                                            _buildEpisodeButton(
-                                              enabled: widget.episodeNav!.canNext &&
-                                                  !widget.episodeNav!.switching,
-                                              icon: Icons.skip_next_rounded,
-                                              tooltip: '下一集 (${_shortcutLabel(PlayerShortcutAction.nextEpisode)})',
-                                              onPressed: _handleNextEpisode,
-                                            ),
-                                          ],
-                                          if (widget.replayNav != null)
-                                            _buildEpisodeButton(
-                                              enabled: !widget.replayNav!.busy,
-                                              icon: Icons.replay_rounded,
-                                              tooltip: '重播（从头开始）',
-                                              onPressed: _handleReplay,
-                                            ),
-                                          if (!_isLiveMode && session == null) _buildSpeedSelector(),
-                                          if (_hasQualityChoices)
-                                            _buildQualitySelector(),
-                                        ]),
-                                        _buildControlGroup([
-                                          _buildSkipMarkerButtons(),
-                                          if (widget.segmentsNav != null)
-                                            _buildSegmentsButton(),
-                                          if (widget.partyNav != null)
-                                            _buildPartyButton(),
-                                          if (_hasDanmaku)
-                                            _buildDanmakuButton(),
-                                          if (_hasDanmakuSearch)
-                                            _buildDanmakuSearchButton(),
-                                          if (_hasDanmakuSettings)
-                                            _buildDanmakuSettingsButton(),
-                                          _buildVolumeControl(),
-                                          if (_hasSettingsEntries)
-                                            _buildSettingsButton(),
-                                          if (_canShowExternalPlayer)
-                                            _buildExternalPlayerButton(),
-                                          _buildPipButton(),
-                                          _buildFullscreenButton(),
-                                        ]),
+                                        const SizedBox(width: 12),
+                                        _buildTimeLabel(),
                                       ],
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 2),
+                                    // 空间不足时右侧组换行，所有按钮仍可直接点击。
+                                    Overlay.wrap(
+                                      alwaysSizeToContent: true,
+                                      clipBehavior: Clip.none,
+                                      child: OverflowBar(
+                                        alignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        overflowAlignment:
+                                            OverflowBarAlignment.end,
+                                        children: [
+                                          _buildControlGroup([
+                                            _buildPlayPauseButton(),
+                                            if (widget.episodeListNav != null)
+                                              _buildEpisodeButton(
+                                                enabled: !widget
+                                                    .episodeListNav!
+                                                    .switching,
+                                                icon:
+                                                    Icons.playlist_play_rounded,
+                                                tooltip: '选集',
+                                                onPressed: _toggleEpisodeDrawer,
+                                              ),
+                                            if (widget.episodeNav != null) ...[
+                                              _buildEpisodeButton(
+                                                enabled:
+                                                    widget
+                                                        .episodeNav!
+                                                        .canPrev &&
+                                                    !widget
+                                                        .episodeNav!
+                                                        .switching,
+                                                icon:
+                                                    Icons.skip_previous_rounded,
+                                                tooltip:
+                                                    '上一集 (${_shortcutLabel(PlayerShortcutAction.previousEpisode)})',
+                                                onPressed: _handlePrevEpisode,
+                                              ),
+                                              _buildEpisodeButton(
+                                                enabled:
+                                                    widget
+                                                        .episodeNav!
+                                                        .canNext &&
+                                                    !widget
+                                                        .episodeNav!
+                                                        .switching,
+                                                icon: Icons.skip_next_rounded,
+                                                tooltip:
+                                                    '下一集 (${_shortcutLabel(PlayerShortcutAction.nextEpisode)})',
+                                                onPressed: _handleNextEpisode,
+                                              ),
+                                            ],
+                                            if (widget.replayNav != null)
+                                              _buildEpisodeButton(
+                                                enabled:
+                                                    !widget.replayNav!.busy,
+                                                icon: Icons.replay_rounded,
+                                                tooltip: '重播（从头开始）',
+                                                onPressed: _handleReplay,
+                                              ),
+                                            if (!_isLiveMode && session == null)
+                                              _buildSpeedSelector(),
+                                            if (_hasQualityChoices)
+                                              _buildQualitySelector(),
+                                          ]),
+                                          _buildControlGroup([
+                                            _buildSkipMarkerButtons(),
+                                            if (widget.segmentsNav != null)
+                                              _buildSegmentsButton(),
+                                            if (widget.partyNav != null)
+                                              _buildPartyButton(),
+                                            if (_hasDanmaku)
+                                              _buildDanmakuButton(),
+                                            if (_hasDanmakuSearch)
+                                              _buildDanmakuSearchButton(),
+                                            if (_hasDanmakuSettings)
+                                              _buildDanmakuSettingsButton(),
+                                            _buildVolumeControl(),
+                                            if (_hasSettingsEntries)
+                                              _buildSettingsButton(),
+                                            if (_canShowExternalPlayer)
+                                              _buildExternalPlayerButton(),
+                                            _buildPipButton(),
+                                            _buildFullscreenButton(),
+                                          ]),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
+                      ),
                     ),
                   ),
-                ),
-                // 7. 跳过片头浮层胶囊（仅已设片头且当前仍在片头区间内出现）；
-                //    §44 其上是共享片段的执行器（自动跳过 / 静音，1 票时的提示胶囊）。
-                //
-                // 位置固定在控制条之上（2026-10-27 实机反馈「点击时抽搐、点好几下点不到」）：
-                // 原先 bottom 随控制条显隐在 96 / 24 之间跳，而 24 正落在底部热区里——
-                // 鼠标移过去 → 控制条出现 → 胶囊跳走 → 鼠标出热区 → 控制条隐藏 → 胶囊落回，循环。
-                // 现在固定 96，并且指针停在胶囊上时视作「在控制区」：控制条不隐藏、撤销倒计时暂停。
-                Positioned(
-                  right: 24,
-                  bottom: 96,
-                  child: MouseRegion(
-                    onEnter: (_) {
-                      _pointerOnPill = true;
-                      _pointerInChrome = true;
-                      _hideControlsTimer?.cancel();
-                    },
-                    onExit: (_) {
-                      _pointerOnPill = false;
-                    },
-                    child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (widget.segmentsNav != null)
-                        SegmentPlaybackRunner(
-                          nav: widget.segmentsNav!,
-                          engine: widget.playerEngine,
-                          onNotice: _osdController.show,
-                        ),
-                      _buildSkipIntroPill(),
-                    ],
-                  ),
-                  ),
-                ),
-
-                // 8. 起播准备态（§16）：解析地址期间盖在最上层。
-                //    没有它时，弱网下点选集要干等几秒才进播放页。
-                if (widget.preparing != null)
-                  PlaybackPreparingOverlay(
-                    intent: widget.preparing!,
-                    onRetry: widget.onRetryPrepare,
-                    onCancel: widget.onCancelPrepare,
-                    sourceSwitchNav:
-                        _canShowSourceActions ? widget.sourceSwitchNav : null,
-                    // 让出顶栏高度，返回按钮才点得到。
-                    topInset: pip ? 0 : 54,
+                  // 7. 跳过片头浮层胶囊（仅已设片头且当前仍在片头区间内出现）；
+                  //    §44 其上是共享片段的执行器（自动跳过 / 静音，1 票时的提示胶囊）。
+                  //
+                  // 位置固定在控制条之上（2026-10-27 实机反馈「点击时抽搐、点好几下点不到」）：
+                  // 原先 bottom 随控制条显隐在 96 / 24 之间跳，而 24 正落在底部热区里——
+                  // 鼠标移过去 → 控制条出现 → 胶囊跳走 → 鼠标出热区 → 控制条隐藏 → 胶囊落回，循环。
+                  // 现在固定 96，并且指针停在胶囊上时视作「在控制区」：控制条不隐藏、撤销倒计时暂停。
+                  Positioned(
+                    right: 24,
+                    bottom: 96,
+                    child: MouseRegion(
+                      onEnter: (_) {
+                        _pointerOnPill = true;
+                        _pointerInChrome = true;
+                        _hideControlsTimer?.cancel();
+                      },
+                      onExit: (_) {
+                        _pointerOnPill = false;
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (widget.segmentsNav != null)
+                            SegmentPlaybackRunner(
+                              nav: widget.segmentsNav!,
+                              engine: widget.playerEngine,
+                              onNotice: _osdController.show,
+                            ),
+                          _buildSkipIntroPill(),
+                        ],
+                      ),
+                    ),
                   ),
 
-                // 9. §20 选集 + 线路抽屉挂在视频表面层（控制条之下，见 _wrapEpisodeLayer）。
-              ],
-            )),
+                  // 8. 起播准备态（§16）：解析地址期间盖在最上层。
+                  //    没有它时，弱网下点选集要干等几秒才进播放页。
+                  if (widget.preparing != null)
+                    PlaybackPreparingOverlay(
+                      intent: widget.preparing!,
+                      onRetry: widget.onRetryPrepare,
+                      onCancel: widget.onCancelPrepare,
+                      sourceSwitchNav: _canShowSourceActions
+                          ? widget.sourceSwitchNav
+                          : null,
+                      // 让出顶栏高度，返回按钮才点得到。
+                      topInset: pip ? 0 : 54,
+                    ),
+
+                  // 9. §20 选集 + 线路抽屉挂在视频表面层（控制条之下，见 _wrapEpisodeLayer）。
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBottomControlTooltip(
-      {required String message, required Widget child}) {
+  Widget _buildBottomControlTooltip({
+    required String message,
+    required Widget child,
+  }) {
     return Tooltip(
       message: message,
       positionDelegate: (position) {
@@ -1920,10 +2025,7 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }) {
     final button = _buildBottomControlTooltip(
       message: tooltip,
-      child: _ControlButton(
-        icon: icon,
-        onPressed: enabled ? onPressed : null,
-      ),
+      child: _ControlButton(icon: icon, onPressed: enabled ? onPressed : null),
     );
     if (enabled) return button;
     return GestureDetector(
@@ -1944,7 +2046,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     return ValueListenableBuilder<SegmentsState>(
       valueListenable: nav.state,
       builder: (context, state, _) => builder(
-          segmentMarksFor(state, widget.playerEngine.duration.inMilliseconds)),
+        segmentMarksFor(state, widget.playerEngine.duration.inMilliseconds),
+      ),
     );
   }
 
@@ -1952,48 +2055,50 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     // D4：真直播隐藏进度条（不是只禁用）——Slider 的 max 依赖 duration，
     // 直播下常为 1 或滑动窗口长度，位置显示会失真，且会诱导用户拖动。
     if (_isLiveMode) return _buildLiveProgressIndicator();
-    return _withSegmentMarks((marks) => StreamBuilder<Duration>(
-      stream: widget.playerEngine.positionStream,
-      initialData: widget.playerEngine.position,
-      builder: (context, snapshot) {
-        final posMs = _dragSeekPositionMs >= 0
-            ? _dragSeekPositionMs
-            : (snapshot.data?.inMilliseconds.toDouble() ?? 0.0);
-        final durMs = widget.playerEngine.duration.inMilliseconds.toDouble();
-        final maxVal = durMs > 0 ? durMs : 1.0;
+    return _withSegmentMarks(
+      (marks) => StreamBuilder<Duration>(
+        stream: widget.playerEngine.positionStream,
+        initialData: widget.playerEngine.position,
+        builder: (context, snapshot) {
+          final posMs = _dragSeekPositionMs >= 0
+              ? _dragSeekPositionMs
+              : (snapshot.data?.inMilliseconds.toDouble() ?? 0.0);
+          final durMs = widget.playerEngine.duration.inMilliseconds.toDouble();
+          final maxVal = durMs > 0 ? durMs : 1.0;
 
-        return MouseRegion(
-          onEnter: (_) => setState(() => _progressHovered = true),
-          onExit: (_) => setState(() => _progressHovered = false),
-          child: TweenAnimationBuilder<double>(
-            // 悬停加粗（B5）：轨道 3.5→6、滑点 6→7，200ms 过渡。
-            tween: Tween<double>(end: _progressHovered ? 1.0 : 0.0),
-            duration: _chromeMotion(context, visible: true),
-            curve: AppMotion.ease,
-            builder: (context, t, _) => SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3.5 + 2.5 * t,
-                // §44 片段色块（片头片尾绿、广告黄……）画在轨道上、滑点之下
-                trackShape: SegmentTrackShape(marks),
-                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6 + t),
-                activeTrackColor: _chromeHighlight,
-                inactiveTrackColor: _chromeTrack,
-                thumbColor: _chromeInk,
-                overlayColor: _chromeHighlight.withValues(alpha: 0.2),
-              ),
-              child: Slider(
-                key: const ValueKey('player-timeline'),
-                value: posMs.clamp(0.0, maxVal),
-                max: maxVal,
-                onChangeStart: durMs > 0 ? _previewSeek : null,
-                onChanged: durMs > 0 ? _previewSeek : null,
-                onChangeEnd: durMs > 0 ? _commitSeek : null,
+          return MouseRegion(
+            onEnter: (_) => setState(() => _progressHovered = true),
+            onExit: (_) => setState(() => _progressHovered = false),
+            child: TweenAnimationBuilder<double>(
+              // 悬停加粗（B5）：轨道 3.5→6、滑点 6→7，200ms 过渡。
+              tween: Tween<double>(end: _progressHovered ? 1.0 : 0.0),
+              duration: _chromeMotion(context, visible: true),
+              curve: AppMotion.ease,
+              builder: (context, t, _) => SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3.5 + 2.5 * t,
+                  // §44 片段色块（片头片尾绿、广告黄……）画在轨道上、滑点之下
+                  trackShape: SegmentTrackShape(marks),
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6 + t),
+                  activeTrackColor: _chromeHighlight,
+                  inactiveTrackColor: _chromeTrack,
+                  thumbColor: _chromeInk,
+                  overlayColor: _chromeHighlight.withValues(alpha: 0.2),
+                ),
+                child: Slider(
+                  key: const ValueKey('player-timeline'),
+                  value: posMs.clamp(0.0, maxVal),
+                  max: maxVal,
+                  onChangeStart: durMs > 0 ? _previewSeek : null,
+                  onChanged: durMs > 0 ? _previewSeek : null,
+                  onChangeEnd: durMs > 0 ? _commitSeek : null,
+                ),
               ),
             ),
-          ),
-        );
-      },
-    ));
+          );
+        },
+      ),
+    );
   }
 
   /// 直播模式下的进度区：`LIVE` 徽标 + 提示，替代 Slider（D4）。
@@ -2036,8 +2141,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   /// 系统开启「减少动画」时瞬切（skill `reduced-motion`）。
   Duration _chromeMotion(BuildContext context, {required bool visible}) =>
       MediaQuery.of(context).disableAnimations
-          ? Duration.zero
-          : (visible ? AppMotion.enter : AppMotion.exit);
+      ? Duration.zero
+      : (visible ? AppMotion.enter : AppMotion.exit);
 
   /// 底栏隐藏时的常驻细进度线：贴窗口最底、纯展示（`IgnorePointer`）。
   ///
@@ -2054,54 +2159,63 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     // 直播不显示常驻细进度线：直链场景里 duration > 0 时它会变成
     // 「直播却有一条看起来可拖动的时间轴」，与 D4 的口径冲突。
     if (_isLiveMode) return const SizedBox.shrink();
-    return _withSegmentMarks((marks) => StreamBuilder<Duration>(
-      stream: widget.playerEngine.positionStream,
-      initialData: widget.playerEngine.position,
-      builder: (context, snapshot) {
-        final durMs = widget.playerEngine.duration.inMilliseconds;
-        final hasDuration = durMs > 0;
-        final posMs = (snapshot.data?.inMilliseconds ?? 0)
-            .clamp(0, hasDuration ? durMs : 1);
-        final fraction = hasDuration ? posMs / durMs : 0.0;
-        final visible =
-            widget.showMiniProgress && !_chromeVisible && hasDuration;
-        return IgnorePointer(
-          // 显示度用颜色 alpha 插值表达（不用 Opacity 包裹）：显隐
-          // 不改变子树结构与语义节点。
-          child: TweenAnimationBuilder<double>(
-            key: const ValueKey('player-mini-progress'),
-            tween: Tween<double>(end: visible ? 1.0 : 0.0),
-            duration: _chromeMotion(context, visible: visible),
-            builder: (context, alpha, _) => SizedBox(
-              height: 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ColoredBox(color: _chromeTrack.withValues(alpha: alpha)),
-                  FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: fraction,
-                    child: ColoredBox(
-                        color: _chromeHighlight.withValues(alpha: alpha)),
-                  ),
-                  // §44 片段色块：与进度条同色，底栏隐藏后也看得到片头片尾 / 广告在哪
-                  for (final m in marks)
+    return _withSegmentMarks(
+      (marks) => StreamBuilder<Duration>(
+        stream: widget.playerEngine.positionStream,
+        initialData: widget.playerEngine.position,
+        builder: (context, snapshot) {
+          final durMs = widget.playerEngine.duration.inMilliseconds;
+          final hasDuration = durMs > 0;
+          final posMs = (snapshot.data?.inMilliseconds ?? 0).clamp(
+            0,
+            hasDuration ? durMs : 1,
+          );
+          final fraction = hasDuration ? posMs / durMs : 0.0;
+          final visible =
+              widget.showMiniProgress && !_chromeVisible && hasDuration;
+          return IgnorePointer(
+            // 显示度用颜色 alpha 插值表达（不用 Opacity 包裹）：显隐
+            // 不改变子树结构与语义节点。
+            child: TweenAnimationBuilder<double>(
+              key: const ValueKey('player-mini-progress'),
+              tween: Tween<double>(end: visible ? 1.0 : 0.0),
+              duration: _chromeMotion(context, visible: visible),
+              builder: (context, alpha, _) => SizedBox(
+                height: 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(color: _chromeTrack.withValues(alpha: alpha)),
                     FractionallySizedBox(
-                      key: ValueKey('player-mini-segment-${m.id}'),
-                      alignment: Alignment(
-                          m.end - m.start >= 1 ? 0 : (m.start / (1 - (m.end - m.start))) * 2 - 1,
-                          0),
-                      widthFactor: m.end - m.start,
+                      alignment: Alignment.centerLeft,
+                      widthFactor: fraction,
                       child: ColoredBox(
-                          color: m.color.withValues(alpha: m.color.a * alpha)),
+                        color: _chromeHighlight.withValues(alpha: alpha),
+                      ),
                     ),
-                ],
+                    // §44 片段色块：与进度条同色，底栏隐藏后也看得到片头片尾 / 广告在哪
+                    for (final m in marks)
+                      FractionallySizedBox(
+                        key: ValueKey('player-mini-segment-${m.id}'),
+                        alignment: Alignment(
+                          m.end - m.start >= 1
+                              ? 0
+                              : (m.start / (1 - (m.end - m.start))) * 2 - 1,
+                          0,
+                        ),
+                        widthFactor: m.end - m.start,
+                        child: ColoredBox(
+                          color: m.color.withValues(alpha: m.color.a * alpha),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    ));
+          );
+        },
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -2116,20 +2230,20 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   static const double _controlRowHeight = 44;
 
   Widget _buildControlGroup(List<Widget> controls) => Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (final control in controls)
-            SizedBox(
-              height: _controlRowHeight,
-              // 入口按自身高度（`_controlHitSize`）居中，图标中心即行中线。
-              child: Align(
-                alignment: Alignment.center,
-                widthFactor: 1,
-                child: control,
-              ),
-            ),
-        ],
-      );
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      for (final control in controls)
+        SizedBox(
+          height: _controlRowHeight,
+          // 入口按自身高度（`_controlHitSize`）居中，图标中心即行中线。
+          child: Align(
+            alignment: Alignment.center,
+            widthFactor: 1,
+            child: control,
+          ),
+        ),
+    ],
+  );
 
   Widget _buildPlayPauseButton() {
     return StreamBuilder<PlaybackStatus>(
@@ -2138,7 +2252,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       builder: (context, snapshot) {
         final isPlaying = snapshot.data == PlaybackStatus.playing;
         return _buildBottomControlTooltip(
-          message: '${isPlaying ? '暂停' : '播放'} '
+          message:
+              '${isPlaying ? '暂停' : '播放'} '
               '(${_shortcutLabel(PlayerShortcutAction.playPause)})',
           child: _ControlButton(
             icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
@@ -2168,13 +2283,14 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     if (nav == null) return const SizedBox.shrink();
     final valueMs = ending ? nav.endingMs : nav.openingMs;
     final label = ending ? '片尾' : '片头';
-    final valueText =
-        valueMs > 0 ? _formatDuration(Duration(milliseconds: valueMs)) : null;
+    final valueText = valueMs > 0
+        ? _formatDuration(Duration(milliseconds: valueMs))
+        : null;
     final message = valueText == null
         ? '$label（未设置）：点击设为当前位置'
         : (ending
-            ? '$label（距结尾 $valueText）：点击设为当前位置'
-            : '$label（当前 $valueText）：点击设为当前位置');
+              ? '$label（距结尾 $valueText）：点击设为当前位置'
+              : '$label（当前 $valueText）：点击设为当前位置');
     return _buildBottomControlTooltip(
       message: message,
       child: FocusOutline(
@@ -2193,9 +2309,13 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               visualDensity: VisualDensity.standard,
               overlayColor: _chromeInk.withValues(alpha: 0.12),
             ),
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: AppType.body, fontWeight: FontWeight.bold)),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: AppType.body,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
       ),
@@ -2258,9 +2378,7 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         return '直播弹幕重连中';
       case LiveDanmakuStatus.error:
         final error = nav.error()?.trim();
-        return error == null || error.isEmpty
-            ? '直播弹幕连接失败'
-            : '直播弹幕连接失败：$error';
+        return error == null || error.isEmpty ? '直播弹幕连接失败' : '直播弹幕连接失败：$error';
       case LiveDanmakuStatus.closed:
         return '直播弹幕已断开';
     }
@@ -2276,8 +2394,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         turningOn ? Icons.subtitles_rounded : Icons.subtitles_off_rounded,
         turningOn
             ? (liveNav.status() == LiveDanmakuStatus.ready
-                ? '弹幕已开启'
-                : '弹幕已开启 · ${_liveDanmakuStatusLabel(liveNav)}')
+                  ? '弹幕已开启'
+                  : '弹幕已开启 · ${_liveDanmakuStatusLabel(liveNav)}')
             : '弹幕已关闭',
       );
       return;
@@ -2291,8 +2409,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       turningOn ? Icons.subtitles_rounded : Icons.subtitles_off_rounded,
       turningOn
           ? (state.phase == DanmakuLoadPhase.ready
-              ? '弹幕已开启'
-              : '弹幕已开启 · ${state.label}')
+                ? '弹幕已开启'
+                : '弹幕已开启 · ${state.label}')
           : '弹幕已关闭',
     );
   }
@@ -2321,8 +2439,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 fontSize: pip
                     ? pipDanmakuFontSize(settings.fontSize, box.maxHeight)
                     : (fullScreen
-                        ? settings.fullscreenFontSize
-                        : settings.fontSize),
+                          ? settings.fullscreenFontSize
+                          : settings.fontSize),
                 area: pip ? settings.pipArea : settings.area,
               ),
             ),
@@ -2360,8 +2478,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                   fontSize: pip
                       ? pipDanmakuFontSize(settings.fontSize, box.maxHeight)
                       : (fullScreen
-                          ? settings.fullscreenFontSize
-                          : settings.fontSize),
+                            ? settings.fullscreenFontSize
+                            : settings.fontSize),
                   area: pip ? settings.pipArea : settings.area,
                 ),
               ),
@@ -2458,7 +2576,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           ? null
           : (source) {
               final nav = widget.danmakuNav;
-              nav?.onSettingsChanged?.call(nav.settings.copyWith(source: source));
+              nav?.onSettingsChanged?.call(
+                nav.settings.copyWith(source: source),
+              );
             },
     );
     if (!mounted) return;
@@ -2483,11 +2603,12 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           final tip = !enabled
               ? '开启弹幕 ($keys)'
               : (status == LiveDanmakuStatus.ready
-                  ? '关闭弹幕 ($keys)'
-                  : '关闭弹幕 ($keys) · ${_liveDanmakuStatusLabel(liveNav)}');
+                    ? '关闭弹幕 ($keys)'
+                    : '关闭弹幕 ($keys) · ${_liveDanmakuStatusLabel(liveNav)}');
           return _buildDanmakuToggleControl(
             enabled: enabled,
-            busy: status == LiveDanmakuStatus.connecting ||
+            busy:
+                status == LiveDanmakuStatus.connecting ||
                 status == LiveDanmakuStatus.retrying,
             message: tip,
           );
@@ -2503,8 +2624,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         final tip = !nav.enabled
             ? '开启弹幕 ($keys)'
             : (state.phase == DanmakuLoadPhase.ready
-                ? '关闭弹幕 ($keys)'
-                : '关闭弹幕 ($keys) · ${state.label}');
+                  ? '关闭弹幕 ($keys)'
+                  : '关闭弹幕 ($keys) · ${state.label}');
         return _buildDanmakuToggleControl(
           enabled: nav.enabled,
           busy: state.busy,
@@ -2542,7 +2663,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 child: DecoratedBox(
                   key: ValueKey('player-danmaku-busy'),
                   decoration: BoxDecoration(
-                      color: _chromeHighlight, shape: BoxShape.circle),
+                    color: _chromeHighlight,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             ),
@@ -2553,7 +2676,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
   Widget _buildFullscreenButton() {
     return _buildBottomControlTooltip(
-      message: '全屏 (${_shortcutLabel(PlayerShortcutAction.toggleFullscreen)} / 双击)',
+      message:
+          '全屏 (${_shortcutLabel(PlayerShortcutAction.toggleFullscreen)} / 双击)',
       child: _ControlButton(
         icon: Icons.fullscreen_rounded,
         iconSize: 22,
@@ -2564,7 +2688,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
   void _launchExternalPlayer() {
     final nav = widget.externalNav;
-    if (!_canShowExternalPlayer || nav == null || !nav.enabled || nav.busy) return;
+    if (!_canShowExternalPlayer || nav == null || !nav.enabled || nav.busy)
+      return;
     _onUserActivity();
     nav.onLaunch();
   }
@@ -2587,7 +2712,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   /// 「画中画」入口：缩小为置顶小窗，返回键还原，拖画面可换位。
   Widget _buildPipButton() {
     return _buildBottomControlTooltip(
-      message: '画中画（小窗悬浮播放，${_shortcutLabel(PlayerShortcutAction.exitFullscreen)} 还原）',
+      message:
+          '画中画（小窗悬浮播放，${_shortcutLabel(PlayerShortcutAction.exitFullscreen)} 还原）',
       child: _ControlButton(
         icon: Icons.picture_in_picture_alt_rounded,
         iconSize: 22,
@@ -2632,14 +2758,17 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               child: Row(
                 children: [
                   _buildBottomControlTooltip(
-                    message: '还原窗口 (${_shortcutLabel(PlayerShortcutAction.exitFullscreen)})',
+                    message:
+                        '还原窗口 (${_shortcutLabel(PlayerShortcutAction.exitFullscreen)})',
                     child: _ControlButton(
                       icon: Icons.open_in_full_rounded,
                       iconSize: 22,
                       onPressed: () {
                         unawaited(widget.windowManager.exitPip());
                         _osdController.show(
-                            Icons.open_in_full_rounded, '已还原窗口');
+                          Icons.open_in_full_rounded,
+                          '已还原窗口',
+                        );
                       },
                     ),
                   ),
@@ -2666,8 +2795,12 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
   void _selectQuality(int index, List<String> expectedNames) {
     final nav = widget.qualityNav;
-    if (!_hasQualityChoices || nav == null || nav.busy ||
-        index == nav.selectedIndex || index < 0 || index >= nav.names.length ||
+    if (!_hasQualityChoices ||
+        nav == null ||
+        nav.busy ||
+        index == nav.selectedIndex ||
+        index < 0 ||
+        index >= nav.names.length ||
         !listEquals(nav.names, expectedNames)) {
       return;
     }
@@ -2699,7 +2832,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               value: index,
               checked: index == nav.selectedIndex,
               enabled: !nav.busy && index != nav.selectedIndex,
-              child: Text(nav.names[index], maxLines: 2, overflow: TextOverflow.ellipsis),
+              child: Text(
+                nav.names[index],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
         // 清晰度入口：36 高统一点击盒，文案 / 忙碌圈 / 箭头共用同一条垂直中线。
@@ -2713,19 +2850,30 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 if (nav.busy) ...[
                   const SizedBox.square(
                     dimension: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: _chromeInk),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _chromeInk,
+                    ),
                   ),
                   const SizedBox(width: 6),
                 ],
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 92),
-                  child: Text(nav.currentName,
+                  child: Text(
+                    nav.currentName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _chromeInk, fontSize: AppType.body),
+                    style: const TextStyle(
+                      color: _chromeInk,
+                      fontSize: AppType.body,
+                    ),
                   ),
                 ),
-                const Icon(Icons.expand_more_rounded, size: 16, color: _chromeInk),
+                const Icon(
+                  Icons.expand_more_rounded,
+                  size: 16,
+                  color: _chromeInk,
+                ),
               ],
             ),
           ),
@@ -2734,24 +2882,34 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     );
   }
 
-  Widget _embeddedVideo(EmbeddedPlaybackSession session) => StreamBuilder<VideoDimensions>(
-    stream: widget.playerEngine.dimensionsStream,
-    initialData: widget.playerEngine.dimensions,
-    builder: (context, snapshot) {
-      final ratio = switch (widget.scale) {
-        '16:9' => 16 / 9,
-        '4:3' => 4 / 3,
-        _ => snapshot.data?.aspectRatio ?? 16 / 9,
-      };
-      return ColoredBox(color: Colors.black, child: ClipRect(child: FittedBox(
-        fit: videoFitForScale(widget.scale),
-        child: SizedBox(width: ratio * 100, height: 100, child: Texture(
-          key: ValueKey('embedded-video-${session.backend.name}'),
-          textureId: session.textureId,
-        )),
-      )));
-    },
-  );
+  Widget _embeddedVideo(EmbeddedPlaybackSession session) =>
+      StreamBuilder<VideoDimensions>(
+        stream: widget.playerEngine.dimensionsStream,
+        initialData: widget.playerEngine.dimensions,
+        builder: (context, snapshot) {
+          final ratio = switch (widget.scale) {
+            '16:9' => 16 / 9,
+            '4:3' => 4 / 3,
+            _ => snapshot.data?.aspectRatio ?? 16 / 9,
+          };
+          return ColoredBox(
+            color: Colors.black,
+            child: ClipRect(
+              child: FittedBox(
+                fit: videoFitForScale(widget.scale),
+                child: SizedBox(
+                  width: ratio * 100,
+                  height: 100,
+                  child: Texture(
+                    key: ValueKey('embedded-video-${session.backend.name}'),
+                    textureId: session.textureId,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
 
   /// 只要还有任何「设置项」就显示齿轮入口，避免空面板。
   bool get _hasSettingsEntries =>
@@ -2833,6 +2991,7 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           void refreshPanel() {
             if (panelAlive && mounted) setPanelState(() {});
           }
+
           _refreshSettingsPanel = refreshPanel;
           return _buildSettingsPanel(context, refreshPanel);
         },
@@ -2878,202 +3037,239 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
     // 画面：画面比例（单选，与设置中心同源）
     if (widget.onScaleChanged != null) {
-      imageRows.add(_buildScaleSelector(
-        rowBuilder: (label) => _panelRow(
-          icon: Icons.aspect_ratio_rounded,
-          label: '画面比例',
+      imageRows.add(
+        _buildScaleSelector(
+          rowBuilder: (label) =>
+              _panelRow(icon: Icons.aspect_ratio_rounded, label: '画面比例'),
+          onSelectionHandled: refreshPanel,
         ),
-        onSelectionHandled: refreshPanel,
-      ));
+      );
     }
 
     // 轨道：字幕 / 音轨 / 视轨（各自内联列表）
     if (!_usingEmbedded && widget.subtitleTracksNav != null) {
-      trackRows.add(_buildSubtitleSelector(
-        rowBuilder: (tracks) => _panelRow(
-          icon: Icons.subtitles_rounded,
-          label: '字幕',
-          value: tracks.any((t) => t.isSelected)
-              ? tracks.firstWhere((t) => t.isSelected).displayName
-              : '已关闭',
+      trackRows.add(
+        _buildSubtitleSelector(
+          rowBuilder: (tracks) => _panelRow(
+            icon: Icons.subtitles_rounded,
+            label: '字幕',
+            value: tracks.any((t) => t.isSelected)
+                ? tracks.firstWhere((t) => t.isSelected).displayName
+                : '已关闭',
+          ),
+          onSelectionHandled: refreshPanel,
         ),
-        onSelectionHandled: refreshPanel,
-      ));
-    } else if (_usingEmbedded && widget.subtitleTracksNav?.readSession != null) {
-      trackRows.add(_panelRow(
-        icon: Icons.subtitles_rounded,
-        label: '字幕需切换到 mpv',
-        trailing: const SizedBox.shrink(),
-      ));
+      );
+    } else if (_usingEmbedded &&
+        widget.subtitleTracksNav?.readSession != null) {
+      trackRows.add(
+        _panelRow(
+          icon: Icons.subtitles_rounded,
+          label: '字幕需切换到 mpv',
+          trailing: const SizedBox.shrink(),
+        ),
+      );
     }
     if (!_usingEmbedded && widget.audioTracksNav != null) {
-      trackRows.add(_buildAudioSelector(
-        rowBuilder: (tracks) => _panelRow(
-          icon: Icons.audiotrack_rounded,
-          label: '音轨',
-          value: tracks.isEmpty
-              ? null
-              : tracks
-                  .firstWhere((t) => t.isSelected, orElse: () => tracks.first)
-                  .displayName,
+      trackRows.add(
+        _buildAudioSelector(
+          rowBuilder: (tracks) => _panelRow(
+            icon: Icons.audiotrack_rounded,
+            label: '音轨',
+            value: tracks.isEmpty
+                ? null
+                : tracks
+                      .firstWhere(
+                        (t) => t.isSelected,
+                        orElse: () => tracks.first,
+                      )
+                      .displayName,
+          ),
+          onSelectionHandled: refreshPanel,
         ),
-        onSelectionHandled: refreshPanel,
-      ));
+      );
     }
     if (!_usingEmbedded && widget.videoTracksNav != null) {
-      trackRows.add(_buildVideoSelector(
-        rowBuilder: (tracks, selectedId) => _panelRow(
-          icon: Icons.video_settings_rounded,
-          label: '视轨',
-          value: switch (selectedId) {
-            'auto' => '自动选择',
-            'no' => '已关闭',
-            _ => tracks
-                .firstWhere((t) => 'video:${t.id}' == selectedId,
-                    orElse: () => tracks.first)
-                .displayName,
-          },
+      trackRows.add(
+        _buildVideoSelector(
+          rowBuilder: (tracks, selectedId) => _panelRow(
+            icon: Icons.video_settings_rounded,
+            label: '视轨',
+            value: switch (selectedId) {
+              'auto' => '自动选择',
+              'no' => '已关闭',
+              _ =>
+                tracks
+                    .firstWhere(
+                      (t) => 'video:${t.id}' == selectedId,
+                      orElse: () => tracks.first,
+                    )
+                    .displayName,
+            },
+          ),
+          onSelectionHandled: refreshPanel,
         ),
-        onSelectionHandled: refreshPanel,
-      ));
+      );
     }
 
     final qualityNav = widget.qualityNav;
     if (_hasQualityChoices && qualityNav != null) {
       for (var index = 0; index < qualityNav.names.length; index++) {
         final selected = index == qualityNav.selectedIndex;
-        qualityRows.add(_panelActionRow(
-          icon: selected ? Icons.check_circle_rounded : Icons.high_quality_rounded,
-          label: qualityNav.names[index],
-          value: qualityNav.busy ? '切换中…' : (selected ? '当前${qualityNav.label}' : null),
-          enabled: !qualityNav.busy && !selected,
-          onTap: () {
-            Navigator.of(context).pop();
-            _selectQuality(index, qualityNav.names);
-          },
-        ));
+        qualityRows.add(
+          _panelActionRow(
+            icon: selected
+                ? Icons.check_circle_rounded
+                : Icons.high_quality_rounded,
+            label: qualityNav.names[index],
+            value: qualityNav.busy
+                ? '切换中…'
+                : (selected ? '当前${qualityNav.label}' : null),
+            enabled: !qualityNav.busy && !selected,
+            onTap: () {
+              Navigator.of(context).pop();
+              _selectQuality(index, qualityNav.names);
+            },
+          ),
+        );
       }
     }
 
     final sourceNav = widget.sourceSwitchNav;
     if (_canShowSourceActions && sourceNav != null) {
-      playRows.add(_panelActionRow(
-        icon: Icons.travel_explore_rounded,
-        label: sourceNav.busy ? '正在查找…' : '换源继续播放',
-        value: sourceNav.statusText,
-        enabled: sourceNav.enabled && !sourceNav.busy,
-        onTap: () {
-          final current = widget.sourceSwitchNav;
-          if (current == null || !current.enabled || current.busy) return;
-          Navigator.of(context).pop();
-          current.onSearch();
-        },
-      ));
-      if (sourceNav.busy && sourceNav.onCancel != null) {
-        playRows.add(_panelActionRow(
-          icon: Icons.close_rounded,
-          label: '取消查找',
+      playRows.add(
+        _panelActionRow(
+          icon: Icons.travel_explore_rounded,
+          label: sourceNav.busy ? '正在查找…' : '换源继续播放',
+          value: sourceNav.statusText,
+          enabled: sourceNav.enabled && !sourceNav.busy,
           onTap: () {
+            final current = widget.sourceSwitchNav;
+            if (current == null || !current.enabled || current.busy) return;
             Navigator.of(context).pop();
-            widget.sourceSwitchNav?.onCancel?.call();
+            current.onSearch();
           },
-        ));
+        ),
+      );
+      if (sourceNav.busy && sourceNav.onCancel != null) {
+        playRows.add(
+          _panelActionRow(
+            icon: Icons.close_rounded,
+            label: '取消查找',
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.sourceSwitchNav?.onCancel?.call();
+            },
+          ),
+        );
       }
     }
 
     // 播放：刷新
     final refreshNav = widget.refreshNav;
     if (refreshNav != null) {
-      playRows.add(_panelActionRow(
-        icon: Icons.refresh_rounded,
-        label: '刷新',
-        value: refreshNav.busy ? '刷新中…' : null,
-        enabled: !refreshNav.busy,
-        onTap: () {
-          Navigator.of(context).pop();
-          _handleRefresh();
-        },
-      ));
+      playRows.add(
+        _panelActionRow(
+          icon: Icons.refresh_rounded,
+          label: '刷新',
+          value: refreshNav.busy ? '刷新中…' : null,
+          enabled: !refreshNav.busy,
+          onTap: () {
+            Navigator.of(context).pop();
+            _handleRefresh();
+          },
+        ),
+      );
     }
 
     // 播放：片头 / 片尾（点击即设为当前位置；已设时行尾可清除）
     final skipNav = widget.skipNav;
     if (skipNav != null) {
-      skipRows.add(_panelActionRow(
-        icon: Icons.skip_next_rounded,
-        label: '片头',
-        value: _skipLabel(skipNav.openingMs, '未设置'),
-        onTap: () {
-          Navigator.of(context).pop();
-          _handleOpeningSkip();
-        },
-        trailing: skipNav.openingMs > 0
-            ? _buildPanelClearButton(
-                tooltip: '清除片头',
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _handleClearOpeningSkip();
-                })
-            : null,
-      ));
-      skipRows.add(_panelActionRow(
-        icon: Icons.skip_previous_rounded,
-        label: '片尾',
-        value: _skipLabel(skipNav.endingMs, '未设置'),
-        onTap: () {
-          Navigator.of(context).pop();
-          _handleEndingSkip();
-        },
-        trailing: skipNav.endingMs > 0
-            ? _buildPanelClearButton(
-                tooltip: '清除片尾',
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _handleClearEndingSkip();
-                })
-            : null,
-      ));
+      skipRows.add(
+        _panelActionRow(
+          icon: Icons.skip_next_rounded,
+          label: '片头',
+          value: _skipLabel(skipNav.openingMs, '未设置'),
+          onTap: () {
+            Navigator.of(context).pop();
+            _handleOpeningSkip();
+          },
+          trailing: skipNav.openingMs > 0
+              ? _buildPanelClearButton(
+                  tooltip: '清除片头',
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _handleClearOpeningSkip();
+                  },
+                )
+              : null,
+        ),
+      );
+      skipRows.add(
+        _panelActionRow(
+          icon: Icons.skip_previous_rounded,
+          label: '片尾',
+          value: _skipLabel(skipNav.endingMs, '未设置'),
+          onTap: () {
+            Navigator.of(context).pop();
+            _handleEndingSkip();
+          },
+          trailing: skipNav.endingMs > 0
+              ? _buildPanelClearButton(
+                  tooltip: '清除片尾',
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _handleClearEndingSkip();
+                  },
+                )
+              : null,
+        ),
+      );
     }
 
     // 危险操作：重置（危险色，仍走确认框）
     final resetNav = widget.resetNav;
     if (resetNav != null) {
-      playRows.add(_panelActionRow(
-        icon: Icons.restart_alt_rounded,
-        label: '重置播放器数据',
-        danger: true,
-        enabled: resetNav.enabled,
-        onTap: () {
-          Navigator.of(context).pop();
-          _confirmReset();
-        },
-      ));
+      playRows.add(
+        _panelActionRow(
+          icon: Icons.restart_alt_rounded,
+          label: '重置播放器数据',
+          danger: true,
+          enabled: resetNav.enabled,
+          onTap: () {
+            Navigator.of(context).pop();
+            _confirmReset();
+          },
+        ),
+      );
     }
 
     // 一起看：局域网同步观看（房主 / 观众共用同一个入口）
     final partyNav = widget.partyNav;
     if (partyNav != null) {
-      partyRows.add(ListenableBuilder(
-        listenable: partyNav.listenable,
-        builder: (context, _) {
-          final active = partyNav.isActive();
-          final hosting = partyNav.isHosting();
-          final status = partyNav.statusText();
-          return _panelActionRow(
-            icon: active ? Icons.groups_rounded : Icons.groups_outlined,
-            label: hosting
-                ? '一起看 · 房主'
-                : active
-                    ? '一起看 · 观众'
-                    : '一起看',
-            value: active ? (status.isEmpty ? '进行中' : status) : '局域网同看',
-            onTap: () {
-              Navigator.of(context).pop();
-              partyNav.onOpen();
-            },
-          );
-        },
-      ));
+      partyRows.add(
+        ListenableBuilder(
+          listenable: partyNav.listenable,
+          builder: (context, _) {
+            final active = partyNav.isActive();
+            final hosting = partyNav.isHosting();
+            final status = partyNav.statusText();
+            return _panelActionRow(
+              icon: active ? Icons.groups_rounded : Icons.groups_outlined,
+              label: hosting
+                  ? '一起看 · 房主'
+                  : active
+                  ? '一起看 · 观众'
+                  : '一起看',
+              value: active ? (status.isEmpty ? '进行中' : status) : '局域网同看',
+              onTap: () {
+                Navigator.of(context).pop();
+                partyNav.onOpen();
+              },
+            );
+          },
+        ),
+      );
     }
 
     // 线路：手动换线（SET-12 重做）。当前线路勾选、已失败灰显，都不可点。
@@ -3081,20 +3277,31 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     final lineSection = _buildLineSection(context);
 
     final sections = <Widget>[
-      if (widget.embeddedPlayback != null && widget.playerEngine.currentSpec != null)
-        NativePlaybackChoices(engine: widget.playerEngine, onSwitched: () {
-          if (ModalRoute.of(context)?.isCurrent == true) Navigator.of(context).pop();
-        }),
+      if (widget.embeddedPlayback != null &&
+          widget.playerEngine.currentSpec != null)
+        NativePlaybackChoices(
+          engine: widget.playerEngine,
+          onSwitched: () {
+            if (ModalRoute.of(context)?.isCurrent == true)
+              Navigator.of(context).pop();
+          },
+        ),
       if (imageRows.isNotEmpty) ...[_panelSection('画面'), ...imageRows],
       if (trackRows.isNotEmpty) ...[_panelSection('轨道'), ...trackRows],
-      if (qualityRows.isNotEmpty) ...[_panelSection(qualityNav!.label), ...qualityRows],
+      if (qualityRows.isNotEmpty) ...[
+        _panelSection(qualityNav!.label),
+        ...qualityRows,
+      ],
       if (lineSection != null) lineSection,
       if (playRows.isNotEmpty) ...[_panelSection('播放'), ...playRows],
       if (partyRows.isNotEmpty) ...[_panelSection('一起看'), ...partyRows],
       if (skipRows.isNotEmpty) ...[_panelSection('跳过'), ...skipRows],
     ];
 
-    final infoLabel = widget.embeddedPlayback?.value?.backend.label ?? widget.playerInfoLabel?.trim() ?? '';
+    final infoLabel =
+        widget.embeddedPlayback?.value?.backend.label ??
+        widget.playerInfoLabel?.trim() ??
+        '';
     return PlayerSideDrawerFrame(
       key: const ValueKey('player-settings-panel'),
       icon: Icons.settings_rounded,
@@ -3136,9 +3343,7 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _panelSection(
-            probe != null && probe.loading ? '线路 · 测速中…' : '线路',
-          ),
+          _panelSection(probe != null && probe.loading ? '线路 · 测速中…' : '线路'),
           for (final option in lineNav.options)
             _buildLineRow(
               context,
@@ -3182,10 +3387,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       icon: option.current
           ? Icons.check_circle_rounded
           : failed
-              ? Icons.block_rounded
-              : preferred
-                  ? Icons.bolt_rounded
-                  : Icons.swap_horiz_rounded,
+          ? Icons.block_rounded
+          : preferred
+          ? Icons.bolt_rounded
+          : Icons.swap_horiz_rounded,
       label: option.name,
       value: value,
       enabled: enabled,
@@ -3263,11 +3468,13 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
-            Icon(icon,
-                size: 18,
-                color: danger
-                    ? context.palette.danger
-                    : context.palette.playerText.withValues(alpha: 0.7)),
+            Icon(
+              icon,
+              size: 18,
+              color: danger
+                  ? context.palette.danger
+                  : context.palette.playerText.withValues(alpha: 0.7),
+            ),
             const SizedBox(width: 10),
             Expanded(
               flex: value == null ? 1 : 2,
@@ -3293,13 +3500,18 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                        color: context.palette.textSub, fontSize: AppType.body),
+                      color: context.palette.textSub,
+                      fontSize: AppType.body,
+                    ),
                   ),
                 ),
               ),
             trailing ??
-                Icon(Icons.chevron_right_rounded,
-                    size: 16, color: context.palette.textDim),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: context.palette.textDim,
+                ),
           ],
         ),
       ),
@@ -3317,11 +3529,12 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     required VoidCallback onTap,
   }) {
     final row = _panelRow(
-        icon: icon,
-        label: label,
-        value: value,
-        danger: danger && enabled,
-        trailing: trailing);
+      icon: icon,
+      label: label,
+      value: value,
+      danger: danger && enabled,
+      trailing: trailing,
+    );
     return FocusOutline(
       radius: AppRadii.sm,
       inset: const EdgeInsets.symmetric(horizontal: 8),
@@ -3336,13 +3549,18 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   /// 面板行尾清除按钮（仅片头 / 片尾已设时出现）。
-  Widget _buildPanelClearButton(
-      {required String tooltip, required VoidCallback onPressed}) {
+  Widget _buildPanelClearButton({
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
     return FocusOutline(
       radius: AppRadii.pill,
       child: IconButton(
-        icon:
-            Icon(Icons.close_rounded, size: 16, color: context.palette.textDim),
+        icon: Icon(
+          Icons.close_rounded,
+          size: 16,
+          color: context.palette.textDim,
+        ),
         tooltip: tooltip,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 32, height: 32),
@@ -3382,7 +3600,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.sm,
+                ),
                 decoration: BoxDecoration(
                   // 「跳过片头」胶囊固定浅底深字：压在任意视频画面上都要醒目，
                   // 与主题无关；下方文字与图标同属这套固定配色。
@@ -3401,8 +3621,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                       ),
                     ),
                     SizedBox(width: 4),
-                    Icon(Icons.skip_next_rounded,
-                        size: 16, color: Color(0xFF101014)),
+                    Icon(
+                      Icons.skip_next_rounded,
+                      size: 16,
+                      color: Color(0xFF101014),
+                    ),
                   ],
                 ),
               ),
@@ -3421,8 +3644,12 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         Icon(icon, size: 16, color: context.palette.textDim),
         const SizedBox(width: AppSpacing.sm),
         Flexible(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: AppType.body)),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: AppType.body),
+          ),
         ),
       ],
     );
@@ -3457,16 +3684,17 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           child: FocusOutline(
             child: Theme(
               // 底栏文本控件 hover 统一为浅色 12%（默认主题 hover 在深底上不可辨）。
-              data: Theme.of(context).copyWith(
-                hoverColor: _chromeInk.withValues(alpha: 0.12),
-              ),
+              data: Theme.of(
+                context,
+              ).copyWith(hoverColor: _chromeInk.withValues(alpha: 0.12)),
               child: PopupMenuButton<double>(
                 key: const ValueKey('player-speed-menu'),
                 // 自带 tooltip 置空：外层已统一用底栏定位，避免两个浮层叠在一起。
                 tooltip: '',
                 color: context.palette.raised,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadii.md)),
+                  borderRadius: BorderRadius.circular(AppRadii.md),
+                ),
                 onOpened: () => _setSpeedMenuOpen(true),
                 onCanceled: () => _setSpeedMenuOpen(false),
                 onSelected: (rate) {
@@ -3480,20 +3708,25 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 child: SizedBox(
                   height: _controlHitSize,
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.speed_rounded,
-                            size: 18, color: _chromeInk),
+                        const Icon(
+                          Icons.speed_rounded,
+                          size: 18,
+                          color: _chromeInk,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           '倍速 $currentRate×',
                           style: const TextStyle(
-                              color: _chromeInk,
-                              fontSize: AppType.body,
-                              fontWeight: FontWeight.bold),
+                            color: _chromeInk,
+                            fontSize: AppType.body,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -3504,13 +3737,17 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                   _holdGesture.cancel();
                   final selectedRate = widget.playerEngine.rate;
                   return speeds
-                      .map((speed) => CheckedPopupMenuItem<double>(
-                            value: speed,
-                            height: 40,
-                            checked: (speed - selectedRate).abs() < 0.001,
-                            child: Text('$speed×',
-                                style: const TextStyle(fontSize: AppType.body)),
-                          ))
+                      .map(
+                        (speed) => CheckedPopupMenuItem<double>(
+                          value: speed,
+                          height: 40,
+                          checked: (speed - selectedRate).abs() < 0.001,
+                          child: Text(
+                            '$speed×',
+                            style: const TextStyle(fontSize: AppType.body),
+                          ),
+                        ),
+                      )
                       .toList();
                 },
               ),
@@ -3545,46 +3782,66 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               tooltip: '',
               color: context.palette.raised,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.md)),
+                borderRadius: BorderRadius.circular(AppRadii.md),
+              ),
               onSelected: (value) => unawaited(
-                  _handleSubtitleSelected(value, tracks, nav)
-                      .whenComplete(() => onSelectionHandled?.call())),
-              child: rowBuilder?.call(tracks) ??
+                _handleSubtitleSelected(
+                  value,
+                  tracks,
+                  nav,
+                ).whenComplete(() => onSelectionHandled?.call()),
+              ),
+              child:
+                  rowBuilder?.call(tracks) ??
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    child: Icon(Icons.subtitles_rounded,
-                        color: _chromeInk, size: 20),
+                    child: Icon(
+                      Icons.subtitles_rounded,
+                      color: _chromeInk,
+                      size: 20,
+                    ),
                   ),
               itemBuilder: (ctx) => [
                 if (canDisable)
                   CheckedPopupMenuItem<String>(
                     value: 'off',
-                    enabled: nav.readSession == null || nav.readSession!() != null,
+                    enabled:
+                        nav.readSession == null || nav.readSession!() != null,
                     height: 40,
                     checked: !hasSelected,
-                    child: const Text('关闭字幕',
-                        style: TextStyle(fontSize: AppType.body)),
+                    child: const Text(
+                      '关闭字幕',
+                      style: TextStyle(fontSize: AppType.body),
+                    ),
                   ),
                 if (tracks.isEmpty)
                   PopupMenuItem<String>(
                     enabled: false,
                     height: 40,
-                    child: Text('无可用字幕轨',
-                        style: TextStyle(
-                            fontSize: AppType.caption,
-                            color: ctx.palette.textDim)),
+                    child: Text(
+                      '无可用字幕轨',
+                      style: TextStyle(
+                        fontSize: AppType.caption,
+                        color: ctx.palette.textDim,
+                      ),
+                    ),
                   )
                 else
-                  ...tracks.map((t) => CheckedPopupMenuItem<String>(
-                        value: 'sub:${t.id}',
-                        height: 40,
-                        checked: t.isSelected,
-                        child: Tooltip(
-                          message: t.displayName,
-                          excludeFromSemantics: true,
-                          child: _menuIconRow(Icons.subtitles_rounded, t.displayName),
+                  ...tracks.map(
+                    (t) => CheckedPopupMenuItem<String>(
+                      value: 'sub:${t.id}',
+                      height: 40,
+                      checked: t.isSelected,
+                      child: Tooltip(
+                        message: t.displayName,
+                        excludeFromSemantics: true,
+                        child: _menuIconRow(
+                          Icons.subtitles_rounded,
+                          t.displayName,
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                 ..._subtitleActionItems(nav, onSelectionHandled),
               ],
             ),
@@ -3596,7 +3853,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
 
   // 动作项在菜单打开时捕获会话，onTap 后只刷新设置，不再走轨道的 onSelected。
   List<PopupMenuEntry<String>> _subtitleActionItems(
-      PlayerSubtitleTracksNav nav, VoidCallback? onSelectionHandled) {
+    PlayerSubtitleTracksNav nav,
+    VoidCallback? onSelectionHandled,
+  ) {
     final engine = widget.playerEngine;
     final session = nav.readSession?.call();
     bool current() =>
@@ -3640,7 +3899,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           current: session != null && nav.canScale?.call() == true
               ? nav.readScale?.call()
               : null,
-          onSelected: (factor) => handle(_setSubtitleScale(nav, factor, current)),
+          onSelected: (factor) =>
+              handle(_setSubtitleScale(nav, factor, current)),
         ),
     ];
   }
@@ -3649,8 +3909,11 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   ///
   /// 弹窗是独立路由，关闭后再回到播放器；这里只负责把选中的字幕挂上去，
   /// 挂成功由弹窗自己关闭。
-  Future<void> _searchOnlineSubtitle(PlayerSubtitleTracksNav nav, int session,
-      bool Function() current) async {
+  Future<void> _searchOnlineSubtitle(
+    PlayerSubtitleTracksNav nav,
+    int session,
+    bool Function() current,
+  ) async {
     final query = nav.readOnlineQuery?.call();
     if (query == null || query.isEmpty) {
       _osdController.show(Icons.info_outline_rounded, '当前没有可用于检索的片名');
@@ -3671,7 +3934,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
         } on UnsupportedError catch (error) {
           if (current()) {
             _osdController.show(
-                Icons.error_outline_rounded, error.message ?? '字幕加载失败');
+              Icons.error_outline_rounded,
+              error.message ?? '字幕加载失败',
+            );
           }
           return false;
         } catch (_) {
@@ -3687,7 +3952,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   Future<void> _setSubtitleScale(
-      PlayerSubtitleTracksNav nav, double factor, bool Function() current) async {
+    PlayerSubtitleTracksNav nav,
+    double factor,
+    bool Function() current,
+  ) async {
     if (!current()) return;
     if (nav.canScale?.call() != true) {
       _osdController.show(Icons.error_outline_rounded, '当前字幕轨不支持调整字号');
@@ -3696,12 +3964,17 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
     try {
       final applied = await nav.onSetScale!(factor);
       if (applied && current()) {
-        _osdController.show(Icons.format_size, '字幕字号：${(factor * 100).round()}%');
+        _osdController.show(
+          Icons.format_size,
+          '字幕字号：${(factor * 100).round()}%',
+        );
       }
     } on UnsupportedError catch (error) {
       if (current()) {
-        _osdController.show(Icons.error_outline_rounded,
-            error.message ?? '当前字幕轨不支持调整字号');
+        _osdController.show(
+          Icons.error_outline_rounded,
+          error.message ?? '当前字幕轨不支持调整字号',
+        );
       }
     } catch (_) {
       if (current()) {
@@ -3711,7 +3984,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   Future<void> _loadLocalSubtitle(
-      PlayerSubtitleTracksNav nav, int session, bool Function() current) async {
+    PlayerSubtitleTracksNav nav,
+    int session,
+    bool Function() current,
+  ) async {
     if (_loadingLocalSubtitle || !current()) return;
     _loadingLocalSubtitle = true;
     var failure = '无法打开字幕文件选择器';
@@ -3725,7 +4001,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       }
     } on UnsupportedError catch (error) {
       if (current()) {
-        _osdController.show(Icons.error_outline_rounded, error.message ?? failure);
+        _osdController.show(
+          Icons.error_outline_rounded,
+          error.message ?? failure,
+        );
       }
     } catch (_) {
       if (current()) {
@@ -3757,36 +4036,52 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               tooltip: '',
               color: context.palette.raised,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.md)),
+                borderRadius: BorderRadius.circular(AppRadii.md),
+              ),
               onSelected: (value) => unawaited(
-                  _handleAudioSelected(value, tracks, nav)
-                      .whenComplete(() => onSelectionHandled?.call())),
-              child: rowBuilder?.call(tracks) ??
+                _handleAudioSelected(
+                  value,
+                  tracks,
+                  nav,
+                ).whenComplete(() => onSelectionHandled?.call()),
+              ),
+              child:
+                  rowBuilder?.call(tracks) ??
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    child: Icon(Icons.audiotrack_rounded,
-                        color: _chromeInk, size: 20),
+                    child: Icon(
+                      Icons.audiotrack_rounded,
+                      color: _chromeInk,
+                      size: 20,
+                    ),
                   ),
               itemBuilder: (ctx) => tracks.isEmpty
                   ? [
                       PopupMenuItem<String>(
                         enabled: false,
                         height: 40,
-                        child: Text('无可用音轨',
-                            style: TextStyle(
-                                fontSize: AppType.caption,
-                                color: ctx.palette.textDim)),
+                        child: Text(
+                          '无可用音轨',
+                          style: TextStyle(
+                            fontSize: AppType.caption,
+                            color: ctx.palette.textDim,
+                          ),
+                        ),
                       ),
                     ]
                   : tracks
-                      .map((t) => CheckedPopupMenuItem<String>(
+                        .map(
+                          (t) => CheckedPopupMenuItem<String>(
                             value: 'audio:${t.id}',
                             height: 40,
                             checked: t.isSelected,
                             child: _menuIconRow(
-                                Icons.audiotrack_rounded, t.displayName),
-                          ))
-                      .toList(),
+                              Icons.audiotrack_rounded,
+                              t.displayName,
+                            ),
+                          ),
+                        )
+                        .toList(),
             ),
           ),
         );
@@ -3806,12 +4101,13 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       initialData: nav.tracks,
       builder: (context, snapshot) {
         final tracks = snapshot.data ?? const <TrackInfo>[];
-        final selectedId = _videoSelectionOverride ??
+        final selectedId =
+            _videoSelectionOverride ??
             (nav.isDisabled
                 ? 'no'
                 : (tracks.any((t) => t.isSelected)
-                    ? 'video:${tracks.firstWhere((t) => t.isSelected).id}'
-                    : 'auto'));
+                      ? 'video:${tracks.firstWhere((t) => t.isSelected).id}'
+                      : 'auto'));
         return _buildBottomControlTooltip(
           message: '视轨',
           child: FocusOutline(
@@ -3820,38 +4116,55 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
               tooltip: '',
               color: context.palette.raised,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.md)),
+                borderRadius: BorderRadius.circular(AppRadii.md),
+              ),
               onSelected: (value) => unawaited(
-                  _handleVideoSelected(value, tracks, nav)
-                      .whenComplete(() => onSelectionHandled?.call())),
-              child: rowBuilder?.call(tracks, selectedId) ??
+                _handleVideoSelected(
+                  value,
+                  tracks,
+                  nav,
+                ).whenComplete(() => onSelectionHandled?.call()),
+              ),
+              child:
+                  rowBuilder?.call(tracks, selectedId) ??
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    child: Icon(Icons.video_settings_rounded,
-                        color: _chromeInk, size: 20),
+                    child: Icon(
+                      Icons.video_settings_rounded,
+                      color: _chromeInk,
+                      size: 20,
+                    ),
                   ),
               itemBuilder: (ctx) => [
                 CheckedPopupMenuItem<String>(
                   value: 'auto',
                   height: 40,
                   checked: selectedId == 'auto',
-                  child: const Text('自动',
-                      style: TextStyle(fontSize: AppType.body)),
+                  child: const Text(
+                    '自动',
+                    style: TextStyle(fontSize: AppType.body),
+                  ),
                 ),
                 CheckedPopupMenuItem<String>(
                   value: 'no',
                   height: 40,
                   checked: selectedId == 'no',
-                  child: const Text('关闭',
-                      style: TextStyle(fontSize: AppType.body)),
+                  child: const Text(
+                    '关闭',
+                    style: TextStyle(fontSize: AppType.body),
+                  ),
                 ),
-                ...tracks.map((t) => CheckedPopupMenuItem<String>(
-                      value: 'video:${t.id}',
-                      height: 40,
-                      checked: selectedId == 'video:${t.id}',
-                      child: _menuIconRow(
-                          Icons.video_settings_rounded, t.displayName),
-                    )),
+                ...tracks.map(
+                  (t) => CheckedPopupMenuItem<String>(
+                    value: 'video:${t.id}',
+                    height: 40,
+                    checked: selectedId == 'video:${t.id}',
+                    child: _menuIconRow(
+                      Icons.video_settings_rounded,
+                      t.displayName,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -3877,23 +4190,35 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           tooltip: '',
           color: context.palette.raised,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadii.md)),
-          onSelected: (value) => unawaited(_handleScaleSelected(value)
-              .whenComplete(() => onSelectionHandled?.call())),
-          child: rowBuilder?.call(currentLabel) ??
+            borderRadius: BorderRadius.circular(AppRadii.md),
+          ),
+          onSelected: (value) => unawaited(
+            _handleScaleSelected(
+              value,
+            ).whenComplete(() => onSelectionHandled?.call()),
+          ),
+          child:
+              rowBuilder?.call(currentLabel) ??
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                child: Icon(Icons.aspect_ratio_rounded,
-                    color: _chromeInk, size: 20),
+                child: Icon(
+                  Icons.aspect_ratio_rounded,
+                  color: _chromeInk,
+                  size: 20,
+                ),
               ),
           itemBuilder: (ctx) => options
-              .map((o) => CheckedPopupMenuItem<String>(
-                    value: o.value,
-                    height: 40,
-                    checked: o.value == current,
-                    child: Text(o.label,
-                        style: const TextStyle(fontSize: AppType.body)),
-                  ))
+              .map(
+                (o) => CheckedPopupMenuItem<String>(
+                  value: o.value,
+                  height: 40,
+                  checked: o.value == current,
+                  child: Text(
+                    o.label,
+                    style: const TextStyle(fontSize: AppType.body),
+                  ),
+                ),
+              )
               .toList(),
         ),
       ),
@@ -3901,7 +4226,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   Future<void> _handleSubtitleSelected(
-      String value, List<TrackInfo> tracks, PlayerSubtitleTracksNav nav) async {
+    String value,
+    List<TrackInfo> tracks,
+    PlayerSubtitleTracksNav nav,
+  ) async {
     try {
       if (value == 'off') {
         final disable = nav.onDisable;
@@ -3917,7 +4245,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       _osdController.show(Icons.subtitles_rounded, '字幕: ${track.displayName}');
     } on UnsupportedError catch (error) {
       if (!mounted) return;
-      _osdController.show(Icons.error_outline_rounded, error.message ?? '播放器未能启用这条字幕');
+      _osdController.show(
+        Icons.error_outline_rounded,
+        error.message ?? '播放器未能启用这条字幕',
+      );
     } catch (_) {
       if (!mounted) return;
       _osdController.show(Icons.error_outline_rounded, '切换失败，请稍后再试');
@@ -3925,7 +4256,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   Future<void> _handleAudioSelected(
-      String value, List<TrackInfo> tracks, PlayerAudioTracksNav nav) async {
+    String value,
+    List<TrackInfo> tracks,
+    PlayerAudioTracksNav nav,
+  ) async {
     try {
       final track = tracks.firstWhere((t) => 'audio:${t.id}' == value);
       await nav.onSelect(track);
@@ -3938,7 +4272,10 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
   }
 
   Future<void> _handleVideoSelected(
-      String value, List<TrackInfo> tracks, PlayerVideoTracksNav nav) async {
+    String value,
+    List<TrackInfo> tracks,
+    PlayerVideoTracksNav nav,
+  ) async {
     try {
       final TrackInfo track;
       if (value == 'auto') {
@@ -3952,7 +4289,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
       if (!mounted) return;
       setState(() => _videoSelectionOverride = value);
       _osdController.show(
-          Icons.video_settings_rounded, '视轨: ${track.displayName}');
+        Icons.video_settings_rounded,
+        '视轨: ${track.displayName}',
+      );
     } catch (_) {
       if (!mounted) return;
       _osdController.show(Icons.error_outline_rounded, '切换失败，请稍后再试');
@@ -4017,7 +4356,8 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildBottomControlTooltip(
-              message: '${vol == 0 ? '取消静音' : '静音'} '
+              message:
+                  '${vol == 0 ? '取消静音' : '静音'} '
                   '(${_shortcutLabel(PlayerShortcutAction.toggleMute)})',
               child: _ControlButton(
                 icon: vol == 0
@@ -4037,8 +4377,9 @@ class _DesktopVideoPlayerState extends State<DesktopVideoPlayer> {
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 2.5,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 4),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 4,
+                    ),
                     activeTrackColor: _chromeInk,
                     inactiveTrackColor: _chromeTrack,
                     thumbColor: _chromeInk,
@@ -4117,7 +4458,9 @@ class _ControlButton extends StatelessWidget {
                 ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(
-              width: _controlHitSize, height: _controlHitSize),
+            width: _controlHitSize,
+            height: _controlHitSize,
+          ),
           // standard：compact 会把内部墨迹盒缩到 28，点击区跟着变小、
           // 图标在 36 盒里偏上 2px（实机「水平高度不符」的一半原因）。
           visualDensity: VisualDensity.standard,

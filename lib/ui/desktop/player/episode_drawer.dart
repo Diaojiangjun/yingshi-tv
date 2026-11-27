@@ -47,12 +47,20 @@ class PlayerLineChoice {
   /// 本次会话里**确认失败**的线路（灰显不可点）；只是「用过」不算。
   final bool unavailable;
 
+  /// 该线路指向的网盘名称；为空表示普通线路。
+  final String? driveName;
+
+  /// 网盘凭据是否可选增强（哔哩哔哩）。
+  final bool driveOptional;
+
   const PlayerLineChoice({
     required this.index,
     required this.name,
     this.current = false,
     this.browsing = false,
     this.unavailable = false,
+    this.driveName,
+    this.driveOptional = false,
   });
 }
 
@@ -218,8 +226,11 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
             .clamp(0.0, position.maxScrollExtent)
             .toDouble();
     if (animate) {
-      _scrollController.animateTo(target,
-          duration: AppMotion.enter, curve: AppMotion.ease);
+      _scrollController.animateTo(
+        target,
+        duration: AppMotion.enter,
+        curve: AppMotion.ease,
+      );
     } else {
       _scrollController.jumpTo(target);
     }
@@ -253,8 +264,11 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
   }
 
   /// 行右键菜单：只复制，**绝不触发切集**（与时间轴右键菜单同一范式）。
-  Future<void> _showEpisodeMenu(PlayerEpisodeOption episode, String copyText,
-      TapUpDetails details) async {
+  Future<void> _showEpisodeMenu(
+    PlayerEpisodeOption episode,
+    String copyText,
+    TapUpDetails details,
+  ) async {
     // 右键顺带把键盘游标移到这一行（不改变当前播放集）。
     if (_cursor != episode.index) {
       setState(() => _cursor = episode.index);
@@ -264,7 +278,8 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
       context: context,
       color: palette.raised,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.md)),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
       position: RelativeRect.fromLTRB(
         details.globalPosition.dx,
         details.globalPosition.dy,
@@ -287,7 +302,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
               Text(
                 _copyMenuLabel,
                 style: TextStyle(
-                    color: palette.playerText, fontSize: AppType.label),
+                  color: palette.playerText,
+                  fontSize: AppType.label,
+                ),
               ),
             ],
           ),
@@ -356,49 +373,51 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
       return widget.child;
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      final width = math.min(_panelMaxWidth, constraints.maxWidth * 0.8);
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          widget.child,
-          // 遮罩：盖住视频与控制条，点空白处收起（模态侧面板）。
-          AnimatedOpacity(
-            duration: widget.open ? AppMotion.enter : AppMotion.exit,
-            opacity: widget.open ? 1 : 0,
-            child: IgnorePointer(
-              ignoring: !widget.open,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onClose,
-                child: const ColoredBox(color: Color(0x66000000)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = math.min(_panelMaxWidth, constraints.maxWidth * 0.8);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.child,
+            // 遮罩：盖住视频与控制条，点空白处收起（模态侧面板）。
+            AnimatedOpacity(
+              duration: widget.open ? AppMotion.enter : AppMotion.exit,
+              opacity: widget.open ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !widget.open,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onClose,
+                  child: const ColoredBox(color: Color(0x66000000)),
+                ),
               ),
             ),
-          ),
-          AnimatedPositioned(
-            duration: widget.open ? AppMotion.enter : AppMotion.exit,
-            curve: AppMotion.ease,
-            top: _topInset,
-            bottom: _bottomInset,
-            right: widget.open ? 0 : -width,
-            width: width,
-            onEnd: () {
-              if (!widget.open && _panelMounted) {
-                setState(() => _panelMounted = false);
-              }
-            },
-            child: IgnorePointer(
-              ignoring: !widget.open,
-              child: Focus(
-                focusNode: _focusNode,
-                onKeyEvent: _onKey,
-                child: _buildPanel(context, nav),
+            AnimatedPositioned(
+              duration: widget.open ? AppMotion.enter : AppMotion.exit,
+              curve: AppMotion.ease,
+              top: _topInset,
+              bottom: _bottomInset,
+              right: widget.open ? 0 : -width,
+              width: width,
+              onEnd: () {
+                if (!widget.open && _panelMounted) {
+                  setState(() => _panelMounted = false);
+                }
+              },
+              child: IgnorePointer(
+                ignoring: !widget.open,
+                child: Focus(
+                  focusNode: _focusNode,
+                  onKeyEvent: _onKey,
+                  child: _buildPanel(context, nav),
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildPanel(BuildContext context, PlayerEpisodeListNav nav) {
@@ -453,12 +472,8 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       itemExtent: _itemExtent,
                       itemCount: nav.episodes.length,
-                      itemBuilder: (context, index) => _buildEpisodeRow(
-                        context,
-                        nav,
-                        palette,
-                        index,
-                      ),
+                      itemBuilder: (context, index) =>
+                          _buildEpisodeRow(context, nav, palette, index),
                     ),
                   ),
                 ),
@@ -471,7 +486,10 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
   }
 
   Widget _buildHeader(
-      BuildContext context, PlayerEpisodeListNav nav, AppPalette palette) {
+    BuildContext context,
+    PlayerEpisodeListNav nav,
+    AppPalette palette,
+  ) {
     final subtitle = nav.lineName == null || nav.lineName!.isEmpty
         ? '共 ${nav.episodes.length} 集'
         : '共 ${nav.episodes.length} 集 · ${nav.lineName}';
@@ -528,11 +546,15 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
             key: const ValueKey('episode-drawer-close'),
             onTap: widget.onClose,
             semanticLabel: '关闭选集',
-            borderRadius:
-                const BorderRadius.all(Radius.circular(AppRadii.pill)),
+            borderRadius: const BorderRadius.all(
+              Radius.circular(AppRadii.pill),
+            ),
             child: IconButton(
-              icon: Icon(Icons.close_rounded,
-                  size: 18, color: palette.playerText.withValues(alpha: 0.7)),
+              icon: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: palette.playerText.withValues(alpha: 0.7),
+              ),
               tooltip: '关闭（Esc）',
               onPressed: widget.onClose,
             ),
@@ -547,7 +569,10 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
   /// 桌面鼠标默认拖不动横向 `ListView`、滚轮又只给 `dy`，所以统一交给
   /// [HorizontalScrollArea]（与影片分类栏同一套口径）。
   Widget _buildLinePills(
-      BuildContext context, PlayerEpisodeListNav nav, AppPalette palette) {
+    BuildContext context,
+    PlayerEpisodeListNav nav,
+    AppPalette palette,
+  ) {
     final probe = nav.probe;
     if (probe == null) return _buildLinePillList(context, nav, palette);
     return ListenableBuilder(
@@ -558,7 +583,10 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
 
   /// 胶囊条本体（测速结果到达时只重建这一段，不动整条抽屉）。
   Widget _buildLinePillList(
-      BuildContext context, PlayerEpisodeListNav nav, AppPalette palette) {
+    BuildContext context,
+    PlayerEpisodeListNav nav,
+    AppPalette palette,
+  ) {
     final onAccent = Theme.of(context).colorScheme.onPrimary;
     final probe = nav.probe;
     return SizedBox(
@@ -582,13 +610,13 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
             final background = line.current
                 ? palette.accent
                 : line.browsing
-                    ? palette.accentWash
-                    : palette.playerText.withValues(alpha: 0.08);
+                ? palette.accentWash
+                : palette.playerText.withValues(alpha: 0.08);
             final foreground = line.current
                 ? onAccent
                 : line.browsing
-                    ? palette.accentInk
-                    : palette.playerText.withValues(alpha: 0.78);
+                ? palette.accentInk
+                : palette.playerText.withValues(alpha: 0.78);
             final pill = FocusRing(
               key: ValueKey('episode-drawer-line-${line.index}'),
               onTap: disabled
@@ -597,8 +625,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                       if (!line.browsing) nav.onSelectLine(line.index);
                     },
               semanticLabel: line.unavailable ? '${line.name}（不可用）' : line.name,
-              borderRadius:
-                  const BorderRadius.all(Radius.circular(AppRadii.pill)),
+              borderRadius: const BorderRadius.all(
+                Radius.circular(AppRadii.pill),
+              ),
               child: AnimatedOpacity(
                 duration: AppMotion.exit,
                 opacity: disabled && !line.current ? 0.4 : 1,
@@ -626,8 +655,11 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (line.current) ...[
-                          Icon(Icons.play_arrow_rounded,
-                              size: 13, color: foreground),
+                          Icon(
+                            Icons.play_arrow_rounded,
+                            size: 13,
+                            color: foreground,
+                          ),
                           const SizedBox(width: 2),
                         ],
                         Flexible(
@@ -650,7 +682,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                         // 带上 Referer 往往能播），红色会让人直接放弃一条能用的线。
                         // 当前线路已有播放三角，不再叠图标；「已失败」由整条胶囊
                         // 置灰表达，也不需要再标。
-                        if (hint != null && !line.current && !line.unavailable) ...[
+                        if (hint != null &&
+                            !line.current &&
+                            !line.unavailable) ...[
                           const SizedBox(width: 3),
                           Icon(
                             hint.failed
@@ -666,14 +700,31 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                             color: foreground.withValues(alpha: 0.85),
                           ),
                         ],
+                        if (line.driveName != null) ...[
+                          const SizedBox(width: 3),
+                          Icon(
+                            Icons.cloud_outlined,
+                            key: ValueKey('episode-drawer-drive-${line.index}'),
+                            size: 11,
+                            color: foreground.withValues(alpha: 0.85),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
             );
-            final tip = hint?.tooltip;
-            if (tip == null || tip.isEmpty) return pill;
+            final driveTip = line.driveName == null
+                ? null
+                : line.driveOptional
+                ? '该线路需要${line.driveName}（可选，未登录也能播低画质）'
+                : '该线路需要${line.driveName}登录';
+            final tip = [
+              hint?.tooltip,
+              driveTip,
+            ].whereType<String>().where((value) => value.isNotEmpty).join('\n');
+            if (tip.isEmpty) return pill;
             return Tooltip(
               message: tip,
               waitDuration: const Duration(milliseconds: 500),
@@ -685,8 +736,12 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
     );
   }
 
-  Widget _buildEpisodeRow(BuildContext context, PlayerEpisodeListNav nav,
-      AppPalette palette, int index) {
+  Widget _buildEpisodeRow(
+    BuildContext context,
+    PlayerEpisodeListNav nav,
+    AppPalette palette,
+    int index,
+  ) {
     final episode = nav.episodes[index];
     final isCurrent = episode.current;
     final isCursor = index == _cursor;
@@ -707,7 +762,7 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
             onSecondaryTapUp: nav.switching
                 ? null
                 : (details) =>
-                    unawaited(_showEpisodeMenu(episode, copyText, details)),
+                      unawaited(_showEpisodeMenu(episode, copyText, details)),
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               onEnter: (_) {
@@ -715,23 +770,24 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                 setState(() => _cursor = index);
               },
               child: AnimatedContainer(
-                duration:
-                    isCursor || isCurrent ? AppMotion.enter : AppMotion.exit,
+                duration: isCursor || isCurrent
+                    ? AppMotion.enter
+                    : AppMotion.exit,
                 height: _itemExtent - 4,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: isCurrent
                       ? palette.accentInk.withValues(alpha: 0.22)
                       : (isCursor
-                          ? palette.playerText.withValues(alpha: 0.08)
-                          : Colors.transparent),
+                            ? palette.playerText.withValues(alpha: 0.08)
+                            : Colors.transparent),
                   borderRadius: BorderRadius.circular(AppRadii.sm),
                   border: Border.all(
                     color: isCurrent
                         ? palette.accentInk.withValues(alpha: 0.45)
                         : (isCursor
-                            ? palette.playerText.withValues(alpha: 0.12)
-                            : Colors.transparent),
+                              ? palette.playerText.withValues(alpha: 0.12)
+                              : Colors.transparent),
                     width: 1,
                   ),
                 ),
@@ -742,7 +798,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                       constraints: const BoxConstraints(minWidth: 30),
                       alignment: Alignment.center,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 2),
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: isCurrent
                             ? palette.accentInk.withValues(alpha: 0.25)
@@ -775,8 +833,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                         message: copyText,
                         waitDuration: _tooltipWait,
                         excludeFromSemantics: true,
-                        constraints:
-                            const BoxConstraints(maxWidth: _panelMaxWidth),
+                        constraints: const BoxConstraints(
+                          maxWidth: _panelMaxWidth,
+                        ),
                         child: Text(
                           episode.name,
                           key: ValueKey('episode-drawer-name-$index'),
@@ -787,8 +846,9 @@ class _EpisodeDrawerLayerState extends State<EpisodeDrawerLayer> {
                                 ? palette.playerText
                                 : palette.playerText.withValues(alpha: 0.82),
                             fontSize: AppType.body,
-                            fontWeight:
-                                isCurrent ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight: isCurrent
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                           ),
                         ),
                       ),

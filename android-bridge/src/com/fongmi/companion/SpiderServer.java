@@ -86,6 +86,10 @@ public class SpiderServer {
         com.fongmi.companion.ui.UiBridge.install();
         // 网盘直链分块并发代理（替代载荷 8096 加速代理），见 docs/NETDISK_PLAYBACK_PLAN.md
         server.createContext(NetdiskChunkProxy.PREFIX, new NetdiskChunkProxy());
+        // 桌面端本机解链的直链也可登记进代理：播放器先探测（无 Range）时，
+        // 部分网盘 CDN 会回 HLS 清单而不是文件，导致 mpv 报「Failed to recognize file format」。
+        // 代理内部一律用 Range 取流，并对播放器返回带 Content-Length 的媒体响应。
+        server.createContext("/netdisk/register", guarded(new NetdiskRegisterHandler()));
 
         server.start();
         this.boundPort = server.getAddress().getPort();
@@ -188,6 +192,31 @@ public class SpiderServer {
                     + ",\"activeCalls\":" + callPool.getActiveCount()
                     + ",\"maxCalls\":" + MAX_INFLIGHT_CALLS + "}";
             sendJsonResponse(exchange, 200, resp);
+        }
+    }
+
+    /** 登记本机解链得到的网盘直链，返回分块代理地址（与载荷包装地址同一入口）。 */
+    private static final class NetdiskRegisterHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+            Map<String, Object> input = JsonCodec.parseObject(readBody(exchange));
+            String url = CatNodeRuntime.text(input.get("url"));
+            Map<String, String> headers = new LinkedHashMap<>();
+            Object raw = input.get("headers");
+            if (raw instanceof Map) {
+                for (Map.Entry<?, ?> entry : ((Map<?, ?>) raw).entrySet()) {
+                    if (entry.getKey() == null || entry.getValue() == null) continue;
+                    String name = String.valueOf(entry.getKey()).trim();
+                    String value = String.valueOf(entry.getValue());
+                    if (!name.isEmpty() && !value.isEmpty()) headers.put(name, value);
+                }
+            }
+            String local = url.isEmpty() ? null : NetdiskChunkProxy.register(url, headers);
+            sendJsonResponse(exchange, 200, "{\"url\":\"" + escapeJson(local == null ? "" : local) + "\"}");
         }
     }
 

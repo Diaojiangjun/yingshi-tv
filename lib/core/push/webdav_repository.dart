@@ -39,12 +39,13 @@ class WebDavConnection {
       throw const FormatException('WebDAV 用户名不能为空或包含冒号');
     }
     return WebDavConnection._(
-        uri,
-        Map.unmodifiable({
-          if (user.isNotEmpty)
-            'Authorization':
-                'Basic ${base64Encode(utf8.encode('$user:$password'))}',
-        }));
+      uri,
+      Map.unmodifiable({
+        if (user.isNotEmpty)
+          'Authorization':
+              'Basic ${base64Encode(utf8.encode('$user:$password'))}',
+      }),
+    );
   }
 
   bool contains(Uri uri) {
@@ -60,8 +61,10 @@ class WebDavConnection {
     final parent = _segments(root);
     final child = _segments(uri);
     return child.length >= parent.length &&
-        List.generate(parent.length, (index) => parent[index] == child[index])
-            .every((matches) => matches);
+        List.generate(
+          parent.length,
+          (index) => parent[index] == child[index],
+        ).every((matches) => matches);
   }
 
   MediaPlaySpec playSpec(WebDavEntry entry) {
@@ -83,12 +86,16 @@ class WebDavEntry {
   final bool isMedia;
   final int? size;
 
+  /// 服务端返回的最后修改时间；未提供或格式非法时为 null。
+  final DateTime? modifiedAt;
+
   const WebDavEntry({
     required this.uri,
     required this.name,
     required this.isDirectory,
     required this.isMedia,
     this.size,
+    this.modifiedAt,
   });
 }
 
@@ -99,12 +106,15 @@ class WebDavRepository {
   bool _disposed = false;
 
   WebDavRepository({Dio? dio})
-      : _ownsDio = dio == null,
-        _dio = dio ??
-            HttpClientFactory.createDio(BaseOptions(
+    : _ownsDio = dio == null,
+      _dio =
+          dio ??
+          HttpClientFactory.createDio(
+            BaseOptions(
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 15),
-            ));
+            ),
+          );
 
   Future<List<WebDavEntry>> list(
     WebDavConnection connection, {
@@ -131,8 +141,9 @@ class WebDavRepository {
       final body = response.data;
       if (body == null) throw const FormatException('WebDAV 返回空内容');
       final buffer = BytesBuilder(copy: false);
-      await for (final chunk
-          in body.stream.timeout(const Duration(seconds: 15))) {
+      await for (final chunk in body.stream.timeout(
+        const Duration(seconds: 15),
+      )) {
         if (buffer.length + chunk.length > 5 * 1024 * 1024) {
           throw const FormatException('WebDAV 目录响应过大，请使用范围更小的根目录');
         }
@@ -168,16 +179,18 @@ class WebDavRepository {
     if (_disposed) throw StateError('WebDAV 连接已关闭');
     late final Response<ResponseBody> response;
     try {
-      response = await _withTransientRetry(() => _dio.requestUri<ResponseBody>(
-            entry.uri,
-            options: Options(
-              method: 'HEAD',
-              headers: connection.headers,
-              responseType: ResponseType.stream,
-              followRedirects: false,
-              validateStatus: (_) => true,
-            ),
-          ));
+      response = await _withTransientRetry(
+        () => _dio.requestUri<ResponseBody>(
+          entry.uri,
+          options: Options(
+            method: 'HEAD',
+            headers: connection.headers,
+            responseType: ResponseType.stream,
+            followRedirects: false,
+            validateStatus: (_) => true,
+          ),
+        ),
+      );
     } on DioException catch (error, stack) {
       // 直链解析只是优化：网络抖动时按原地址播放，不新增失败路径。
       ErrorLog.instance.record(
@@ -227,23 +240,24 @@ class WebDavRepository {
     WebDavConnection connection,
   ) async {
     Future<Response<ResponseBody>> send() => _dio.requestUri<ResponseBody>(
-          target,
-          data: '<?xml version="1.0" encoding="UTF-8"?>'
-              '<d:propfind xmlns:d="DAV:"><d:prop>'
-              '<d:displayname/><d:resourcetype/><d:getcontentlength/>'
-              '<d:getcontenttype/></d:prop></d:propfind>',
-          options: Options(
-            method: 'PROPFIND',
-            headers: {
-              ...connection.headers,
-              'Depth': '1',
-              'Content-Type': 'application/xml; charset=utf-8',
-            },
-            responseType: ResponseType.stream,
-            followRedirects: false,
-            validateStatus: (_) => true,
-          ),
-        );
+      target,
+      data:
+          '<?xml version="1.0" encoding="UTF-8"?>'
+          '<d:propfind xmlns:d="DAV:"><d:prop>'
+          '<d:displayname/><d:resourcetype/><d:getcontentlength/>'
+          '<d:getcontenttype/><d:getlastmodified/></d:prop></d:propfind>',
+      options: Options(
+        method: 'PROPFIND',
+        headers: {
+          ...connection.headers,
+          'Depth': '1',
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+        responseType: ResponseType.stream,
+        followRedirects: false,
+        validateStatus: (_) => true,
+      ),
+    );
     return _withTransientRetry(send);
   }
 
@@ -278,16 +292,20 @@ class WebDavRepository {
       if (!connection.contains(uri)) continue;
       final path = _segments(uri);
       if (path.length != parent.length + 1 ||
-          !List.generate(parent.length, (index) => parent[index] == path[index])
-              .every((matches) => matches)) {
+          !List.generate(
+            parent.length,
+            (index) => parent[index] == path[index],
+          ).every((matches) => matches)) {
         continue;
       }
 
       final properties = <String, XmlElement>{};
       var successful = false;
       for (final propstat in _children(response, 'propstat')) {
-        if (!RegExp(r'^\s*HTTP/\S+\s+2\d\d(?:\s|$)', caseSensitive: false)
-            .hasMatch(_childText(propstat, 'status'))) {
+        if (!RegExp(
+          r'^\s*HTTP/\S+\s+2\d\d(?:\s|$)',
+          caseSensitive: false,
+        ).hasMatch(_childText(propstat, 'status'))) {
           continue;
         }
         successful = true;
@@ -305,34 +323,50 @@ class WebDavRepository {
       final display = properties['displayname']?.innerText.trim() ?? '';
       final contentType =
           properties['getcontenttype']?.innerText.toLowerCase() ?? '';
-      final size =
-          int.tryParse(properties['getcontentlength']?.innerText.trim() ?? '');
+      final size = int.tryParse(
+        properties['getcontentlength']?.innerText.trim() ?? '',
+      );
+      final modifiedAt = _parseHttpDate(
+        properties['getlastmodified']?.innerText.trim() ?? '',
+      );
       final entry = WebDavEntry(
         uri: uri,
         name: display.isEmpty ? path.last : display,
         isDirectory: isDirectory,
-        isMedia: !isDirectory &&
+        isMedia:
+            !isDirectory &&
             (PushInputResolver.isMediaFileName(path.last) ||
                 contentType.startsWith('video/') ||
                 contentType.startsWith('audio/') ||
                 contentType.startsWith('application/vnd.apple.mpegurl') ||
                 contentType.startsWith('application/x-mpegurl')),
         size: size != null && size >= 0 ? size : null,
+        modifiedAt: modifiedAt,
       );
       entries.putIfAbsent(uri.toString(), () => entry);
     }
-    return List.unmodifiable(entries.values.toList()
-      ..sort((left, right) {
+    return List.unmodifiable(
+      entries.values.toList()..sort((left, right) {
         if (left.isDirectory != right.isDirectory) {
           return left.isDirectory ? -1 : 1;
         }
         return left.name.toLowerCase().compareTo(right.name.toLowerCase());
-      }));
+      }),
+    );
   }
 
   void dispose() {
     _disposed = true;
     if (_ownsDio) _dio.close(force: true);
+  }
+}
+
+DateTime? _parseHttpDate(String value) {
+  if (value.isEmpty) return null;
+  try {
+    return HttpDate.parse(value);
+  } catch (_) {
+    return DateTime.tryParse(value);
   }
 }
 
@@ -404,5 +438,6 @@ String _childText(XmlElement element, String name) {
 List<String> _segments(Uri uri) =>
     uri.pathSegments.where((part) => part.isNotEmpty).toList();
 
-bool _safePath(Uri uri) => uri.pathSegments.every((part) =>
-    part != '.' && part != '..' && !part.contains(RegExp(r'[/\\\x00]')));
+bool _safePath(Uri uri) => uri.pathSegments.every(
+  (part) => part != '.' && part != '..' && !part.contains(RegExp(r'[/\\\x00]')),
+);

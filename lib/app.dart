@@ -55,6 +55,9 @@ import 'core/subtitle/subtitle_models.dart';
 import 'core/subtitle/subtitle_query.dart';
 import 'core/player/models/player_settings.dart';
 import 'core/drive/drive_account_repository.dart';
+import 'core/drive/drive_line_hint.dart';
+import 'core/drive/netdisk_share_resolver.dart';
+import 'ui/desktop/dialogs/drive_login_prompt.dart';
 import 'core/push/webdav_browse_origin.dart';
 import 'core/player/models/player_state.dart';
 import 'core/player/hls_playlist_probe.dart';
@@ -151,22 +154,26 @@ part 'playback_external_actions.dart';
 
 final configRepositoryProvider = Provider<ConfigRepository>((ref) {
   throw UnimplementedError(
-      'ConfigRepository 必须在启动时通过 ProviderScope overrides 注入');
+    'ConfigRepository 必须在启动时通过 ProviderScope overrides 注入',
+  );
 });
 
 final windowManagerProvider = Provider<DesktopWindowManager>((ref) {
   throw UnimplementedError(
-      'DesktopWindowManager 必须在启动时通过 ProviderScope overrides 注入');
+    'DesktopWindowManager 必须在启动时通过 ProviderScope overrides 注入',
+  );
 });
 
 final playerEngineProvider = Provider<MpvPlayerEngine>((ref) {
   throw UnimplementedError(
-      'MpvPlayerEngine 必须在启动时通过 ProviderScope overrides 注入');
+    'MpvPlayerEngine 必须在启动时通过 ProviderScope overrides 注入',
+  );
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   throw UnimplementedError(
-      'SettingsRepository 必须在启动时通过 ProviderScope overrides 注入');
+    'SettingsRepository 必须在启动时通过 ProviderScope overrides 注入',
+  );
 });
 
 /// 搜索显示与聚合开关偏好（随设置保存 / 读取实时更新）
@@ -175,21 +182,24 @@ final searchPreferencesProvider = StreamProvider<SearchPreferences>((ref) {
 });
 
 /// 外观偏好（SET-08：壁纸；主题）；随设置保存 / 读取实时更新
-final appearancePreferencesProvider =
-    StreamProvider<AppearancePreferences>((ref) {
+final appearancePreferencesProvider = StreamProvider<AppearancePreferences>((
+  ref,
+) {
   return ref.watch(settingsRepositoryProvider).appearancePreferencesStream;
 });
 
 /// 当前主题模式：默认深色；「跟随系统」由 MaterialApp 依平台亮度解析。
 final themeModeProvider = Provider<AppThemeMode>((ref) {
-  final preferences = ref.watch(appearancePreferencesProvider).valueOrNull ??
+  final preferences =
+      ref.watch(appearancePreferencesProvider).valueOrNull ??
       ref.read(settingsRepositoryProvider).appearancePreferences;
   return preferences.themeMode;
 });
 
 /// 当前主题色：默认冷灰（与历史观感一致）。
 final appAccentProvider = Provider<AppAccent>((ref) {
-  final preferences = ref.watch(appearancePreferencesProvider).valueOrNull ??
+  final preferences =
+      ref.watch(appearancePreferencesProvider).valueOrNull ??
       ref.read(settingsRepositoryProvider).appearancePreferences;
   return preferences.accent;
 });
@@ -203,13 +213,15 @@ final appThemesProvider = Provider<({ThemeData light, ThemeData dark})>((ref) {
   return (
     light: buildAppTheme(
       brightness: Brightness.light,
-      palette: AppPalette.light
-          .withAccent(accentColorsFor(accent, Brightness.light)),
+      palette: AppPalette.light.withAccent(
+        accentColorsFor(accent, Brightness.light),
+      ),
     ),
     dark: buildAppTheme(
       brightness: Brightness.dark,
-      palette: AppPalette.dark
-          .withAccent(accentColorsFor(accent, Brightness.dark)),
+      palette: AppPalette.dark.withAccent(
+        accentColorsFor(accent, Brightness.dark),
+      ),
     ),
   );
 });
@@ -219,12 +231,25 @@ final appThemesProvider = Provider<({ThemeData light, ThemeData dark})>((ref) {
 /// 设置页、后续的分享链接解析与蜘蛛注入共用同一份，避免各建一份缓存
 /// 导致「刚登录完另一个地方还显示未登录」。
 final driveAccountRepositoryProvider = Provider<DriveAccountRepository>((ref) {
-  return DriveAccountRepository();
+  final repository = DriveAccountRepository(
+    onCredentialsChanged: () async {
+      // 已加载的 Spider 需要重新读取带凭据的 ext；未运行时 reset 会立即返回。
+      try {
+        await ref.read(siteApiProvider).resetCompanionSpiders();
+      } catch (_) {
+        // 重置失败不影响凭据保存，下次懒加载会用新 ext。
+      }
+    },
+  );
+  // 启动即读一次，保证蜘蛛首次请求前凭据已可用于注入。
+  unawaited(repository.ensureLoaded());
+  return repository;
 });
 
 /// 壁纸副本管理。像素探针依赖 `dart:ui`，因此在这里（UI 层）装配。
 final wallpaperStoreProvider = Provider<WallpaperStore>(
-    (ref) => WallpaperStore(probeSize: probeWallpaperImageSize));
+  (ref) => WallpaperStore(probeSize: probeWallpaperImageSize),
+);
 
 /// 「一起看」服务：进程级单例。
 ///
@@ -251,8 +276,9 @@ final startupEntryProvider = Provider<StartupEntry>((ref) => StartupEntry.vod);
 final settingsPageOpenProvider = StateProvider<bool>((ref) => false);
 
 /// 设置页打开时的初始分区；恢复 WebDAV 浏览时切到「网盘与 WebDAV」。
-final settingsInitialSectionProvider =
-    StateProvider<SettingsSection>((ref) => SettingsSection.configSources);
+final settingsInitialSectionProvider = StateProvider<SettingsSection>(
+  (ref) => SettingsSection.configSources,
+);
 
 // --- 配置源徽标与切换（方案 B · Phase 1）---
 
@@ -265,7 +291,8 @@ final configSourcesProvider = StreamProvider<List<ConfigSourceEntry>>((ref) {
 final configSourceSummaryProvider = Provider<ConfigSourceSummary>((ref) {
   final config = ref.watch(vodConfigProvider);
   final repository = ref.watch(configRepositoryProvider);
-  final entries = ref.watch(configSourcesProvider).valueOrNull ??
+  final entries =
+      ref.watch(configSourcesProvider).valueOrNull ??
       ref.watch(settingsRepositoryProvider).configSources;
   return buildConfigSourceSummary(
     kind: repository.currentSourceKind,
@@ -277,16 +304,18 @@ final configSourceSummaryProvider = Provider<ConfigSourceSummary>((ref) {
 
 // --- 检测更新（BACKLOG §8）---
 
-final updatePreferencesStoreProvider =
-    Provider<UpdatePreferencesStore>((ref) => UpdatePreferencesStore());
+final updatePreferencesStoreProvider = Provider<UpdatePreferencesStore>(
+  (ref) => UpdatePreferencesStore(),
+);
 
 final updatePreferencesProvider =
     StateNotifierProvider<UpdatePreferencesNotifier, UpdatePreferences>((ref) {
-  final notifier =
-      UpdatePreferencesNotifier(ref.watch(updatePreferencesStoreProvider));
-  unawaited(notifier.load());
-  return notifier;
-});
+      final notifier = UpdatePreferencesNotifier(
+        ref.watch(updatePreferencesStoreProvider),
+      );
+      unawaited(notifier.load());
+      return notifier;
+    });
 
 final updateServiceProvider = Provider<UpdateService>((ref) {
   final service = UpdateService();
@@ -307,27 +336,28 @@ final updateDownloaderProvider = Provider<UpdateDownloader>((ref) {
   return downloader;
 });
 
-final installerLauncherProvider =
-    Provider<InstallerLauncher>((ref) => InstallerLauncher());
+final installerLauncherProvider = Provider<InstallerLauncher>(
+  (ref) => InstallerLauncher(),
+);
 
 final updateControllerProvider =
     StateNotifierProvider<UpdateController, UpdateUiState>((ref) {
-  return UpdateController(
-    service: ref.watch(updateServiceProvider),
-    mirrorCatalog: ref.watch(updateMirrorCatalogProvider),
-    downloader: ref.watch(updateDownloaderProvider),
-    launcher: ref.watch(installerLauncherProvider),
-    preferences: ref.read(updatePreferencesProvider.notifier),
-    closeApp: () => ref.read(windowManagerProvider).close(),
-  );
-});
+      return UpdateController(
+        service: ref.watch(updateServiceProvider),
+        mirrorCatalog: ref.watch(updateMirrorCatalogProvider),
+        downloader: ref.watch(updateDownloaderProvider),
+        launcher: ref.watch(installerLauncherProvider),
+        preferences: ref.read(updatePreferencesProvider.notifier),
+        closeApp: () => ref.read(windowManagerProvider).close(),
+      );
+    });
 
 /// 打开更新对话框（检查结果、下载进度、安装确认都在同一框内切换）。
 Future<void> showUpdateDialog(BuildContext context) => showAppDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const _UpdateDialogHost(),
-    );
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => const _UpdateDialogHost(),
+);
 
 final cmsApiProvider = Provider<CmsJsonApi>((ref) => CmsJsonApi());
 final tmdbRepositoryProvider = Provider<TmdbRepository>((ref) {
@@ -336,11 +366,24 @@ final tmdbRepositoryProvider = Provider<TmdbRepository>((ref) {
   return repo;
 });
 final Provider<SiteApi> siteApiProvider = Provider<SiteApi>((ref) {
+  Map<String, String> driveCredentials() {
+    final repository = ref.read(driveAccountRepositoryProvider);
+    // 主凭据之外还有 UC TV Token 这类附加令牌，一并注入。
+    return <String, String>{
+      ...repository.credentialMap(),
+      ...repository.extraCredentialsMap(),
+    };
+  }
+
   final api = SiteApi(
     cmsApi: ref.watch(cmsApiProvider),
     // 伴随服务懒启动后由 SiteApi 把当前开关推给 Java 侧
     selfCheckEnabled: () =>
         ref.read(settingsRepositoryProvider).selfCheckPreferences.enabled,
+    // 网盘 Cookie / Token 注入 Spider 的 ext；访客态已在 credentialMap 里过滤。
+    driveCredentials: driveCredentials,
+    // 夸克 / UC / 百度分享的本机免转存解链。
+    netdiskShareResolver: NetdiskShareResolver(credentials: driveCredentials),
   );
   // 每次加载配置都让伴随服务释放旧配置的资源：否则类加载器、python 子进程、
   // 代理端口只增不减，换几次配置后加固源会因端口池耗尽而无法播放。
@@ -351,7 +394,8 @@ final Provider<SiteApi> siteApiProvider = Provider<SiteApi>((ref) {
       await api.resetCompanionSpiders();
       ref.read(liveRepositoryProvider).notifyScriptReset();
       await api.prewarmCompanionJars(
-          ref.read(configRepositoryProvider).currentVodConfig.sites);
+        ref.read(configRepositoryProvider).currentVodConfig.sites,
+      );
     }());
   });
   final readyPort = api.companionManager.readyPort;
@@ -372,8 +416,11 @@ final Provider<SiteApi> siteApiProvider = Provider<SiteApi>((ref) {
   });
   // 启动阶段：配置在 runApp 之前就加载完了，configLoadedStream 那一次事件没有监听者，
   // 所以这里再主动预热一次（否则首次使用仍要「先全局搜索一次」才激活）。
-  unawaited(api.prewarmCompanionJars(
-      ref.read(configRepositoryProvider).currentVodConfig.sites));
+  unawaited(
+    api.prewarmCompanionJars(
+      ref.read(configRepositoryProvider).currentVodConfig.sites,
+    ),
+  );
   return api;
 });
 final parseEngineProvider = Provider<ParseEngine>((ref) => ParseEngine());
@@ -389,11 +436,13 @@ final companionUiChannelProvider = Provider<CompanionUiChannel>((ref) {
   return channel;
 });
 final searchEngineProvider = Provider<SearchEngine>(
-    (ref) => SearchEngine(siteApi: ref.watch(siteApiProvider)));
+  (ref) => SearchEngine(siteApi: ref.watch(siteApiProvider)),
+);
 
 /// 豆瓣「热播」数据源（§17）：内存缓存 8 分钟，失败不缓存。
-final doubanRepositoryProvider =
-    Provider<DoubanRepository>((ref) => DoubanRepository());
+final doubanRepositoryProvider = Provider<DoubanRepository>(
+  (ref) => DoubanRepository(),
+);
 
 final liveRepositoryProvider = Provider<LiveRepository>((ref) {
   final repository = LiveRepository(
@@ -450,8 +499,9 @@ final epgRepositoryProvider = Provider<EpgRepository>((ref) {
 });
 
 /// 存储与缓存盘点 / 清理（SET-09）。默认使用真实 %APPDATA%/YingshiTV。
-final cacheMaintenanceProvider =
-    Provider<CacheMaintenance>((ref) => CacheMaintenance());
+final cacheMaintenanceProvider = Provider<CacheMaintenance>(
+  (ref) => CacheMaintenance(),
+);
 
 /// 数据备份与恢复（SET-10）。读取前等待配置 / 设置保存链落定。
 final dataBackupServiceProvider = Provider<DataBackupService>((ref) {
@@ -483,9 +533,9 @@ final lineSwitchNoticeProvider = StateProvider<String?>((ref) => null);
 /// 播放器内手动换线（SET-12 重做）：与自动换线共用同一条执行链路。
 final manualLineSwitchProvider =
     Provider<Future<void> Function(PlaybackSession, int)>((ref) {
-  return (session, sourceIndex) =>
-      _manualSwitchToLine(ref, session, sourceIndex);
-});
+      return (session, sourceIndex) =>
+          _manualSwitchToLine(ref, session, sourceIndex);
+    });
 
 /// 早期错误自动换线控制器（SET-12）。
 final autoLineSwitchProvider = Provider<AutoLineSwitchController>((ref) {
@@ -521,8 +571,6 @@ final autoLineSwitchProvider = Provider<AutoLineSwitchController>((ref) {
 /// 本地 companion 代理播放中断后的有界自恢复控制器在主视图 `initState` 创建：
 /// 它需要 `WidgetRef`（内部走 `_refreshPlayback`），不能放在 Provider 里。
 
-
-
 /// 同步响应式 VodConfig 状态 Notifier
 class VodConfigNotifier extends StateNotifier<VodConfig> {
   final ConfigRepository _repo;
@@ -541,8 +589,9 @@ class VodConfigNotifier extends StateNotifier<VodConfig> {
   }
 }
 
-final vodConfigProvider =
-    StateNotifierProvider<VodConfigNotifier, VodConfig>((ref) {
+final vodConfigProvider = StateNotifierProvider<VodConfigNotifier, VodConfig>((
+  ref,
+) {
   final repo = ref.watch(configRepositoryProvider);
   return VodConfigNotifier(repo);
 });
@@ -565,8 +614,9 @@ class CurrentSiteNotifier extends StateNotifier<Site?> {
   }
 }
 
-final currentSiteProvider =
-    StateNotifierProvider<CurrentSiteNotifier, Site?>((ref) {
+final currentSiteProvider = StateNotifierProvider<CurrentSiteNotifier, Site?>((
+  ref,
+) {
   final repo = ref.watch(configRepositoryProvider);
   return CurrentSiteNotifier(repo);
 });
@@ -591,9 +641,9 @@ class HistoryNotifier extends StateNotifier<List<HistoryRecord>> {
 
 final historyProvider =
     StateNotifierProvider<HistoryNotifier, List<HistoryRecord>>((ref) {
-  final repo = ref.watch(configRepositoryProvider);
-  return HistoryNotifier(repo);
-});
+      final repo = ref.watch(configRepositoryProvider);
+      return HistoryNotifier(repo);
+    });
 
 /// 同步响应式 Favorites 状态 Notifier
 class FavoritesNotifier extends StateNotifier<List<VodItem>> {
@@ -615,9 +665,9 @@ class FavoritesNotifier extends StateNotifier<List<VodItem>> {
 
 final favoritesProvider =
     StateNotifierProvider<FavoritesNotifier, List<VodItem>>((ref) {
-  final repo = ref.watch(configRepositoryProvider);
-  return FavoritesNotifier(repo);
-});
+      final repo = ref.watch(configRepositoryProvider);
+      return FavoritesNotifier(repo);
+    });
 
 /// 同步响应式直播收藏状态（§33）。直播频道与点播影片是两份独立数据，
 /// 因此各自一个 Notifier；抽屉「收藏频道」置顶分类（§34）从这里取键。
@@ -640,9 +690,9 @@ class LiveFavoritesNotifier extends StateNotifier<List<Live>> {
 
 final liveFavoritesProvider =
     StateNotifierProvider<LiveFavoritesNotifier, List<Live>>((ref) {
-  final repo = ref.watch(configRepositoryProvider);
-  return LiveFavoritesNotifier(repo);
-});
+      final repo = ref.watch(configRepositoryProvider);
+      return LiveFavoritesNotifier(repo);
+    });
 
 /// 弹窗探测（§40）：有模态弹窗时窗口仍要能拖动。
 final DialogRouteObserver _dialogRouteObserver = DialogRouteObserver();
@@ -665,7 +715,9 @@ final danmakuControllerProvider = Provider<DanmakuController>((ref) {
     cache: DanmakuCache(p.join(DataDirectoryManager.currentPath, 'danmaku')),
   );
   final subscription = settings.playerSettingsStream.listen((next) {
-    unawaited(controller.selectSource(resolveDanmakuSource(next.danmaku.source)));
+    unawaited(
+      controller.selectSource(resolveDanmakuSource(next.danmaku.source)),
+    );
   });
   ref.onDispose(() {
     unawaited(subscription.cancel());
@@ -697,7 +749,8 @@ final segmentsControllerProvider = Provider<SegmentsController>((ref) {
 /// 最近一次「点选集」的入参，供准备态「重试」复用（只存数据，不存闭包）。
 final pendingPlayProvider =
     StateProvider<({VodItem item, EpisodeSelection selection, Site? site})?>(
-        (ref) => null);
+      (ref) => null,
+    );
 
 /// 准备态的作废计数：每次发起/取消都自增，迟到的解析结果直接丢弃。
 int _playPreparationEpoch = 0;
@@ -721,8 +774,11 @@ Future<void> startEpisodePlaybackWithIntent(
     subtitle: '${episode.name} · ${selection.sourceName}',
     cover: item.pic,
   );
-  ref.read(pendingPlayProvider.notifier).state =
-      (item: item, selection: selection, site: targetSite);
+  ref.read(pendingPlayProvider.notifier).state = (
+    item: item,
+    selection: selection,
+    site: targetSite,
+  );
   ref.read(playbackIntentProvider.notifier).state = intent;
 
   final result = await () async {
@@ -763,8 +819,12 @@ Future<void> startEpisodePlaybackWithIntent(
 Future<void> retryPlayPreparation(WidgetRef ref) async {
   final pending = ref.read(pendingPlayProvider);
   if (pending == null) return;
-  await startEpisodePlaybackWithIntent(ref, pending.item, pending.selection,
-      targetSite: pending.site);
+  await startEpisodePlaybackWithIntent(
+    ref,
+    pending.item,
+    pending.selection,
+    targetSite: pending.site,
+  );
 }
 
 /// 准备态「返回」：作废在途结果并回到列表。
@@ -799,11 +859,13 @@ void _commitPlaybackVolume(WidgetRef ref, double value) {
     final repo = ref.read(settingsRepositoryProvider);
     final current = repo.playerSettings.defaultVolume;
     if ((current - target).abs() < 0.5) return;
-    unawaited(repo.updatePlayerSettings(
-      repo.playerSettings.copyWith(
-        defaultVolume: target.clamp(0.0, 100.0).roundToDouble(),
+    unawaited(
+      repo.updatePlayerSettings(
+        repo.playerSettings.copyWith(
+          defaultVolume: target.clamp(0.0, 100.0).roundToDouble(),
+        ),
       ),
-    ));
+    );
   });
 }
 
@@ -882,23 +944,23 @@ class PlaybackSession {
     int? sourceIndex,
     Set<String>? triedLines,
     Set<String>? failedLines,
-  }) =>
-      PlaybackSession(
-        item: item,
-        sourceName: sourceName ?? this.sourceName,
-        episodes: episodes ?? this.episodes,
-        index: index ?? this.index,
-        site: site,
-        sources: sources ?? this.sources,
-        sourceIndex: sourceIndex ?? this.sourceIndex,
-        triedLines: triedLines ?? this.triedLines,
-        failedLines: failedLines ?? this.failedLines,
-        switching: switching ?? this.switching,
-      );
+  }) => PlaybackSession(
+    item: item,
+    sourceName: sourceName ?? this.sourceName,
+    episodes: episodes ?? this.episodes,
+    index: index ?? this.index,
+    site: site,
+    sources: sources ?? this.sources,
+    sourceIndex: sourceIndex ?? this.sourceIndex,
+    triedLines: triedLines ?? this.triedLines,
+    failedLines: failedLines ?? this.failedLines,
+    switching: switching ?? this.switching,
+  );
 }
 
-final activePlaybackSessionProvider =
-    StateProvider<PlaybackSession?>((ref) => null);
+final activePlaybackSessionProvider = StateProvider<PlaybackSession?>(
+  (ref) => null,
+);
 
 /// 选集抽屉正在浏览的线路。null 表示跟随实际播放线路；只切目录时不改播放真相。
 final episodeBrowseSourceIndexProvider = StateProvider<int?>((ref) => null);
@@ -993,13 +1055,16 @@ bool Function() _playbackRequestStaleGuard(WidgetRef ref) {
 /// - [restoreRecordId] 启动失败时把跟踪对象改回仍在其位的那条记录（不写错记录）；
 /// - [isStale] 引擎启动窗口内的作废判定：为 true 时不提交播放规格，避免迟到结果
 ///   把已关闭的播放器重新唤醒（幽灵播放）。
-Future<void> _launchPlayback(WidgetRef ref, MediaPlaySpec spec,
-    {String? historyRecordId,
-    String? restoreRecordId,
-    bool Function()? isStale,
-    _LiveCatalogPlaybackSnapshot? liveCatalog,
-    bool preserveRate = false,
-    bool keepSettingsOpen = false}) async {
+Future<void> _launchPlayback(
+  WidgetRef ref,
+  MediaPlaySpec spec, {
+  String? historyRecordId,
+  String? restoreRecordId,
+  bool Function()? isStale,
+  _LiveCatalogPlaybackSnapshot? liveCatalog,
+  bool preserveRate = false,
+  bool keepSettingsOpen = false,
+}) async {
   bool stale() => !ref.context.mounted || (isStale?.call() ?? false);
   if (stale()) return;
   // invariant: 只有显式选台或同频道事务传入目录归属，独立来源不继承旧频道。
@@ -1007,8 +1072,9 @@ Future<void> _launchPlayback(WidgetRef ref, MediaPlaySpec spec,
       liveCatalog ?? _LiveCatalogPlaybackSnapshot.forChannel(spec, null);
   final tracker = ref.read(playbackHistoryTrackerProvider);
   final engine = ref.read(playerEngineProvider);
-  final savedRate =
-      preserveRate && !spec.isLive ? _inheritableRate(engine) : null;
+  final savedRate = preserveRate && !spec.isLive
+      ? _inheritableRate(engine)
+      : null;
   Future<void> discardStaleOpen() async {
     // invariant: 只能清理本次仍持有的打开结果，不能停止后续请求的引擎或历史跟踪。
     if (!identical(engine.currentSpec, spec)) return;
@@ -1083,10 +1149,14 @@ LiveFavoriteActions _liveFavoriteActions(WidgetRef ref) {
 /// 起播指定直播频道：更新运行态（抽屉 / 切台的单一数据源）、记录启动入口与
 /// 「上次频道」（以用户选择为准——失败也保留，便于下次原样重试）。
 /// 返回是否成功起播；失败给统一提示而不抛出（直播失败可直接换台重试）。
-Future<bool> _startLiveChannel(WidgetRef ref, List<Live> channels, int index,
-    {bool Function()? isStale,
-    bool keepSettingsOpen = false,
-    int lineIndex = 0}) async {
+Future<bool> _startLiveChannel(
+  WidgetRef ref,
+  List<Live> channels,
+  int index, {
+  bool Function()? isStale,
+  bool keepSettingsOpen = false,
+  int lineIndex = 0,
+}) async {
   if (index < 0 ||
       index >= channels.length ||
       !ref.context.mounted ||
@@ -1110,23 +1180,30 @@ Future<bool> _startLiveChannel(WidgetRef ref, List<Live> channels, int index,
   ref.read(liveRuntimeProvider.notifier).state = LivePlaybackRuntime(
     channels: List.unmodifiable(channels),
     index: index,
-    committedPlayback: committed != null &&
+    committedPlayback:
+        committed != null &&
             identical(committed.spec, ref.read(activePlaySpecProvider))
         ? committed
         : null,
   );
   unawaited(
-      ref.read(settingsRepositoryProvider).recordLastEntry(StartupEntry.live));
-  unawaited(ref
-      .read(liveRepositoryProvider)
-      .saveLastChannelKey(liveChannelBookmark(live)));
+    ref.read(settingsRepositoryProvider).recordLastEntry(StartupEntry.live),
+  );
+  unawaited(
+    ref
+        .read(liveRepositoryProvider)
+        .saveLastChannelKey(liveChannelBookmark(live)),
+  );
   try {
     final spec = await _resolveLivePlaySpec(ref, live, serial, lineIndex);
     if (spec == null || stale()) return false;
-    await _launchPlayback(ref, spec,
-        isStale: stale,
-        liveCatalog: _LiveCatalogPlaybackSnapshot.forChannel(spec, live),
-        keepSettingsOpen: keepSettingsOpen);
+    await _launchPlayback(
+      ref,
+      spec,
+      isStale: stale,
+      liveCatalog: _LiveCatalogPlaybackSnapshot.forChannel(spec, live),
+      keepSettingsOpen: keepSettingsOpen,
+    );
     return !stale();
   } catch (_) {
     if (stale()) return false;
@@ -1139,8 +1216,10 @@ Future<bool> _startLiveChannel(WidgetRef ref, List<Live> channels, int index,
 Future<void> _switchLiveChannel(WidgetRef ref, int delta) async {
   if (!ref.context.mounted) return;
   final runtime = ref.read(liveRuntimeProvider);
-  final playingIndex =
-      _livePlayingIndex(ref.read(activePlaySpecProvider), runtime);
+  final playingIndex = _livePlayingIndex(
+    ref.read(activePlaySpecProvider),
+    runtime,
+  );
   if (runtime == null || playingIndex < 0 || delta == 0) return;
   final next = (playingIndex + delta) % runtime.channels.length;
   final name = runtime.channels[next].name;
@@ -1161,7 +1240,8 @@ Future<MediaPlaySpec?> _resolveLivePlaySpec(
   final url = livePlaySpec(live, lineIndex: lineIndex).url;
   final choice = ref.read(livePlaybackChoicesProvider)[url];
   final settings = ref.read(settingsRepositoryProvider).playerSettings;
-  final probe = shouldProbeLiveChannel(
+  final probe =
+      shouldProbeLiveChannel(
         live: live.copyWith(url: url),
         choice: choice,
         isManualChannel: live.groupName == LiveRepository.manualSourceName,
@@ -1187,8 +1267,12 @@ Future<MediaPlaySpec?> _resolveLivePlaySpec(
     } else {
       _liveProbeFailedUrls.remove(url);
     }
-    return livePlaySpec(live,
-        choice: choice, probe: result, lineIndex: lineIndex);
+    return livePlaySpec(
+      live,
+      choice: choice,
+      probe: result,
+      lineIndex: lineIndex,
+    );
   } finally {
     if (serial == _liveLaunchSerial) probing.state = false;
   }
@@ -1253,21 +1337,27 @@ Future<MediaPlaySpec?> _resolveEpisodeSpec(
   required Site? site,
   required String sourceName,
   required String episodeUrl,
+  String episodeName = '',
   Duration? timeout,
 }) async {
   _lastPlayError = null;
   try {
-    final future = ref.read(siteApiProvider).resolvePlayback(
+    final future = ref
+        .read(siteApiProvider)
+        .resolvePlayback(
           site,
           id: episodeUrl,
           flag: sourceName,
-          preferredQualityName:
-              ref.read(playbackQualityPreferencesProvider)[site?.key],
+          episodeName: episodeName,
+          preferredQualityName: ref.read(
+            playbackQualityPreferencesProvider,
+          )[site?.key],
           parses: ref.read(configRepositoryProvider).currentVodConfig.parses,
           parseEngine: ref.read(parseEngineProvider),
         );
-    final resolved =
-        timeout == null ? await future : await future.timeout(timeout);
+    final resolved = timeout == null
+        ? await future
+        : await future.timeout(timeout);
     if (resolved.url.isEmpty) return null;
     return resolved;
   } catch (e) {
@@ -1283,7 +1373,7 @@ Object? _lastPlayError;
 
 /// 构建目标集播放参数并写入历史记录（切集与详情页选集共用同一字段与记录 ID 规则）。
 ({MediaPlaySpec spec, String? recordId, HistoryResumeMatch? resumeMatch})
-    _prepareEpisodePlayback(
+_prepareEpisodePlayback(
   WidgetRef ref, {
   required VodItem item,
   required String sourceName,
@@ -1307,15 +1397,18 @@ Object? _lastPlayError;
   }
   final repo = ref.read(configRepositoryProvider);
   final recordId = HistoryRecord.buildId(item.id, episode.name);
-  final resumeMatch = resumeRecord != null ? null : repo.findLatestResumeCandidate(
-    vodId: item.id,
-    vodName: item.name,
-    episodeName: episode.name,
-    // 单集影片（电影）跨站集名差异大：按最外层片名续播，不再死扣集名。
-    singleEpisode: episodes.length == 1 ||
-        (episodes.isNotEmpty &&
-            episodes.every((e) => isMovieEpisodeName(e.name))),
-  );
+  final resumeMatch = resumeRecord != null
+      ? null
+      : repo.findLatestResumeCandidate(
+          vodId: item.id,
+          vodName: item.name,
+          episodeName: episode.name,
+          // 单集影片（电影）跨站集名差异大：按最外层片名续播，不再死扣集名。
+          singleEpisode:
+              episodes.length == 1 ||
+              (episodes.isNotEmpty &&
+                  episodes.every((e) => isMovieEpisodeName(e.name))),
+        );
   final existing = resumeRecord ?? resumeMatch?.record;
 
   // 片头跳过：起播位置取「续播位置」与「片头」的较大者（片头只提前、不回退）
@@ -1323,8 +1416,8 @@ Object? _lastPlayError;
   final resume = existing?.resumePosition;
   final startPosition =
       (opening != null && (resume == null || resume < opening))
-          ? opening
-          : resume;
+      ? opening
+      : resume;
 
   final spec = resolved.copyWith(
     headers: resolved.headers ?? site?.header,
@@ -1360,7 +1453,7 @@ Object? _lastPlayError;
 /// 首轮自动换线（SET-12）：当前线路解析 / 启动失败时，按详情页顺序尝试
 /// 同站同片同集的最多 2 条备用线路；全部失败才返回错误。
 Future<({String? error, HistoryResumeMatch? resumeMatch})>
-    _startEpisodePlayback(
+_startEpisodePlayback(
   WidgetRef ref, {
   required VodItem item,
   required String sourceName,
@@ -1378,8 +1471,9 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})>
   final allSources = (sources == null || sources.isEmpty)
       ? <PlayFrom>[PlayFrom(name: sourceName, episodes: episodes)]
       : sources;
-  final selectedIndex =
-      sourceIndex >= 0 && sourceIndex < allSources.length ? sourceIndex : 0;
+  final selectedIndex = sourceIndex >= 0 && sourceIndex < allSources.length
+      ? sourceIndex
+      : 0;
   final currentSource = allSources[selectedIndex];
   final currentEpisode = episodes[index];
   final tried = <String>{lineSwitchKey(selectedIndex, currentSource.name)};
@@ -1412,6 +1506,7 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})>
       site: site,
       sourceName: candidate.source.name,
       episodeUrl: candidate.episode.url,
+      episodeName: candidate.episode.name,
       timeout: attempts.length > 1 ? const Duration(seconds: 20) : null,
     );
     if (isStale()) return (error: null, resumeMatch: null);
@@ -1462,7 +1557,9 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})>
     ref.read(activePlaybackSessionProvider.notifier).state = session;
     ref.read(episodeBrowseSourceIndexProvider.notifier).state = null;
     if (!prepared.spec.isLive) {
-      ref.read(autoLineSwitchProvider).arm(
+      ref
+          .read(autoLineSwitchProvider)
+          .arm(
             sources: allSources,
             currentSourceIndex: candidate.sourceIndex,
             currentSourceName: candidate.source.name,
@@ -1483,8 +1580,10 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})>
   }
 
   return (
-    error:
-        playResolveFailureText(_lastPlayError, allLines: attempts.length > 1),
+    error: playResolveFailureText(
+      _lastPlayError,
+      allLines: attempts.length > 1,
+    ),
     resumeMatch: null,
   );
 }
@@ -1508,8 +1607,8 @@ void _showResumeHint(WidgetRef ref, HistoryResumeMatch? match) {
   final source = match.record.siteName?.trim().isNotEmpty == true
       ? match.record.siteName!.trim()
       : (match.record.sourceName.trim().isNotEmpty
-          ? match.record.sourceName.trim()
-          : '其他站点');
+            ? match.record.sourceName.trim()
+            : '其他站点');
   showAppMessage(
     '已从「$source」的观看进度续播（${_formatPlaybackPosition(resume)}）',
     type: AppMessageType.info,
@@ -1530,11 +1629,15 @@ Future<void> _restartCurrentFromStart(WidgetRef ref) async {
     await engine.resume();
     if (recordId == null) return;
     tracker.track(recordId, flushPrevious: false);
-    unawaited(ref.read(configRepositoryProvider).updateHistoryProgress(
-          recordId,
-          positionMs: 0,
-          durationMs: engine.duration.inMilliseconds,
-        ));
+    unawaited(
+      ref
+          .read(configRepositoryProvider)
+          .updateHistoryProgress(
+            recordId,
+            positionMs: 0,
+            durationMs: engine.duration.inMilliseconds,
+          ),
+    );
   } catch (_) {
     // 重播失败不影响当前播放；用户可再次点击。
   }
@@ -1548,15 +1651,17 @@ void _markLineFailed(Ref ref, String key, {bool failed = true}) {
   final next = {...session.failedLines};
   final changed = failed ? next.add(key) : next.remove(key);
   if (!changed) return;
-  ref.read(activePlaybackSessionProvider.notifier).state =
-      session.copyWith(failedLines: Set.unmodifiable(next));
+  ref.read(activePlaybackSessionProvider.notifier).state = session.copyWith(
+    failedLines: Set.unmodifiable(next),
+  );
 }
 
 /// 选集解析/启动失败时旧媒体仍在播放：只恢复会话闸门。
 /// 原自动换线控制器没有被拆除，起播窗口与已尝试线路均保持原值。
 void _restoreEpisodeSwitchSession(WidgetRef ref, PlaybackSession session) {
-  ref.read(activePlaybackSessionProvider.notifier).state =
-      session.copyWith(switching: false);
+  ref.read(activePlaybackSessionProvider.notifier).state = session.copyWith(
+    switching: false,
+  );
   ref.read(autoLineSwitchProvider).resumePendingAttempt();
 }
 
@@ -1587,8 +1692,10 @@ Future<bool> _autoSwitchToLine(
           session.site,
           id: candidate.episode.url,
           flag: candidate.source.name,
-          preferredQualityName:
-              ref.read(playbackQualityPreferencesProvider)[session.site?.key],
+          episodeName: candidate.episode.name,
+          preferredQualityName: ref.read(
+            playbackQualityPreferencesProvider,
+          )[session.site?.key],
           parses: ref.read(configRepositoryProvider).currentVodConfig.parses,
           parseEngine: ref.read(parseEngineProvider),
         )
@@ -1643,14 +1750,18 @@ Future<bool> _autoSwitchToLine(
         baseline: position,
         floor: position > Duration.zero ? position : null,
       );
-      unawaited(ref.read(configRepositoryProvider).updateHistorySource(
-            recordId,
-            sourceName: candidate.source.name,
-            playUrl: resolved.url,
-            episodeUrl: candidate.episode.url,
-            siteKey: session.item.siteKey ?? session.site?.key,
-            siteName: session.item.siteName ?? session.site?.name,
-          ));
+      unawaited(
+        ref
+            .read(configRepositoryProvider)
+            .updateHistorySource(
+              recordId,
+              sourceName: candidate.source.name,
+              playUrl: resolved.url,
+              episodeUrl: candidate.episode.url,
+              siteKey: session.item.siteKey ?? session.site?.key,
+              siteName: session.item.siteName ?? session.site?.name,
+            ),
+      );
     }
 
     final current = ref.read(activePlaybackSessionProvider);
@@ -1684,8 +1795,10 @@ Future<bool> _autoSwitchToLine(
 /// 迟到结果在会话已关闭或被替换时作废（不播放、不写历史、不更新 UI）。
 /// 返回 null 表示成功或无事发生；否则为用户可展示的错误文案。
 Future<({String? error, HistoryResumeMatch? resumeMatch})> _switchEpisode(
-    WidgetRef ref, int targetIndex,
-    {int? sourceIndex}) async {
+  WidgetRef ref,
+  int targetIndex, {
+  int? sourceIndex,
+}) async {
   if (ref.read(playbackSourceChangeProvider) != null ||
       ref.read(playerRefreshBusyProvider) ||
       ref.read(playerAutoSwitchBusyProvider)) {
@@ -1717,14 +1830,16 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})> _switchEpisode(
   // 成功后下方会以目标集的新状态覆盖 arm。
   final epoch = ++_playbackSessionEpoch;
   ref.read(autoLineSwitchProvider).rebindEpoch(epoch);
-  ref.read(activePlaybackSessionProvider.notifier).state =
-      session.copyWith(switching: true);
+  ref.read(activePlaybackSessionProvider.notifier).state = session.copyWith(
+    switching: true,
+  );
 
   final resolved = await _resolveEpisodeSpec(
     ref,
     site: session.site,
     sourceName: targetSource.name,
     episodeUrl: targetSource.episodes[targetIndex].url,
+    episodeName: targetSource.episodes[targetIndex].name,
   );
 
   // 会话已关闭 / 被替换 / 有更新操作：迟到结果作废
@@ -1735,19 +1850,17 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})> _switchEpisode(
   if (current == null) return (error: null, resumeMatch: null);
   if (resolved == null) {
     _restoreEpisodeSwitchSession(ref, current);
-    return (
-      error: playResolveFailureText(_lastPlayError),
-      resumeMatch: null,
-    );
+    return (error: playResolveFailureText(_lastPlayError), resumeMatch: null);
   }
 
   // 切换前快照：启动失败时用于把历史与跟踪对象恢复到「切换前」状态。
   final repo = ref.read(configRepositoryProvider);
   final previousRecordId =
       ref.read(playbackHistoryTrackerProvider).activeRecordId ??
-          ref.read(_sourceRecoverySnapshotProvider)?.recordId;
-  final previousRecord =
-      previousRecordId == null ? null : repo.findHistoryById(previousRecordId);
+      ref.read(_sourceRecoverySnapshotProvider)?.recordId;
+  final previousRecord = previousRecordId == null
+      ? null
+      : repo.findHistoryById(previousRecordId);
 
   final prepared = _prepareEpisodePlayback(
     ref,
@@ -1816,7 +1929,9 @@ Future<({String? error, HistoryResumeMatch? resumeMatch})> _switchEpisode(
     );
     ref.read(episodeBrowseSourceIndexProvider.notifier).state = null;
     if (!prepared.spec.isLive) {
-      ref.read(autoLineSwitchProvider).arm(
+      ref
+          .read(autoLineSwitchProvider)
+          .arm(
             sources: allSources,
             currentSourceIndex: targetSourceIndex,
             currentSourceName: targetSource.name,
@@ -1859,8 +1974,12 @@ Duration? _openingStart(WidgetRef ref, String vodId) {
 }
 
 /// 由播放会话装配片头 / 片尾视图模型；无会话返回 null（直播 / 推送 / 续播不显示）。
-PlayerSkipNav? _buildSkipNav(WidgetRef ref, PlaybackSession? session,
-    BuildContext playerContext, PlaySkipPreferences preferences) {
+PlayerSkipNav? _buildSkipNav(
+  WidgetRef ref,
+  PlaybackSession? session,
+  BuildContext playerContext,
+  PlaySkipPreferences preferences,
+) {
   if (session == null) return null;
   final entry = preferences.entryFor(session.item.id);
   return PlayerSkipNav(
@@ -1873,9 +1992,11 @@ PlayerSkipNav? _buildSkipNav(WidgetRef ref, PlaybackSession? session,
     onSetEndingAt: (ms) =>
         unawaited(_editSkipMarker(playerContext, ref, ending: true, atMs: ms)),
     onClearOpening: () => unawaited(
-        _editSkipMarker(playerContext, ref, ending: false, clear: true)),
+      _editSkipMarker(playerContext, ref, ending: false, clear: true),
+    ),
     onClearEnding: () => unawaited(
-        _editSkipMarker(playerContext, ref, ending: true, clear: true)),
+      _editSkipMarker(playerContext, ref, ending: true, clear: true),
+    ),
   );
 }
 
@@ -1885,8 +2006,13 @@ PlayerSkipNav? _buildSkipNav(WidgetRef ref, PlaybackSession? session,
 /// - 片尾由宿主换算为「距片尾偏移」后落盘（沿用 `play_skip_preferences` 口径）；
 /// - [clear] 清除该侧标记（保留另一侧，空条目自动移除）；
 /// - 范围（min(时长/2, 10 分钟)）与重叠校验保留，反馈走顶部浮层消息。
-Future<void> _editSkipMarker(BuildContext context, WidgetRef ref,
-    {required bool ending, int? atMs, bool clear = false}) async {
+Future<void> _editSkipMarker(
+  BuildContext context,
+  WidgetRef ref, {
+  required bool ending,
+  int? atMs,
+  bool clear = false,
+}) async {
   final session = ref.read(activePlaybackSessionProvider);
   if (session == null || ref.read(activePlaySpecProvider) == null) return;
   // 切换 / 刷新过渡期时长与位置可能仍属上一集：避免据此写入错误时间点
@@ -1902,8 +2028,10 @@ Future<void> _editSkipMarker(BuildContext context, WidgetRef ref,
 
   // updatedAt 单调递增：系统时钟回拨时不至于让自己刚写的条目成为「最旧」而被淘汰
   final now = DateTime.now().millisecondsSinceEpoch;
-  final newest = preferences.items.values
-      .fold<int>(0, (acc, item) => item.updatedAt > acc ? item.updatedAt : acc);
+  final newest = preferences.items.values.fold<int>(
+    0,
+    (acc, item) => item.updatedAt > acc ? item.updatedAt : acc,
+  );
   final stamp = now > newest ? now : newest + 1;
 
   Future<bool> persist(PlaySkipEntry next) async {
@@ -1930,9 +2058,10 @@ Future<void> _editSkipMarker(BuildContext context, WidgetRef ref,
     final currentMs = ending ? (entry?.endingMs ?? 0) : (entry?.openingMs ?? 0);
     if (entry == null || currentMs <= 0) return;
     final next = entry.copyWith(
-        openingMs: ending ? null : 0,
-        endingMs: ending ? 0 : null,
-        updatedAt: stamp);
+      openingMs: ending ? null : 0,
+      endingMs: ending ? 0 : null,
+      updatedAt: stamp,
+    );
     if (await persist(next) && context.mounted) {
       showAppMessage('$label已清除', type: AppMessageType.success);
     }
@@ -1951,23 +2080,27 @@ Future<void> _editSkipMarker(BuildContext context, WidgetRef ref,
   final valueMs = ending ? duration.inMilliseconds - pointMs : pointMs;
   final limitMs = _skipSetLimit(duration).inMilliseconds;
   if (valueMs <= 0 || valueMs > limitMs) {
-    showAppMessage('仅允许在$label附近的 ${_formatSkipMs(limitMs)} 内设置，请先调整播放位置',
-        type: AppMessageType.warning);
+    showAppMessage(
+      '仅允许在$label附近的 ${_formatSkipMs(limitMs)} 内设置，请先调整播放位置',
+      type: AppMessageType.warning,
+    );
     return;
   }
 
   // 重叠校验：片头起点 + 片尾偏移必须小于总时长（留 1s 余量）
-  final otherMs =
-      entry == null ? 0 : (ending ? entry.openingMs : entry.endingMs);
+  final otherMs = entry == null
+      ? 0
+      : (ending ? entry.openingMs : entry.endingMs);
   if (otherMs > 0 && valueMs + otherMs >= duration.inMilliseconds - 1000) {
     showAppMessage('片头与片尾重叠，请调整后再设置', type: AppMessageType.warning);
     return;
   }
 
   final next = (entry ?? const PlaySkipEntry()).copyWith(
-      openingMs: ending ? null : valueMs,
-      endingMs: ending ? valueMs : null,
-      updatedAt: stamp);
+    openingMs: ending ? null : valueMs,
+    endingMs: ending ? valueMs : null,
+    updatedAt: stamp,
+  );
   if (await persist(next) && context.mounted) {
     showAppMessage('$label已更新', type: AppMessageType.success);
   }
@@ -1975,7 +2108,10 @@ Future<void> _editSkipMarker(BuildContext context, WidgetRef ref,
 
 /// 播放器切集入口：失败时以顶部浮层消息提示（与详情页选集失败口径一致）。
 Future<void> _handleEpisodeSwitch(
-    BuildContext context, WidgetRef ref, int targetIndex) async {
+  BuildContext context,
+  WidgetRef ref,
+  int targetIndex,
+) async {
   final result = await _switchEpisode(ref, targetIndex);
   if (!context.mounted) return;
   if (result.error != null) {
@@ -1985,10 +2121,17 @@ Future<void> _handleEpisodeSwitch(
   _showResumeHint(ref, result.resumeMatch);
 }
 
-Future<void> _handleEpisodeSwitchOnSource(BuildContext context, WidgetRef ref,
-    int sourceIndex, int targetIndex) async {
-  final result =
-      await _switchEpisode(ref, targetIndex, sourceIndex: sourceIndex);
+Future<void> _handleEpisodeSwitchOnSource(
+  BuildContext context,
+  WidgetRef ref,
+  int sourceIndex,
+  int targetIndex,
+) async {
+  final result = await _switchEpisode(
+    ref,
+    targetIndex,
+    sourceIndex: sourceIndex,
+  );
   if (!context.mounted) return;
   if (result.error != null) {
     showAppMessage(result.error!, type: AppMessageType.error);
@@ -2021,7 +2164,8 @@ Future<void> _recoverCompanionProxyPlayback(WidgetRef ref) async {
 /// 保留刷新前位置、不新增历史记录、失败不打断当前播放；
 /// 返回 `refreshed` 表示是否真的重载过，`error` 为用户可展示的错误文案。
 Future<({String? error, bool refreshed})> _refreshPlayback(
-    WidgetRef ref) async {
+  WidgetRef ref,
+) async {
   final spec = ref.read(activePlaySpecProvider);
   if (spec == null) return (error: null, refreshed: false);
   if (ref.read(playbackSourceChangeProvider) != null ||
@@ -2036,8 +2180,10 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
 
   final epoch = ++_playbackSessionEpoch; // 作废在途的切集 / 刷新
   final isStale = _playbackRequestStaleGuard(ref);
-  final liveCatalog =
-      _LiveCatalogPlaybackSnapshot(spec, ref.read(liveRuntimeProvider));
+  final liveCatalog = _LiveCatalogPlaybackSnapshot(
+    spec,
+    ref.read(liveRuntimeProvider),
+  );
   _refreshOwnerEpoch = epoch;
   ref.read(playerRefreshBusyProvider.notifier).state = true;
   ref.read(autoLineSwitchProvider).disarm();
@@ -2048,8 +2194,9 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
     final tracker = ref.read(playbackHistoryTrackerProvider);
     final engine = ref.read(playerEngineProvider);
     final recovery = ref.read(_sourceRecoverySnapshotProvider);
-    final recordId =
-        spec.isLive ? null : tracker.activeRecordId ?? recovery?.recordId;
+    final recordId = spec.isLive
+        ? null
+        : tracker.activeRecordId ?? recovery?.recordId;
     final position = recovery?.position ?? engine.position;
 
     // 刷新期间不落盘：避免解析 / seek 过渡期的位置事件把断点改小
@@ -2062,8 +2209,9 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
         ? const <String>{}
         : <String>{lineSwitchKey(session.sourceIndex, session.sourceName)};
     if (session != null) {
-      ref.read(activePlaybackSessionProvider.notifier).state =
-          session.copyWith(triedLines: resetTried);
+      ref.read(activePlaybackSessionProvider.notifier).state = session.copyWith(
+        triedLines: resetTried,
+      );
     }
     if (session != null) {
       // 点播剧集：重新解析当前集（与详情页选集 / 切集同一调用）
@@ -2078,14 +2226,19 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
               session.site,
               id: episode.url,
               flag: session.sourceName,
-              preferredQualityName: spec.isLive &&
+              episodeName: episode.name,
+              preferredQualityName:
+                  spec.isLive &&
                       spec.qualityIndex >= 0 &&
                       spec.qualityIndex < spec.qualities.length
                   ? spec.qualities[spec.qualityIndex].name
                   : ref.read(
-                      playbackQualityPreferencesProvider)[session.site?.key],
-              parses:
-                  ref.read(configRepositoryProvider).currentVodConfig.parses,
+                      playbackQualityPreferencesProvider,
+                    )[session.site?.key],
+              parses: ref
+                  .read(configRepositoryProvider)
+                  .currentVodConfig
+                  .parses,
               parseEngine: ref.read(parseEngineProvider),
             )
             .timeout(const Duration(seconds: 20));
@@ -2117,8 +2270,13 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
 
     if (error == null && !isStale()) {
       try {
-        await _launchPlayback(ref, target,
-            isStale: isStale, liveCatalog: liveCatalog, preserveRate: true);
+        await _launchPlayback(
+          ref,
+          target,
+          isStale: isStale,
+          liveCatalog: liveCatalog,
+          preserveRate: true,
+        );
         refreshed = !isStale();
       } catch (_) {
         if (!isStale()) error = '刷新失败：播放启动失败，请重试';
@@ -2131,19 +2289,27 @@ Future<({String? error, bool refreshed})> _refreshPlayback(
         (recovery == null || refreshed) &&
         recordId != null &&
         ref.read(activePlaySpecProvider)?.isLive == false) {
-      tracker.track(recordId,
-          flushPrevious: false,
-          baseline: position,
-          floor: position > Duration.zero ? position : null);
+      tracker.track(
+        recordId,
+        flushPrevious: false,
+        baseline: position,
+        floor: position > Duration.zero ? position : null,
+      );
       if (error == null && position > Duration.zero) {
-        unawaited(ref.read(configRepositoryProvider).updateHistoryProgress(
-              recordId,
-              positionMs: position.inMilliseconds,
-              durationMs: engine.duration.inMilliseconds,
-            ));
+        unawaited(
+          ref
+              .read(configRepositoryProvider)
+              .updateHistoryProgress(
+                recordId,
+                positionMs: position.inMilliseconds,
+                durationMs: engine.duration.inMilliseconds,
+              ),
+        );
       }
       if (session != null && ref.read(activePlaySpecProvider) != null) {
-        ref.read(autoLineSwitchProvider).arm(
+        ref
+            .read(autoLineSwitchProvider)
+            .arm(
               sources: session.sources,
               currentSourceIndex: session.sourceIndex,
               currentSourceName: session.sourceName,
@@ -2191,11 +2357,15 @@ Future<String?> _replayFromStart(WidgetRef ref, MpvPlayerEngine engine) async {
       // 在 resume 之前清零：清 floor / 基线并显式写 0，
       // 这样即使随后立刻返回主视图，也不会残留旧断点。
       tracker.track(recordId, flushPrevious: false);
-      unawaited(ref.read(configRepositoryProvider).updateHistoryProgress(
-            recordId,
-            positionMs: 0,
-            durationMs: engine.duration.inMilliseconds,
-          ));
+      unawaited(
+        ref
+            .read(configRepositoryProvider)
+            .updateHistoryProgress(
+              recordId,
+              positionMs: 0,
+              durationMs: engine.duration.inMilliseconds,
+            ),
+      );
     }
     if (epoch != _playbackSessionEpoch) return null;
     await engine.resume();
@@ -2207,7 +2377,10 @@ Future<String?> _replayFromStart(WidgetRef ref, MpvPlayerEngine engine) async {
 
 /// 重播入口：失败时以顶部浮层消息提示（与刷新失败同口径）。
 Future<void> _handleReplayRequested(
-    BuildContext context, WidgetRef ref, MpvPlayerEngine engine) async {
+  BuildContext context,
+  WidgetRef ref,
+  MpvPlayerEngine engine,
+) async {
   final error = await _replayFromStart(ref, engine);
   if (error != null && context.mounted) {
     showAppMessage(error, type: AppMessageType.error);
@@ -2222,8 +2395,9 @@ Future<void> _handleRefreshPlayback(BuildContext context, WidgetRef ref) async {
   if (message != null) {
     showAppMessage(
       message,
-      type:
-          result.error != null ? AppMessageType.error : AppMessageType.success,
+      type: result.error != null
+          ? AppMessageType.error
+          : AppMessageType.success,
     );
   }
 }
@@ -2231,8 +2405,11 @@ Future<void> _handleRefreshPlayback(BuildContext context, WidgetRef ref) async {
 /// 由播放会话装配切集视图模型；无会话或单集（≤1 集）返回 null（按钮整对隐藏）。
 /// [refreshBusy] 为真（刷新进行中）时两个切集按钮一并禁用，避免两条启动链路竞争。
 PlayerEpisodeNav? _buildEpisodeNav(
-    WidgetRef ref, PlaybackSession? session, BuildContext playerContext,
-    {bool refreshBusy = false}) {
+  WidgetRef ref,
+  PlaybackSession? session,
+  BuildContext playerContext, {
+  bool refreshBusy = false,
+}) {
   if (session == null || session.episodes.length <= 1) return null;
   return PlayerEpisodeNav(
     canPrev: session.hasPrev && !session.switching && !refreshBusy,
@@ -2250,8 +2427,11 @@ PlayerEpisodeNav? _buildEpisodeNav(
 /// 只在多集会话里出现；线路切换沿用 SET-12 的手动换线（保留当前集与位置），
 /// 抽屉不关闭、列表随会话更新。
 PlayerEpisodeListNav? _buildEpisodeListNav(
-    WidgetRef ref, PlaybackSession? session, BuildContext playerContext,
-    {bool busy = false}) {
+  WidgetRef ref,
+  PlaybackSession? session,
+  BuildContext playerContext, {
+  bool busy = false,
+}) {
   if (session == null) return null;
   final sources = session.sources.isEmpty
       ? <PlayFrom>[
@@ -2261,7 +2441,8 @@ PlayerEpisodeListNav? _buildEpisodeListNav(
   final hasChoices = session.episodes.length > 1 || sources.length > 1;
   if (!hasChoices) return null;
   final requestedBrowse = ref.watch(episodeBrowseSourceIndexProvider);
-  final browseSourceIndex = requestedBrowse != null &&
+  final browseSourceIndex =
+      requestedBrowse != null &&
           requestedBrowse >= 0 &&
           requestedBrowse < sources.length
       ? requestedBrowse
@@ -2276,18 +2457,25 @@ PlayerEpisodeListNav? _buildEpisodeListNav(
         current: browsingPlayingLine && i == session.index,
       ),
   ];
-  final lines = <PlayerLineChoice>[
-    if (sources.length > 1)
-      for (var i = 0; i < sources.length; i++)
+  final lines = <PlayerLineChoice>[];
+  if (sources.length > 1) {
+    for (var i = 0; i < sources.length; i++) {
+      final hint = driveHintFromFlag(sources[i].name);
+      lines.add(
         PlayerLineChoice(
           index: i,
           name: sources[i].name,
           current: i == session.sourceIndex,
           browsing: i == browseSourceIndex,
-          unavailable:
-              session.failedLines.contains(lineSwitchKey(i, sources[i].name)),
+          unavailable: session.failedLines.contains(
+            lineSwitchKey(i, sources[i].name),
+          ),
+          driveName: hint?.name,
+          driveOptional: hint?.optional ?? false,
         ),
-  ];
+      );
+    }
+  }
   // 线路测速：按会话指纹缓存，抽屉打开时才真正开始测（见 ensureStarted）。
   final probe = sources.length > 1
       ? LineProbeHub.instance.feedFor(
@@ -2307,33 +2495,78 @@ PlayerEpisodeListNav? _buildEpisodeListNav(
     browsingPlayingLine: browsingPlayingLine,
     switching: session.switching || busy,
     onSelectEpisode: (index) => unawaited(
-      browsingPlayingLine
-          ? _handleEpisodeSwitch(playerContext, ref, index)
-          : _handleEpisodeSwitchOnSource(
-              playerContext, ref, browseSourceIndex, index),
+      _selectEpisodeWithDriveCheck(
+        ref,
+        session,
+        playerContext,
+        index,
+        browsingPlayingLine: browsingPlayingLine,
+        browseSourceIndex: browseSourceIndex,
+        lineName: browseSource.name,
+      ),
     ),
-    onSelectLine: (index) =>
-        unawaited(ref.read(manualLineSwitchProvider)(session, index)),
+    onSelectLine: (index) => unawaited(
+      _switchLineWithDriveCheck(ref, session, playerContext, index),
+    ),
   );
+}
+
+Future<void> _selectEpisodeWithDriveCheck(
+  WidgetRef ref,
+  PlaybackSession session,
+  BuildContext context,
+  int index, {
+  required bool browsingPlayingLine,
+  required int browseSourceIndex,
+  required String lineName,
+}) async {
+  if (!await _ensureDriveReady(ref, context, lineName)) return;
+  if (!context.mounted) return;
+  if (browsingPlayingLine) {
+    await _handleEpisodeSwitch(context, ref, index);
+  } else {
+    await _handleEpisodeSwitchOnSource(context, ref, browseSourceIndex, index);
+  }
+}
+
+Future<void> _switchLineWithDriveCheck(
+  WidgetRef ref,
+  PlaybackSession session,
+  BuildContext context,
+  int index,
+) async {
+  if (!await _ensureDriveReady(ref, context, session.sources[index].name)) {
+    return;
+  }
+  if (!context.mounted) return;
+  await ref.read(manualLineSwitchProvider)(session, index);
 }
 
 /// 播放器内线路视图模型（SET-12 重做）：只列「本片这一集确实存在」的线路。
 ///
 /// 当前线路打勾、已失败灰显、缺集线路不出现；只剩当前线路时不显示整个分组。
-PlayerLineNav? _buildLineNav(WidgetRef ref, PlaybackSession? session,
-    {bool busy = false}) {
+PlayerLineNav? _buildLineNav(
+  WidgetRef ref,
+  PlaybackSession? session,
+  BuildContext context, {
+  bool busy = false,
+}) {
   if (session == null || session.sources.length <= 1) return null;
   final episodeName = session.episodes[session.index].name;
   final options = <PlayerLineOption>[];
   for (var i = 0; i < session.sources.length; i++) {
     final source = session.sources[i];
     if (matchEpisodeOnLine(source, episodeName) == null) continue;
-    options.add(PlayerLineOption(
-      index: i,
-      name: source.name,
-      current: i == session.sourceIndex,
-      unavailable: session.failedLines.contains(lineSwitchKey(i, source.name)),
-    ));
+    options.add(
+      PlayerLineOption(
+        index: i,
+        name: source.name,
+        current: i == session.sourceIndex,
+        unavailable: session.failedLines.contains(
+          lineSwitchKey(i, source.name),
+        ),
+      ),
+    );
   }
   if (options.length <= 1) return null;
   return PlayerLineNav(
@@ -2348,14 +2581,33 @@ PlayerLineNav? _buildLineNav(WidgetRef ref, PlaybackSession? session,
       session.sources,
     ),
     onSelect: (index) =>
-        unawaited(ref.read(manualLineSwitchProvider)(session, index)),
+        unawaited(_switchLineWithDriveCheck(ref, session, context, index)),
+  );
+}
+
+/// 线路需要网盘凭据时先就地登录；可选增强直接放行。
+Future<bool> _ensureDriveReady(
+  WidgetRef ref,
+  BuildContext context,
+  String lineName,
+) async {
+  final hint = driveHintFromFlag(lineName);
+  if (hint == null) return true;
+  if (!context.mounted) return false;
+  return promptDriveLogin(
+    context,
+    repository: ref.read(driveAccountRepositoryProvider),
+    hint: hint,
   );
 }
 
 /// 播放器内手动换线（SET-12 重做）：与自动换线共用 `_autoSwitchToLine`，
 /// 保证位置保持、历史回写、提示口径完全一致。
 Future<void> _manualSwitchToLine(
-    Ref ref, PlaybackSession session, int sourceIndex) async {
+  Ref ref,
+  PlaybackSession session,
+  int sourceIndex,
+) async {
   final current = ref.read(activePlaybackSessionProvider);
   if (current == null) return;
   if (sourceIndex < 0 || sourceIndex >= current.sources.length) return;
@@ -2429,7 +2681,8 @@ LiveSourceNav _buildLiveSourceNav(WidgetRef ref, BuildContext context) {
   final liveRepository = ref.read(liveRepositoryProvider);
   final history = liveRepository.sourceHistory;
   final summary = ref.watch(configSourceSummaryProvider);
-  final entries = ref.watch(configSourcesProvider).valueOrNull ??
+  final entries =
+      ref.watch(configSourcesProvider).valueOrNull ??
       ref.read(settingsRepositoryProvider).configSources;
   final active = history.active;
   // 主配置自带的直播线路（lives）：多于一条时才值得单独列出来切换。
@@ -2460,24 +2713,29 @@ LiveSourceNav _buildLiveSourceNav(WidgetRef ref, BuildContext context) {
     if (entry.location == summary.location || entry.liveCount <= 0) continue;
     final location = _configSourceLiveLocation(entry);
     if (location == null || !listed.add(location)) continue;
-    options.add(LiveSourceOption(
-      location: location,
-      name: entry.displayName,
-      subtitle: _configSourceSubtitle(entry),
-      current: active == location,
-    ));
+    options.add(
+      LiveSourceOption(
+        location: location,
+        name: entry.displayName,
+        subtitle: _configSourceSubtitle(entry),
+        current: active == location,
+      ),
+    );
   }
   for (final entry in history.entries) {
     if (!listed.add(entry.location)) continue;
-    options.add(LiveSourceOption(
-      location: entry.location,
-      name: entry.displayName,
-      subtitle: _liveSourceEntrySubtitle(entry),
-      current: active == entry.location,
-    ));
+    options.add(
+      LiveSourceOption(
+        location: entry.location,
+        name: entry.displayName,
+        subtitle: _liveSourceEntrySubtitle(entry),
+        current: active == entry.location,
+      ),
+    );
   }
   return LiveSourceNav(
-    label: history.activeEntry?.displayName ??
+    label:
+        history.activeEntry?.displayName ??
         (mainLineName == null ? '跟随主配置源' : '主配置 · $mainLineName'),
     options: options,
     onSelect: (option) => _selectLiveSource(ref, option),
@@ -2521,16 +2779,16 @@ Future<void> _selectLiveSource(WidgetRef ref, LiveSourceOption option) async {
       }
       await repository.selectMainLive(option.mainLiveIndex);
       showAppMessage(
-        option.mainLiveIndex == null
-            ? '直播已改用主配置源'
-            : '直播线路已切换：${option.name}',
+        option.mainLiveIndex == null ? '直播已改用主配置源' : '直播线路已切换：${option.name}',
         type: AppMessageType.success,
       );
       return;
     }
     final used = await repository.useSourceEntry(location);
-    showAppMessage('已切换直播源：${used.displayName}（${used.channelCount} 个频道）',
-        type: AppMessageType.success);
+    showAppMessage(
+      '已切换直播源：${used.displayName}（${used.channelCount} 个频道）',
+      type: AppMessageType.success,
+    );
   } catch (error) {
     final text = error is FormatException
         ? error.message
@@ -2574,20 +2832,29 @@ Future<void> _applyLivePlaybackChoice(
   final runtime = ref.read(liveRuntimeProvider);
   final index = _livePlayingIndex(spec, runtime);
   if (spec == null || runtime == null || index < 0) return;
-  final restartUrl =
-      livePlaySpec(runtime.channels[index], lineIndex: spec.qualityIndex).url;
+  final restartUrl = livePlaySpec(
+    runtime.channels[index],
+    lineIndex: spec.qualityIndex,
+  ).url;
   final choices = ref.read(livePlaybackChoicesProvider.notifier);
   choices.state = {...choices.state, spec.url: choice, restartUrl: choice};
   // 选的方式和正在用的一致时不重播，免得画面中断；「自动识别」总是重新识别。
-  final unchanged = (choice == LivePlaybackChoice.live && spec.isLive) ||
+  final unchanged =
+      (choice == LivePlaybackChoice.live && spec.isLive) ||
       (choice == LivePlaybackChoice.vod && !spec.isLive);
   if (unchanged) return;
-  final started = await _startLiveChannel(ref, runtime.channels, index,
-      lineIndex: spec.qualityIndex);
+  final started = await _startLiveChannel(
+    ref,
+    runtime.channels,
+    index,
+    lineIndex: spec.qualityIndex,
+  );
   final now = ref.read(activePlaySpecProvider);
   if (!started || now == null) return;
-  showAppMessage(now.isLive ? '已按直播播放' : '已按点播播放，可以拖动进度',
-      type: AppMessageType.info);
+  showAppMessage(
+    now.isLive ? '已按直播播放' : '已按点播播放，可以拖动进度',
+    type: AppMessageType.info,
+  );
 }
 
 /// 正在播的频道在运行态列表里的位置；不在列表里（推送的直播流等）返回 -1。
@@ -2597,9 +2864,10 @@ int _livePlayingIndex(MediaPlaySpec? spec, LivePlaybackRuntime? runtime) {
   if (committed != null) {
     if (!identical(committed.spec, spec)) return -1;
     final reconciled = reconcileLiveAfterConfigSwitch(
-        catalog: LiveCatalog(channels: runtime.channels),
-        current: committed.channel,
-        previousScopeId: null);
+      catalog: LiveCatalog(channels: runtime.channels),
+      current: committed.channel,
+      previousScopeId: null,
+    );
     return reconciled.found ? reconciled.index : -1;
   }
   final channels = runtime.channels;
@@ -2619,9 +2887,11 @@ bool _liveChannelLinesChanged(Live? previous, Live current) =>
     previous.url != current.url ||
     !mapEquals(previous.headers, current.headers) ||
     previous.lines.length != current.lines.length ||
-    previous.lines.asMap().entries.any((entry) =>
-        entry.value.name != current.lines[entry.key].name ||
-        entry.value.url != current.lines[entry.key].url);
+    previous.lines.asMap().entries.any(
+      (entry) =>
+          entry.value.name != current.lines[entry.key].name ||
+          entry.value.url != current.lines[entry.key].url,
+    );
 
 MediaPlaySpec _withLiveCatalogLines(MediaPlaySpec playing, Live channel) {
   final lines = channel.lines.isEmpty
@@ -2635,14 +2905,17 @@ MediaPlaySpec _withLiveCatalogLines(MediaPlaySpec playing, Live channel) {
   if (selected < 0) {
     // invariant: 保留旧流的真实选中项，新目录线路的索引保持不变。
     selected = qualities.length;
-    qualities.add(PlaybackQuality(
-      name: '当前线路（旧地址）',
-      url: playing.url,
-      headers: playing.headers ?? const {},
-    ));
+    qualities.add(
+      PlaybackQuality(
+        name: '当前线路（旧地址）',
+        url: playing.url,
+        headers: playing.headers ?? const {},
+      ),
+    );
   }
-  final normalized =
-      qualities.length < 2 ? const <PlaybackQuality>[] : qualities;
+  final normalized = qualities.length < 2
+      ? const <PlaybackQuality>[]
+      : qualities;
   if (playing.qualityIndex == selected &&
       playing.qualities.length == normalized.length &&
       normalized.asMap().entries.every((entry) {
@@ -2664,10 +2937,14 @@ MediaPlaySpec _withLiveCatalogLines(MediaPlaySpec playing, Live channel) {
 /// 在途播放只可合入其捕获频道的目录变化，不能把独立来源接入电视目录。
 class _LiveCatalogPlaybackSnapshot {
   factory _LiveCatalogPlaybackSnapshot(
-      MediaPlaySpec? playing, LivePlaybackRuntime? runtime) {
+    MediaPlaySpec? playing,
+    LivePlaybackRuntime? runtime,
+  ) {
     final index = _livePlayingIndex(playing, runtime);
     return _LiveCatalogPlaybackSnapshot.forChannel(
-        playing, index < 0 ? null : runtime!.channels[index]);
+      playing,
+      index < 0 ? null : runtime!.channels[index],
+    );
   }
 
   const _LiveCatalogPlaybackSnapshot.forChannel(this.playing, this.anchor);
@@ -2676,7 +2953,9 @@ class _LiveCatalogPlaybackSnapshot {
   final Live? anchor;
 
   ({MediaPlaySpec spec, LivePlaybackRuntime? runtime}) rebase(
-      MediaPlaySpec target, LivePlaybackRuntime? latest) {
+    MediaPlaySpec target,
+    LivePlaybackRuntime? latest,
+  ) {
     final previous = playing;
     final originalChannel = anchor;
     if (previous == null || originalChannel == null || latest == null) {
@@ -2688,20 +2967,23 @@ class _LiveCatalogPlaybackSnapshot {
       return (spec: target, runtime: latest);
     }
     final reconciled = reconcileLiveAfterConfigSwitch(
-        catalog: LiveCatalog(channels: latest.channels),
-        current: originalChannel,
-        previousScopeId: null);
+      catalog: LiveCatalog(channels: latest.channels),
+      current: originalChannel,
+      previousScopeId: null,
+    );
     if (!reconciled.found) return (spec: target, runtime: latest);
     final currentIndex = reconciled.index;
     final channel = latest.channels[currentIndex];
-    final retainedUrl = channel.url == target.url ||
+    final retainedUrl =
+        channel.url == target.url ||
             channel.lines.any((line) => line.url == target.url)
         ? null
         : target.url;
     final committedSpec = _withLiveCatalogLines(target, channel);
     return (
       spec: committedSpec,
-      runtime: latest.index == currentIndex &&
+      runtime:
+          latest.index == currentIndex &&
               latest.retainedPlaybackUrl == retainedUrl &&
               identical(latest.committedPlayback?.spec, committedSpec) &&
               identical(latest.committedPlayback?.channel, channel)
@@ -2748,7 +3030,9 @@ String? _relativeConfigSourceTime(int milliseconds) {
 bool _isLiveCatalogPlaybackActive(WidgetRef ref) {
   try {
     return _livePlayingIndex(
-            ref.read(activePlaySpecProvider), ref.read(liveRuntimeProvider)) >=
+          ref.read(activePlaySpecProvider),
+          ref.read(liveRuntimeProvider),
+        ) >=
         0;
   } catch (_) {
     // 播放器页面可能已被销毁，WidgetRef 不再可用。
@@ -2797,16 +3081,22 @@ class _LiveSourceWatcherState extends ConsumerState<_LiveSourceWatcher> {
     final sessionEpoch = _playbackSessionEpoch;
     final LiveCatalog catalog;
     try {
-      final sourceUrl =
-          ref.read(configRepositoryProvider).currentWindowConfig.lastConfigUrl;
-      catalog = await ref.read(liveRepositoryProvider).load(
+      final sourceUrl = ref
+          .read(configRepositoryProvider)
+          .currentWindowConfig
+          .lastConfigUrl;
+      catalog = await ref
+          .read(liveRepositoryProvider)
+          .load(
             ref.read(vodConfigProvider).lives,
             baseUri: sourceUrl == null ? null : Uri.tryParse(sourceUrl),
           );
     } catch (error) {
       if (!_stale(generation, sessionEpoch)) {
-        showAppMessage('直播频道加载失败：${liveErrorMessage(error)}',
-            type: AppMessageType.error);
+        showAppMessage(
+          '直播频道加载失败：${liveErrorMessage(error)}',
+          type: AppMessageType.error,
+        );
       }
       return;
     }
@@ -2814,7 +3104,8 @@ class _LiveSourceWatcherState extends ConsumerState<_LiveSourceWatcher> {
     // invariant: 同代际切线可能已提交，目录结果只能合入当前播放的地址。
     final runtime = ref.read(liveRuntimeProvider);
     final playing = ref.read(activePlaySpecProvider);
-    final selectedLineName = playing != null &&
+    final selectedLineName =
+        playing != null &&
             playing.qualityIndex >= 0 &&
             playing.qualityIndex < playing.qualities.length
         ? playing.qualities[playing.qualityIndex].name
@@ -2822,14 +3113,17 @@ class _LiveSourceWatcherState extends ConsumerState<_LiveSourceWatcher> {
     final playingIndex = _livePlayingIndex(playing, runtime);
     final current = playingIndex < 0 ? null : runtime!.channels[playingIndex];
     final reconciled = reconcileLiveAfterConfigSwitch(
-        catalog: catalog, current: current, previousScopeId: null);
+      catalog: catalog,
+      current: current,
+      previousScopeId: null,
+    );
     if (reconciled.found && !reconciled.requiresRestart) {
       final channel = reconciled.channels[reconciled.index];
       // invariant: 重复目录通知不替换播放参数；新菜单参数必须同时更新频道绑定。
       final committedSpec =
           playing != null && _liveChannelLinesChanged(current, channel)
-              ? _withLiveCatalogLines(playing, channel)
-              : playing;
+          ? _withLiveCatalogLines(playing, channel)
+          : playing;
       ref.read(liveRuntimeProvider.notifier).state = LivePlaybackRuntime(
         channels: reconciled.channels,
         index: reconciled.index,
@@ -2849,13 +3143,17 @@ class _LiveSourceWatcherState extends ConsumerState<_LiveSourceWatcher> {
           ? lines.indexWhere((line) => line.name == selectedLineName)
           : -1;
       final started = await _startLiveChannel(
-          ref, reconciled.channels, reconciled.index,
-          isStale: () => !mounted || generation != _generation,
-          keepSettingsOpen: true,
-          lineIndex: selectedLine < 0 ? 0 : selectedLine);
+        ref,
+        reconciled.channels,
+        reconciled.index,
+        isStale: () => !mounted || generation != _generation,
+        keepSettingsOpen: true,
+        lineIndex: selectedLine < 0 ? 0 : selectedLine,
+      );
       if (started && !reconciled.found) {
         showAppMessage(
-            '直播源已更换，正在播放「${reconciled.channels[reconciled.index].name}」');
+          '直播源已更换，正在播放「${reconciled.channels[reconciled.index].name}」',
+        );
       }
       return;
     }
@@ -2910,11 +3208,12 @@ class ConfigDialog extends StatefulWidget {
   /// 本地配置文件选择器（可注入以便测试；缺省弹出系统文件对话框）
   final Future<String?> Function()? pickConfigFile;
 
-  const ConfigDialog(
-      {super.key,
-      required this.repository,
-      this.settingsRepository,
-      this.pickConfigFile});
+  const ConfigDialog({
+    super.key,
+    required this.repository,
+    this.settingsRepository,
+    this.pickConfigFile,
+  });
 
   @override
   State<ConfigDialog> createState() => _ConfigDialogState();
@@ -2940,12 +3239,14 @@ class _ConfigDialogState extends State<ConfigDialog> {
   bool get _busy => _isLoading || _isPickingFile;
 
   List<String> get _categories => List<String>.from(
-      widget.settingsRepository?.configSourceCategories ?? const [])
-    ..sort();
+    widget.settingsRepository?.configSourceCategories ?? const [],
+  )..sort();
 
   /// 下拉里合法的选择值：未分类（空串）+ 目录中的分类名。
-  static Set<String> _categoryItems(List<String> categories) =>
-      {'', ...categories};
+  static Set<String> _categoryItems(List<String> categories) => {
+    '',
+    ...categories,
+  };
 
   /// 直接粘贴配置正文时不会产生历史记录（没有来源地址），名称与分类无处可存。
   bool get _isPastingContent {
@@ -2975,10 +3276,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
 
   /// 多仓选择回调（URL / 粘贴 / 本地文件三条路径共用同一选择弹窗）
   Future<int?> _selectDepot(List<DepotEntry> entries) => showAppDialog<int>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => DepotSelectionDialog(entries: entries),
-      );
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => DepotSelectionDialog(entries: entries),
+  );
 
   Future<void> _load() async {
     if (_busy) return;
@@ -3016,7 +3317,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
       final configPath = p.extension(selectedPath).toLowerCase() == '.zip'
           ? (await CatLocalPackageImporter().import(selectedPath)).configPath
           : selectedPath;
-      await widget.repository.loadFromFile(configPath, selectDepot: _selectDepot);
+      await widget.repository.loadFromFile(
+        configPath,
+        selectDepot: _selectDepot,
+      );
     });
   }
 
@@ -3035,10 +3339,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   /// 需要认证时先弹账号密码框，记住凭据后重试一次：与 Fongmi 壳子一致，
   /// 用户始终只有「填地址 → 加载」这一条路径。
   /// [host] 是本次输入指向的主机（本地文件 / 粘贴内容时为 null）。
-  Future<void> _runLoad(
-    Future<void> Function() task, {
-    String? host,
-  }) async {
+  Future<void> _runLoad(Future<void> Function() task, {String? host}) async {
     if (!mounted || _isLoading) return;
     setState(() {
       _isLoading = true;
@@ -3118,8 +3419,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
     if (host != null &&
         host.isNotEmpty &&
         widget.repository.credentialsForHost(host) != null) {
-      final confirmed =
-          await _promptCredentials(host: host, rejected: false);
+      final confirmed = await _promptCredentials(host: host, rejected: false);
       if (confirmed == null) {
         throw const FormatException('已取消输入账号密码');
       }
@@ -3184,17 +3484,24 @@ class _ConfigDialogState extends State<ConfigDialog> {
     return AlertDialog(
       backgroundColor: context.palette.raised,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.lg)),
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+      ),
       title: Row(
         children: [
-          Icon(Icons.settings_rounded,
-              color: context.palette.accentInk, size: 20),
+          Icon(
+            Icons.settings_rounded,
+            color: context.palette.accentInk,
+            size: 20,
+          ),
           const SizedBox(width: 8),
-          Text('配置源设置',
-              style: TextStyle(
-                  fontSize: AppType.heading,
-                  color: context.palette.textTitle,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            '配置源设置',
+            style: TextStyle(
+              fontSize: AppType.heading,
+              color: context.palette.textTitle,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
       content: SizedBox(
@@ -3206,7 +3513,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
             Text(
               '输入配置地址、粘贴 JSON / Base64，或选择本地配置文件与猫源 ZIP 包：',
               style: TextStyle(
-                  fontSize: AppType.label, color: context.palette.textBody),
+                fontSize: AppType.label,
+                color: context.palette.textBody,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -3217,7 +3526,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
               // 只影响下面「粘贴内容不会入历史」的提示文案。
               onChanged: (_) => setState(() {}),
               style: TextStyle(
-                  fontSize: AppType.label, color: context.palette.textMain),
+                fontSize: AppType.label,
+                color: context.palette.textMain,
+              ),
               decoration: InputDecoration(
                 hintText: 'https://example.com/tv.json 或粘贴配置内容',
                 hintStyle: TextStyle(color: context.palette.textDim),
@@ -3227,8 +3538,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
                   borderRadius: BorderRadius.circular(AppRadii.sm),
                   borderSide: BorderSide(color: context.palette.borderStrong),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -3242,8 +3555,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
                     controller: _nameController,
                     enabled: !_busy,
                     style: TextStyle(
-                        fontSize: AppType.label,
-                        color: context.palette.textMain),
+                      fontSize: AppType.label,
+                      color: context.palette.textMain,
+                    ),
                     decoration: InputDecoration(
                       labelText: '名称（可选）',
                       hintText: '例如：饭太硬',
@@ -3254,11 +3568,14 @@ class _ConfigDialogState extends State<ConfigDialog> {
                       fillColor: context.palette.raised,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadii.sm),
-                        borderSide:
-                            BorderSide(color: context.palette.borderStrong),
+                        borderSide: BorderSide(
+                          color: context.palette.borderStrong,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -3267,16 +3584,18 @@ class _ConfigDialogState extends State<ConfigDialog> {
                   flex: 2,
                   child: DropdownButtonFormField<String>(
                     key: ValueKey(
-                        'config-source-category:$_category:$_categoryRevision'),
+                      'config-source-category:$_category:$_categoryRevision',
+                    ),
                     initialValue:
                         _categoryItems(_categories).contains(_category)
-                            ? _category
-                            : '',
+                        ? _category
+                        : '',
                     isDense: true,
                     dropdownColor: context.palette.raised,
                     style: TextStyle(
-                        fontSize: AppType.label,
-                        color: context.palette.textMain),
+                      fontSize: AppType.label,
+                      color: context.palette.textMain,
+                    ),
                     decoration: InputDecoration(
                       labelText: '分类',
                       labelStyle: TextStyle(color: context.palette.textBody),
@@ -3285,22 +3604,30 @@ class _ConfigDialogState extends State<ConfigDialog> {
                       fillColor: context.palette.raised,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadii.sm),
-                        borderSide:
-                            BorderSide(color: context.palette.borderStrong),
+                        borderSide: BorderSide(
+                          color: context.palette.borderStrong,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('未分类')),
                       for (final name in _categories)
                         DropdownMenuItem(
-                            value: name,
-                            child: Text(name,
-                                maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          value: name,
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       const DropdownMenuItem(
-                          value: _newCategoryValue,
-                          child: Text('＋ 新建分类…')),
+                        value: _newCategoryValue,
+                        child: Text('＋ 新建分类…'),
+                      ),
                     ],
                     onChanged: _busy
                         ? null
@@ -3321,7 +3648,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
               Text(
                 '粘贴的配置内容不会记入配置源历史；名称与分类只在地址或本地文件加载时生效。',
                 style: TextStyle(
-                    fontSize: AppType.body, color: context.palette.textSub),
+                  fontSize: AppType.body,
+                  color: context.palette.textSub,
+                ),
               ),
             ],
             const SizedBox(height: 10),
@@ -3330,15 +3659,20 @@ class _ConfigDialogState extends State<ConfigDialog> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _importFromFile,
                   icon: const Icon(Icons.folder_open_rounded, size: 16),
-                  label: const Text('导入本地文件…',
-                      style: TextStyle(fontSize: AppType.label)),
+                  label: const Text(
+                    '导入本地文件…',
+                    style: TextStyle(fontSize: AppType.label),
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: context.palette.textBody,
                     side: BorderSide(color: context.palette.borderStrong),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadii.sm)),
+                      borderRadius: BorderRadius.circular(AppRadii.sm),
+                    ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -3346,7 +3680,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
                   child: Text(
                     '支持 TVBox 配置、多仓清单、CMS 清单及猫源 ZIP 包',
                     style: TextStyle(
-                        fontSize: AppType.body, color: context.palette.textDim),
+                      fontSize: AppType.body,
+                      color: context.palette.textDim,
+                    ),
                   ),
                 ),
               ],
@@ -3364,9 +3700,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
                 child: Text(
                   _errorMessage!,
                   style: TextStyle(
-                      fontSize: AppType.body,
-                      height: 1.4,
-                      color: context.palette.danger),
+                    fontSize: AppType.body,
+                    height: 1.4,
+                    color: context.palette.danger,
+                  ),
                 ),
               ),
             ],
@@ -3384,7 +3721,8 @@ class _ConfigDialogState extends State<ConfigDialog> {
             // 品牌底上必须显式前景 onPrimary：M3 默认前景是 primary=品牌色，会同色不可见
             foregroundColor: Theme.of(context).colorScheme.onPrimary,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadii.sm)),
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+            ),
           ),
           onPressed: _busy ? null : _load,
           child: _isLoading
@@ -3392,11 +3730,14 @@ class _ConfigDialogState extends State<ConfigDialog> {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.onPrimary),
+                    strokeWidth: 2,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
                 )
-              : const Text('加载配置',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              : const Text(
+                  '加载配置',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
         ),
       ],
     );
@@ -3507,13 +3848,15 @@ class _PartySessionSyncState extends State<_PartySessionSync> {
     final status = widget.engine.status;
     if (status == PlaybackStatus.idle || status == PlaybackStatus.error) return;
     final index = session.index.clamp(0, session.episodes.length - 1);
-    widget.party.publish(PartyState(
-      title: session.item.name,
-      episodeName: session.episodes[index].name,
-      episodeIndex: index,
-      positionMs: widget.engine.position.inMilliseconds,
-      playing: status == PlaybackStatus.playing,
-    ));
+    widget.party.publish(
+      PartyState(
+        title: session.item.name,
+        episodeName: session.episodes[index].name,
+        episodeIndex: index,
+        positionMs: widget.engine.position.inMilliseconds,
+        playing: status == PlaybackStatus.playing,
+      ),
+    );
   }
 
   /// 新集加载完成后补位置：切集时拿到的 `positionMs` 在旧集上是没有意义的。
@@ -3608,7 +3951,8 @@ class _EpisodeAdvanceWatcher extends ConsumerStatefulWidget {
       _EpisodeAdvanceWatcherState();
 }
 
-class _EpisodeAdvanceWatcherState extends ConsumerState<_EpisodeAdvanceWatcher> {
+class _EpisodeAdvanceWatcherState
+    extends ConsumerState<_EpisodeAdvanceWatcher> {
   StreamSubscription<Duration>? _subscription;
   StreamSubscription<PlaybackStatus>? _statusSubscription;
 
@@ -3629,8 +3973,10 @@ class _EpisodeAdvanceWatcherState extends ConsumerState<_EpisodeAdvanceWatcher> 
       _subscription = widget.engine.positionStream.listen(_onPosition);
     } on StateError {
       // 该引擎的位置流是单订阅且已被播放器消费：退回 500ms 轮询（真机引擎为广播流，走上面分支）。
-      _timer = Timer.periodic(const Duration(milliseconds: 500),
-          (_) => _onPosition(widget.engine.position));
+      _timer = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (_) => _onPosition(widget.engine.position),
+      );
     }
   }
 
@@ -3664,7 +4010,8 @@ class _EpisodeAdvanceWatcherState extends ConsumerState<_EpisodeAdvanceWatcher> 
     if (spec == null || spec.isLive) return;
     if (status == PlaybackStatus.playing) {
       _startedSpec = spec;
-    } else if (status == PlaybackStatus.error || status == PlaybackStatus.idle) {
+    } else if (status == PlaybackStatus.error ||
+        status == PlaybackStatus.idle) {
       _startedSpec = null;
     } else if (status == PlaybackStatus.completed &&
         identical(_startedSpec, spec)) {
@@ -3683,8 +4030,9 @@ class _EpisodeAdvanceWatcherState extends ConsumerState<_EpisodeAdvanceWatcher> 
         widget.engine.status == PlaybackStatus.playing) {
       _startedSpec = spec;
     }
-    final preferences =
-        ref.read(settingsRepositoryProvider).playSkipPreferences;
+    final preferences = ref
+        .read(settingsRepositoryProvider)
+        .playSkipPreferences;
     if (!preferences.enabled) return;
     final entry = preferences.entryFor(session.item.id);
     if (entry == null || entry.endingMs <= 0) return;
@@ -3703,7 +4051,10 @@ class _EpisodeAdvanceWatcherState extends ConsumerState<_EpisodeAdvanceWatcher> 
   void _advance(MediaPlaySpec spec, PlaybackSession session) {
     // 解析下一集期间，旧媒体可能继续上报片尾位置或 EOF，即使切集失败也不循环重试。
     if (identical(_triggeredSpec, spec) ||
-        !ref.read(settingsRepositoryProvider).playerSettings.autoPlayNextEpisode) {
+        !ref
+            .read(settingsRepositoryProvider)
+            .playerSettings
+            .autoPlayNextEpisode) {
       return;
     }
     _triggeredSpec = spec;
@@ -3721,7 +4072,9 @@ Future<void> _handleScaleChanged(WidgetRef ref, String scale) async {
 
 /// 重置播放器数据：当前影片片头 / 片尾 + 播放器设置（含画面比例）+ 即时应用。
 Future<void> _handleResetPlayerData(
-    WidgetRef ref, MpvPlayerEngine engine) async {
+  WidgetRef ref,
+  MpvPlayerEngine engine,
+) async {
   final session = ref.read(activePlaybackSessionProvider);
   await resetPlayerData(
     settings: ref.read(settingsRepositoryProvider),
@@ -3766,13 +4119,15 @@ class _SegmentsSessionSyncState extends State<_SegmentsSessionSync> {
       return;
     }
     final index = session.index.clamp(0, session.episodes.length - 1);
-    unawaited(widget.controller.load(
-      title: session.item.name,
-      episodeName: session.episodes[index].name,
-      episodeCount: session.episodes.length,
-      // 集名认不出集号时按选集位置兜底（「正片」「彩蛋」这类）
-      episodeIndex: index,
-    ));
+    unawaited(
+      widget.controller.load(
+        title: session.item.name,
+        episodeName: session.episodes[index].name,
+        episodeCount: session.episodes.length,
+        // 集名认不出集号时按选集位置兜底（「正片」「彩蛋」这类）
+        episodeIndex: index,
+      ),
+    );
   }
 
   @override
@@ -3823,14 +4178,16 @@ class _DanmakuSessionSyncState extends State<_DanmakuSessionSync> {
     final index = session.index.clamp(0, session.episodes.length - 1);
     // 集号 / 总集数参与本地校验（多集认不出集号不匹配、单集按电影匹配），
     // 站点 + 影片 id 区分播放会话：同名不同片不复用上一部的弹幕
-    unawaited(widget.controller.load(
-      name: session.item.name,
-      episode: session.episodes[index].name,
-      episodeIndex: index,
-      episodeCount: session.episodes.length,
-      yearHint: session.item.year,
-      scope: '${session.site?.key ?? ''}|${session.item.id}',
-    ));
+    unawaited(
+      widget.controller.load(
+        name: session.item.name,
+        episode: session.episodes[index].name,
+        episodeIndex: index,
+        episodeCount: session.episodes.length,
+        yearHint: session.item.year,
+        scope: '${session.site?.key ?? ''}|${session.item.id}',
+      ),
+    );
   }
 
   @override
@@ -3842,16 +4199,18 @@ class _DanmakuSessionSyncState extends State<_DanmakuSessionSync> {
 class _PlayerPrefsBinding extends StatefulWidget {
   final SettingsRepository repository;
   final Widget Function(
-      BuildContext context,
-      String scale,
-      bool hideWindowTitleBar,
-      bool danmakuEnabled,
-      DanmakuSettings danmakuSettings,
-      bool showMiniProgress,
-      bool showResolution,
-      double holdRate,
-      bool autoHideCursor,
-      PlayerShortcutBindings shortcuts) builder;
+    BuildContext context,
+    String scale,
+    bool hideWindowTitleBar,
+    bool danmakuEnabled,
+    DanmakuSettings danmakuSettings,
+    bool showMiniProgress,
+    bool showResolution,
+    double holdRate,
+    bool autoHideCursor,
+    PlayerShortcutBindings shortcuts,
+  )
+  builder;
 
   const _PlayerPrefsBinding({required this.repository, required this.builder});
 
@@ -3871,16 +4230,17 @@ class _PlayerPrefsBindingState extends State<_PlayerPrefsBinding> {
       builder: (context, snapshot) {
         final settings = snapshot.data ?? PlayerSettings.defaults;
         return widget.builder(
-            context,
-            settings.scale,
-            settings.hideWindowTitleBar,
-            settings.danmakuEnabled,
-            settings.danmaku,
-            settings.showMiniProgress,
-            settings.showResolution,
-            settings.holdRate,
-            settings.autoHideCursor,
-            settings.shortcuts);
+          context,
+          settings.scale,
+          settings.hideWindowTitleBar,
+          settings.danmakuEnabled,
+          settings.danmaku,
+          settings.showMiniProgress,
+          settings.showResolution,
+          settings.holdRate,
+          settings.autoHideCursor,
+          settings.shortcuts,
+        );
       },
     );
   }
@@ -3935,7 +4295,8 @@ class AboutUpdateSectionHost extends ConsumerWidget {
         unawaited(showUpdateDialog(context));
       },
       onAutoCheckChanged: (value) => unawaited(
-          ref.read(updatePreferencesProvider.notifier).setAutoCheck(value)),
+        ref.read(updatePreferencesProvider.notifier).setAutoCheck(value),
+      ),
       onOpenResult: () => unawaited(showUpdateDialog(context)),
       onMirrorSettings: state.busy
           ? null
@@ -3963,8 +4324,11 @@ class AboutUpdateSectionHost extends ConsumerWidget {
 Future<void> _resetAllSettingsAndRestart(WidgetRef ref) async {
   await AppDataReset.schedule();
   try {
-    await Process.start(Platform.resolvedExecutable, const [],
-        mode: ProcessStartMode.detached);
+    await Process.start(
+      Platform.resolvedExecutable,
+      const [],
+      mode: ProcessStartMode.detached,
+    );
   } catch (_) {
     showAppMessage('已重置，请手动重新打开应用', type: AppMessageType.success);
     return;
@@ -4054,9 +4418,12 @@ class PrewarmBanner extends ConsumerWidget {
       valueListenable: api.prewarm,
       builder: (context, status, _) => _PrewarmBannerBody(
         status: status,
-        onRetry: () => unawaited(api.prewarmCompanionJars(
+        onRetry: () => unawaited(
+          api.prewarmCompanionJars(
             ref.read(configRepositoryProvider).currentVodConfig.sites,
-            force: true)),
+            force: true,
+          ),
+        ),
       ),
     );
   }
@@ -4137,16 +4504,16 @@ class _PrewarmBannerBodyState extends State<_PrewarmBannerBody> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              Icon(Icons.wifi_off_rounded,
-                  size: 16, color: theme.colorScheme.error),
+              Icon(
+                Icons.wifi_off_rounded,
+                size: 16,
+                color: theme.colorScheme.error,
+              ),
             const SizedBox(width: 10),
             Text(status.message, style: theme.textTheme.bodyMedium),
             if (status.failed) ...[
               const SizedBox(width: 4),
-              TextButton(
-                onPressed: widget.onRetry,
-                child: const Text('重试'),
-              ),
+              TextButton(onPressed: widget.onRetry, child: const Text('重试')),
             ],
           ],
         ),
@@ -4155,8 +4522,9 @@ class _PrewarmBannerBodyState extends State<_PrewarmBannerBody> {
   }
 }
 
-final homeSiteIconProvider =
-    StateProvider<({String identity, String? icon})?>((ref) => null);
+final homeSiteIconProvider = StateProvider<({String identity, String? icon})?>(
+  (ref) => null,
+);
 
 Object? _browserPlaybackIdentity(PlaybackSession? session) {
   if (session == null) return null;
@@ -4216,7 +4584,8 @@ class BrowserVerificationHost extends ConsumerWidget {
           child: Center(
             child: BrowserVerificationBanner(
               key: ValueKey(
-                  'browser-verification:${request.site.key}:${request.id}'),
+                'browser-verification:${request.site.key}:${request.id}',
+              ),
               request: request,
               command: (operation) => controller.command(request, operation),
               onCancel: () => controller.cancel(request),
@@ -4237,7 +4606,8 @@ class BrowserVerificationHost extends ConsumerWidget {
                     request.method == 'playerContent' &&
                     _browserPlaybackIdentity(session) ==
                         _browserPlaybackIdentity(
-                            ref.read(activePlaybackSessionProvider)) &&
+                          ref.read(activePlaybackSessionProvider),
+                        ) &&
                     session?.site?.key == request.site.key &&
                     ref.read(activePlaySpecProvider) != null) {
                   await _refreshPlayback(ref);
@@ -4266,9 +4636,10 @@ class YingshiTvApp extends ConsumerWidget {
     final iconIdentity = currentSite == null
         ? null
         : '${iconRepository.currentConfigIdentity}:'
-            '${HomeSitePreference.requestIdentity(currentSite)}';
+              '${HomeSitePreference.requestIdentity(currentSite)}';
     final returnedIcon = ref.watch(homeSiteIconProvider);
-    final activeSiteIcon = currentSite?.iconUrl ??
+    final activeSiteIcon =
+        currentSite?.iconUrl ??
         (returnedIcon?.identity == iconIdentity ? returnedIcon?.icon : null);
     final playbackConfig = ref.watch(vodConfigProvider);
     final activePlaySpec = ref.watch(activePlaySpecProvider);
@@ -4287,26 +4658,30 @@ class YingshiTvApp extends ConsumerWidget {
     // 弹幕、片段两个入口只属于点播剧集，直播页（含按点播播放）一律不挂。
     final livePage = _isLivePage(activePlaySpec, liveRuntime);
     final livePlayingIndex = _livePlayingIndex(activePlaySpec, liveRuntime);
-    final liveChannels =
-        livePlayingIndex >= 0 ? liveRuntime!.channels : const <Live>[];
+    final liveChannels = livePlayingIndex >= 0
+        ? liveRuntime!.channels
+        : const <Live>[];
     // §34：抽屉「收藏频道」置顶分类用的收藏键（与频道弹窗同一份数据）。
-    final liveFavoriteKeys =
-        ref.watch(liveFavoritesProvider).map((e) => e.key).toSet();
+    final liveFavoriteKeys = ref
+        .watch(liveFavoritesProvider)
+        .map((e) => e.key)
+        .toSet();
     final playerEngine = ref.watch(playerEngineProvider);
     final showSettings = ref.watch(settingsPageOpenProvider);
-    final showPlayer = activePlaySpec != null || liveEntryLoading ||
-        prepareIntent != null;
+    final showPlayer =
+        activePlaySpec != null || liveEntryLoading || prepareIntent != null;
     final sourceChange = ref.watch(playbackSourceChangeProvider);
     final refreshBusy =
         ref.watch(playerRefreshBusyProvider) || sourceChange != null;
     final autoSwitchBusy = ref.watch(playerAutoSwitchBusyProvider);
-    final sourceSearchReady = (activeSession?.site != null ||
+    final sourceSearchReady =
+        (activeSession?.site != null ||
             (prepareIntent?.isFailed == true &&
                 ref.watch(pendingPlayProvider) != null)) &&
         !livePage;
     final playSkipPreferences =
         ref.watch(playSkipPreferencesProvider).valueOrNull ??
-            ref.read(settingsRepositoryProvider).playSkipPreferences;
+        ref.read(settingsRepositoryProvider).playSkipPreferences;
     final isRealMpvEngine = playerEngine.runtimeType == MpvPlayerEngine;
     // 在线字幕只对点播剧集有意义：直播 / 直链没有剧名与集号，
     // 传 null 后字幕菜单里就不会出现「搜索在线字幕」。
@@ -4315,8 +4690,8 @@ class YingshiTvApp extends ConsumerWidget {
         : () {
             final session = ref.read(activePlaybackSessionProvider);
             if (session == null) return const SubtitleQuery(title: '');
-            final episodeName = session.index >= 0 &&
-                    session.index < session.episodes.length
+            final episodeName =
+                session.index >= 0 && session.index < session.episodes.length
                 ? session.episodes[session.index].name
                 : '';
             final parsed = int.tryParse(extractEp(episodeName));
@@ -4324,14 +4699,17 @@ class YingshiTvApp extends ConsumerWidget {
               title: session.item.name,
               year: int.tryParse(session.item.year ?? ''),
               // 单集（电影）没有集号时留空，剧集则退回「第几集」的序号
-              episode: parsed ??
+              episode:
+                  parsed ??
                   (session.episodes.length > 1 ? session.index + 1 : null),
               rawName: episodeName,
             );
           };
     final trackNavs = isRealMpvEngine
-        ? buildPlayerTrackNavs(playerEngine,
-            readOnlineQuery: onlineSubtitleQuery)
+        ? buildPlayerTrackNavs(
+            playerEngine,
+            readOnlineQuery: onlineSubtitleQuery,
+          )
         : null;
 
     // 主题色只换品牌色相，中性色与组件尺寸不变；
@@ -4385,13 +4763,14 @@ class YingshiTvApp extends ConsumerWidget {
               builder: (ctx) {
                 final searchBridge = ref.watch(homeSearchBridgeProvider);
                 // 侧栏开关在窗口标题栏：状态与主界面共用同一外观偏好。
-                final appearance = ref
-                        .watch(appearancePreferencesProvider)
-                        .valueOrNull ??
+                final appearance =
+                    ref.watch(appearancePreferencesProvider).valueOrNull ??
                     ref.read(settingsRepositoryProvider).appearancePreferences;
                 return DesktopWindowFrame(
                   windowManager: windowMgr,
-                  onDetailBack: showSettings || showPlayer ? null : searchBridge.onDetailBack,
+                  onDetailBack: showSettings || showPlayer
+                      ? null
+                      : searchBridge.onDetailBack,
                   activeSiteName: activeSiteName,
                   activeSiteIcon: activeSiteIcon,
                   activeSiteHeaders: currentSite?.header,
@@ -4399,20 +4778,24 @@ class YingshiTvApp extends ConsumerWidget {
                   onSiteSelectorPressed: () =>
                       showSiteSelectorDialog(innerContext, ref),
                   searchBar: const HomeSearchBarHost(),
-                  onRefresh:
-                      searchBridge.visible ? searchBridge.onRefresh : null,
+                  onRefresh: searchBridge.visible
+                      ? searchBridge.onRefresh
+                      : null,
                   refreshBusy: searchBridge.refreshBusy,
                   sidebarCollapsed: appearance.sidebarCollapsed,
                   onSidebarToggle: () async {
                     final settings = ref.read(settingsRepositoryProvider);
                     try {
-                      await settings.updateAppearancePreferences(settings
-                          .appearancePreferences
-                          .withSidebarCollapsed(!settings
-                              .appearancePreferences.sidebarCollapsed));
+                      await settings.updateAppearancePreferences(
+                        settings.appearancePreferences.withSidebarCollapsed(
+                          !settings.appearancePreferences.sidebarCollapsed,
+                        ),
+                      );
                     } catch (_) {
-                      showAppMessage('侧栏状态保存失败，请在设置中重试保存',
-                          type: AppMessageType.error);
+                      showAppMessage(
+                        '侧栏状态保存失败，请在设置中重试保存',
+                        type: AppMessageType.error,
+                      );
                     }
                   },
                   child: DesktopShell(
@@ -4420,35 +4803,47 @@ class YingshiTvApp extends ConsumerWidget {
                     showSettings: showSettings,
                     settingsView: showSettings
                         ? SettingsPage(
-                            initialSection:
-                                ref.watch(settingsInitialSectionProvider),
-                            companionSpiderApi:
-                                ref.read(siteApiProvider).companionSpiderApi,
+                            initialSection: ref.watch(
+                              settingsInitialSectionProvider,
+                            ),
+                            companionSpiderApi: ref
+                                .read(siteApiProvider)
+                                .companionSpiderApi,
                             liveRepository: ref.read(liveRepositoryProvider),
                             playerSettingsApplication:
                                 playerEngine.settingsApplication,
                             playerEngine: playerEngine,
-                            configRepository:
-                                ref.read(configRepositoryProvider),
-                            settingsRepository:
-                                ref.read(settingsRepositoryProvider),
-                            cacheMaintenance:
-                                ref.read(cacheMaintenanceProvider),
+                            configRepository: ref.read(
+                              configRepositoryProvider,
+                            ),
+                            settingsRepository: ref.read(
+                              settingsRepositoryProvider,
+                            ),
+                            cacheMaintenance: ref.read(
+                              cacheMaintenanceProvider,
+                            ),
                             epgRepository: ref.read(epgRepositoryProvider),
-                            dataBackupService:
-                                ref.read(dataBackupServiceProvider),
+                            dataBackupService: ref.read(
+                              dataBackupServiceProvider,
+                            ),
                             wallpaperStore: ref.read(wallpaperStoreProvider),
-                            driveAccounts:
-                                ref.read(driveAccountRepositoryProvider),
+                            driveAccounts: ref.read(
+                              driveAccountRepositoryProvider,
+                            ),
                             onPlayMedia: (spec) async {
                               ref
-                                  .read(settingsPageOpenProvider.notifier)
-                                  .state = false;
+                                      .read(settingsPageOpenProvider.notifier)
+                                      .state =
+                                  false;
                               await _launchPlayback(ref, spec);
                             },
-                            onWebDavPlaybackOrigin: (origin) => ref
-                                .read(webDavBrowseOriginProvider.notifier)
-                                .state = origin,
+                            onWebDavPlaybackOrigin: (origin) =>
+                                ref
+                                        .read(
+                                          webDavBrowseOriginProvider.notifier,
+                                        )
+                                        .state =
+                                    origin,
                             isPlaybackActive: () =>
                                 ref.read(activePlaySpecProvider) != null,
                             updateSection: (buildInfo) =>
@@ -4456,8 +4851,9 @@ class YingshiTvApp extends ConsumerWidget {
                             onResetAll: () => _resetAllSettingsAndRestart(ref),
                             onClose: () {
                               ref
-                                  .read(settingsPageOpenProvider.notifier)
-                                  .state = false;
+                                      .read(settingsPageOpenProvider.notifier)
+                                      .state =
+                                  false;
                               ref
                                   .read(autoLineSwitchProvider)
                                   .resumePendingAttempt();
@@ -4465,10 +4861,11 @@ class YingshiTvApp extends ConsumerWidget {
                             onAddConfig: (pageContext) => showAppDialog<void>(
                               context: pageContext,
                               builder: (_) => ConfigDialog(
-                                  repository:
-                                      ref.read(configRepositoryProvider),
-                                  settingsRepository:
-                                      ref.read(settingsRepositoryProvider)),
+                                repository: ref.read(configRepositoryProvider),
+                                settingsRepository: ref.read(
+                                  settingsRepositoryProvider,
+                                ),
+                              ),
                             ),
                           )
                         : null,
@@ -4476,7 +4873,8 @@ class YingshiTvApp extends ConsumerWidget {
                       store: ref.read(wallpaperStoreProvider),
                       child: const DesktopMainView(),
                     ),
-                    playerView: activePlaySpec == null &&
+                    playerView:
+                        activePlaySpec == null &&
                             !liveEntryLoading &&
                             prepareIntent == null
                         ? null
@@ -4489,202 +4887,253 @@ class YingshiTvApp extends ConsumerWidget {
                                 engine: playerEngine,
                                 party: ref.read(watchPartyProvider),
                                 onOpenEpisode: (index) => unawaited(
-                                    _handleEpisodeSwitch(context, ref, index)),
-                                onNotice: (message) =>
-                                    showAppMessage(message),
+                                  _handleEpisodeSwitch(context, ref, index),
+                                ),
+                                onNotice: (message) => showAppMessage(message),
                                 child: const SizedBox.shrink(),
                               ),
                               _LineSwitchNoticeHost(
                                 child: _EpisodeAdvanceWatcher(
                                   engine: playerEngine,
                                   child: _PlayerPrefsBinding(
-                                    repository:
-                                        ref.read(settingsRepositoryProvider),
-                                    builder: (playerContext,
-                                            scale,
-                                            hideWindowTitleBar,
-                                            danmakuDefault,
-                                            danmakuSettings,
-                                            showMiniProgress,
-                                            showResolution,
-                                            holdRate,
-                                            autoHideCursor,
-                                            shortcuts) =>
-                                        _SegmentsSessionSync(
-                                      session:
-                                          !segmentsServiceConfigured || livePage
+                                    repository: ref.read(
+                                      settingsRepositoryProvider,
+                                    ),
+                                    builder:
+                                        (
+                                          playerContext,
+                                          scale,
+                                          hideWindowTitleBar,
+                                          danmakuDefault,
+                                          danmakuSettings,
+                                          showMiniProgress,
+                                          showResolution,
+                                          holdRate,
+                                          autoHideCursor,
+                                          shortcuts,
+                                        ) => _SegmentsSessionSync(
+                                          session:
+                                              !segmentsServiceConfigured ||
+                                                  livePage
                                               ? null
                                               : activeSession,
-                                      controller: segmentsController,
-                                      child: _DanmakuSessionSync(
-                                        session:
-                                            livePage ? null : activeSession,
-                                        // §43 弹幕可选：本次构建未配置弹幕服务时不加载、不挂入口
-                                        enabled: danmakuServiceConfigured &&
-                                            !livePage &&
-                                            (danmakuOverride ?? danmakuDefault),
-                                        controller: danmakuController,
-                                        child: LiveDanmakuBinding(
-                                          client: ref
-                                              .watch(liveDanmakuClientProvider),
-                                          sourceUrl: activePlaySpec != null &&
-                                                  activePlaySpec
-                                                      .liveDanmakuSources
-                                                      .isNotEmpty
-                                              ? activePlaySpec
-                                                  .liveDanmakuSources.first.url
-                                              : null,
-                                          contextKey: (
-                                            playbackConfig,
-                                            currentSite?.key
-                                          ),
-                                          enabled:
-                                              danmakuOverride ?? danmakuDefault,
-                                          settings: danmakuSettings,
-                                          preparing: prepareIntent != null ||
-                                              liveEntryLoading,
-                                          onToggle: () => ref
-                                                  .read(
-                                                      danmakuSessionOverrideProvider
-                                                          .notifier)
-                                                  .state =
-                                              !(danmakuOverride ??
-                                                  danmakuDefault),
-                                          onSettingsChanged: (next) {
-                                            final repo = ref.read(
-                                                settingsRepositoryProvider);
-                                            unawaited(repo.updatePlayerSettings(
-                                                repo.playerSettings
-                                                    .copyWith(danmaku: next)));
-                                          },
-                                          builder: (_, liveDanmakuNav) =>
-                                              DesktopVideoPlayer(
-                                            // 直播没有稳定进度、推送直链没有集顺序：
-                                            // 两者都不提供「一起看」入口。
-                                            partyNav: livePage ||
-                                                    activeSession == null
+                                          controller: segmentsController,
+                                          child: _DanmakuSessionSync(
+                                            session: livePage
                                                 ? null
-                                                : PlayerPartyNav(
-                                                    isActive: () => ref
-                                                        .read(watchPartyProvider)
-                                                        .active,
-                                                    isHosting: () => ref
-                                                        .read(watchPartyProvider)
-                                                        .hosting,
-                                                    statusText: () {
-                                                      final party = ref.read(
-                                                          watchPartyProvider);
-                                                      if (party.hosting) {
-                                                        return '房主 · ${party.roomCode}';
-                                                      }
-                                                      if (party.joined) {
-                                                        return '跟随 ${party.hostName}';
-                                                      }
-                                                      return '';
-                                                    },
-                                                    listenable: ref.read(
-                                                        watchPartyProvider),
-                                                    onOpen: () => unawaited(
-                                                        showPartyDialog(
+                                                : activeSession,
+                                            // §43 弹幕可选：本次构建未配置弹幕服务时不加载、不挂入口
+                                            enabled:
+                                                danmakuServiceConfigured &&
+                                                !livePage &&
+                                                (danmakuOverride ??
+                                                    danmakuDefault),
+                                            controller: danmakuController,
+                                            child: LiveDanmakuBinding(
+                                              client: ref.watch(
+                                                liveDanmakuClientProvider,
+                                              ),
+                                              sourceUrl:
+                                                  activePlaySpec != null &&
+                                                      activePlaySpec
+                                                          .liveDanmakuSources
+                                                          .isNotEmpty
+                                                  ? activePlaySpec
+                                                        .liveDanmakuSources
+                                                        .first
+                                                        .url
+                                                  : null,
+                                              contextKey: (
+                                                playbackConfig,
+                                                currentSite?.key,
+                                              ),
+                                              enabled:
+                                                  danmakuOverride ??
+                                                  danmakuDefault,
+                                              settings: danmakuSettings,
+                                              preparing:
+                                                  prepareIntent != null ||
+                                                  liveEntryLoading,
+                                              onToggle: () =>
+                                                  ref
+                                                          .read(
+                                                            danmakuSessionOverrideProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      !(danmakuOverride ??
+                                                          danmakuDefault),
+                                              onSettingsChanged: (next) {
+                                                final repo = ref.read(
+                                                  settingsRepositoryProvider,
+                                                );
+                                                unawaited(
+                                                  repo.updatePlayerSettings(
+                                                    repo.playerSettings
+                                                        .copyWith(
+                                                          danmaku: next,
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                              builder: (_, liveDanmakuNav) => DesktopVideoPlayer(
+                                                // 直播没有稳定进度、推送直链没有集顺序：
+                                                // 两者都不提供「一起看」入口。
+                                                partyNav:
+                                                    livePage ||
+                                                        activeSession == null
+                                                    ? null
+                                                    : PlayerPartyNav(
+                                                        isActive: () => ref
+                                                            .read(
+                                                              watchPartyProvider,
+                                                            )
+                                                            .active,
+                                                        isHosting: () => ref
+                                                            .read(
+                                                              watchPartyProvider,
+                                                            )
+                                                            .hosting,
+                                                        statusText: () {
+                                                          final party = ref.read(
+                                                            watchPartyProvider,
+                                                          );
+                                                          if (party.hosting) {
+                                                            return '房主 · ${party.roomCode}';
+                                                          }
+                                                          if (party.joined) {
+                                                            return '跟随 ${party.hostName}';
+                                                          }
+                                                          return '';
+                                                        },
+                                                        listenable: ref.read(
+                                                          watchPartyProvider,
+                                                        ),
+                                                        onOpen: () => unawaited(
+                                                          showPartyDialog(
                                                             playerContext,
                                                             ref.read(
-                                                                watchPartyProvider))),
-                                                  ),
-                                            onHoldBaseRateChanged: (rate) =>
-                                                _holdBaseRate = rate,
-                                            liveDanmakuNav: liveDanmakuNav,
-                                            shortcuts: shortcuts,
-                                            seekRecovery: isRealMpvEngine
-                                                ? playerEngine
-                                                : null,
-                                            qualityNav: activePlaySpec ==
-                                                        null ||
-                                                    (!livePage &&
-                                                        activeSession ==
-                                                            null) ||
-                                                    activePlaySpec
-                                                            .qualities.length <
-                                                        2
-                                                ? null
-                                                : PlayerQualityNav(
-                                                    names: activePlaySpec
-                                                        .qualities
-                                                        .map((q) => q.name)
-                                                        .toList(),
-                                                    selectedIndex:
+                                                              watchPartyProvider,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                onHoldBaseRateChanged: (rate) =>
+                                                    _holdBaseRate = rate,
+                                                liveDanmakuNav: liveDanmakuNav,
+                                                shortcuts: shortcuts,
+                                                seekRecovery: isRealMpvEngine
+                                                    ? playerEngine
+                                                    : null,
+                                                qualityNav:
+                                                    activePlaySpec == null ||
+                                                        (!livePage &&
+                                                            activeSession ==
+                                                                null) ||
                                                         activePlaySpec
-                                                            .qualityIndex,
-                                                    label:
-                                                        livePage ? '线路' : '清晰度',
-                                                    busy: refreshBusy ||
-                                                        autoSwitchBusy ||
-                                                        (activeSession
-                                                                ?.switching ??
-                                                            false),
-                                                    onSelect: (index) =>
-                                                        unawaited(livePage
-                                                            ? ref.read(
-                                                                    switchLiveLineProvider)(
-                                                                index)
-                                                            : ref.read(
-                                                                    switchPlaybackQualityProvider)(
-                                                                index)),
-                                                  ),
-                                            externalNav: activePlaySpec ==
-                                                        null ||
-                                                    prepareIntent != null
-                                                ? null
-                                                : PlayerExternalNav(
-                                                    busy: sourceChange?.kind ==
-                                                        PlaybackSourceChangeKind
-                                                            .external,
-                                                    enabled: !refreshBusy &&
-                                                        !autoSwitchBusy &&
-                                                        !(activeSession
-                                                                ?.switching ??
-                                                            false),
-                                                    statusText: sourceChange
+                                                                .qualities
+                                                                .length <
+                                                            2
+                                                    ? null
+                                                    : PlayerQualityNav(
+                                                        names: activePlaySpec
+                                                            .qualities
+                                                            .map((q) => q.name)
+                                                            .toList(),
+                                                        selectedIndex:
+                                                            activePlaySpec
+                                                                .qualityIndex,
+                                                        label: livePage
+                                                            ? '线路'
+                                                            : '清晰度',
+                                                        busy:
+                                                            refreshBusy ||
+                                                            autoSwitchBusy ||
+                                                            (activeSession
+                                                                    ?.switching ??
+                                                                false),
+                                                        onSelect: (index) => unawaited(
+                                                          livePage
+                                                              ? ref.read(
+                                                                  switchLiveLineProvider,
+                                                                )(index)
+                                                              : ref.read(
+                                                                  switchPlaybackQualityProvider,
+                                                                )(index),
+                                                        ),
+                                                      ),
+                                                externalNav:
+                                                    activePlaySpec == null ||
+                                                        prepareIntent != null
+                                                    ? null
+                                                    : PlayerExternalNav(
+                                                        busy:
+                                                            sourceChange
                                                                 ?.kind ==
                                                             PlaybackSourceChangeKind
-                                                                .external
-                                                        ? sourceChange
-                                                            ?.statusText
-                                                        : null,
-                                                    onLaunch: () => unawaited(ref
-                                                            .read(
-                                                                launchExternalPlaybackProvider)(
-                                                        (warnings) =>
-                                                            _confirmExternalPlayback(
-                                                                playerContext,
-                                                                ref,
-                                                                warnings))),
-                                                  ),
-                                            sourceSwitchNav: sourceSearchReady
-                                                ? PlayerSourceSwitchNav(
-                                                    busy: sourceChange?.kind ==
-                                                        PlaybackSourceChangeKind
-                                                            .source,
-                                                    enabled: !refreshBusy &&
-                                                        !autoSwitchBusy &&
-                                                        !(activeSession
-                                                                ?.switching ??
-                                                            false),
-                                                    statusText: sourceChange
-                                                        ?.statusText,
-                                                    onSearch: () => unawaited(ref
-                                                            .read(
-                                                                switchPlaybackSourceProvider)(
-                                                        (candidates) =>
-                                                            _choosePlaybackSource(
-                                                                playerContext,
-                                                                ref,
-                                                                candidates))),
-                                                    onCancel: sourceChange
-                                                        ?.cancelToken.cancel,
-                                                  )
-                                                : null,
-                                            danmakuNav:
-                                                !danmakuServiceConfigured ||
+                                                                .external,
+                                                        enabled:
+                                                            !refreshBusy &&
+                                                            !autoSwitchBusy &&
+                                                            !(activeSession
+                                                                    ?.switching ??
+                                                                false),
+                                                        statusText:
+                                                            sourceChange
+                                                                    ?.kind ==
+                                                                PlaybackSourceChangeKind
+                                                                    .external
+                                                            ? sourceChange
+                                                                  ?.statusText
+                                                            : null,
+                                                        onLaunch: () => unawaited(
+                                                          ref.read(
+                                                            launchExternalPlaybackProvider,
+                                                          )(
+                                                            (warnings) =>
+                                                                _confirmExternalPlayback(
+                                                                  playerContext,
+                                                                  ref,
+                                                                  warnings,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                sourceSwitchNav:
+                                                    sourceSearchReady
+                                                    ? PlayerSourceSwitchNav(
+                                                        busy:
+                                                            sourceChange
+                                                                ?.kind ==
+                                                            PlaybackSourceChangeKind
+                                                                .source,
+                                                        enabled:
+                                                            !refreshBusy &&
+                                                            !autoSwitchBusy &&
+                                                            !(activeSession
+                                                                    ?.switching ??
+                                                                false),
+                                                        statusText: sourceChange
+                                                            ?.statusText,
+                                                        onSearch: () => unawaited(
+                                                          ref.read(
+                                                            switchPlaybackSourceProvider,
+                                                          )(
+                                                            (candidates) =>
+                                                                _choosePlaybackSource(
+                                                                  playerContext,
+                                                                  ref,
+                                                                  candidates,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        onCancel: sourceChange
+                                                            ?.cancelToken
+                                                            .cancel,
+                                                      )
+                                                    : null,
+                                                danmakuNav:
+                                                    !danmakuServiceConfigured ||
                                                         activeSession == null ||
                                                         livePage
                                                     ? null
@@ -4697,116 +5146,206 @@ class YingshiTvApp extends ConsumerWidget {
                                                         settings:
                                                             danmakuSettings,
                                                         // §43 播放页「弹幕设置」抽屉：与设置中心同一份设置，改动落盘
-                                                        onSettingsChanged:
-                                                            (next) {
+                                                        onSettingsChanged: (next) {
                                                           final repo = ref.read(
-                                                              settingsRepositoryProvider);
-                                                          unawaited(repo
-                                                              .updatePlayerSettings(repo
-                                                                  .playerSettings
+                                                            settingsRepositoryProvider,
+                                                          );
+                                                          unawaited(
+                                                            repo.updatePlayerSettings(
+                                                              repo.playerSettings
                                                                   .copyWith(
-                                                                      danmaku:
-                                                                          next)));
+                                                                    danmaku:
+                                                                        next,
+                                                                  ),
+                                                            ),
+                                                          );
                                                         },
                                                         enabled:
                                                             danmakuOverride ??
-                                                                danmakuDefault,
-                                                        onToggle: () => ref
-                                                                .read(danmakuSessionOverrideProvider
-                                                                    .notifier)
-                                                                .state =
-                                                            !(danmakuOverride ??
-                                                                danmakuDefault),
+                                                            danmakuDefault,
+                                                        onToggle: () =>
+                                                            ref
+                                                                    .read(
+                                                                      danmakuSessionOverrideProvider
+                                                                          .notifier,
+                                                                    )
+                                                                    .state =
+                                                                !(danmakuOverride ??
+                                                                    danmakuDefault),
                                                       ),
-                                            playerEngine: playerEngine,
-                                            embeddedPlayback: isRealMpvEngine && Platform.isWindows
-                                                ? playerEngine.embeddedSession
-                                                : null,
-                                            windowManager: windowMgr,
-                                            scale: scale,
-                                            hideWindowTitleBar:
-                                                hideWindowTitleBar,
-                                            showMiniProgress: showMiniProgress,
-                                            showResolution: showResolution,
-                                            holdRate: holdRate,
-                                            autoHideCursor: autoHideCursor,
-                                            playerInfoLabel: 'MPV 播放器',
-                                            episodeNav: _buildEpisodeNav(
-                                                ref,
-                                                livePage ? null : activeSession,
-                                                playerContext,
-                                                refreshBusy: refreshBusy ||
-                                                    autoSwitchBusy),
-                                            episodeListNav:
-                                                _buildEpisodeListNav(
-                                                    ref,
-                                                    livePage
-                                                        ? null
-                                                        : activeSession,
-                                                    playerContext,
-                                                    busy: refreshBusy ||
-                                                        autoSwitchBusy),
-                                            lineNav: _buildLineNav(ref,
-                                                livePage ? null : activeSession,
-                                                busy: refreshBusy ||
-                                                    autoSwitchBusy),
-                                            playbackModeNav:
-                                                _buildPlaybackModeNav(ref),
-                                            liveSourceNav: liveChannels.isEmpty
-                                                ? null
-                                                : _buildLiveSourceNav(
-                                                    ref, innerContext),
-                                            onLivePrev: liveChannels.isEmpty
-                                                ? null
-                                                : () => unawaited(
-                                                    _switchLiveChannel(
-                                                        ref, -1)),
-                                            onLiveNext: liveChannels.isEmpty
-                                                ? null
-                                                : () => unawaited(
-                                                    _switchLiveChannel(ref, 1)),
-                                            liveChannels: liveChannels,
-                                            liveCurrentIndex:
-                                                livePlayingIndex < 0
+                                                playerEngine: playerEngine,
+                                                embeddedPlayback:
+                                                    isRealMpvEngine &&
+                                                        Platform.isWindows
+                                                    ? playerEngine
+                                                          .embeddedSession
+                                                    : null,
+                                                windowManager: windowMgr,
+                                                scale: scale,
+                                                hideWindowTitleBar:
+                                                    hideWindowTitleBar,
+                                                showMiniProgress:
+                                                    showMiniProgress,
+                                                showResolution: showResolution,
+                                                holdRate: holdRate,
+                                                autoHideCursor: autoHideCursor,
+                                                playerInfoLabel: 'MPV 播放器',
+                                                episodeNav: _buildEpisodeNav(
+                                                  ref,
+                                                  livePage
+                                                      ? null
+                                                      : activeSession,
+                                                  playerContext,
+                                                  refreshBusy:
+                                                      refreshBusy ||
+                                                      autoSwitchBusy,
+                                                ),
+                                                episodeListNav:
+                                                    _buildEpisodeListNav(
+                                                      ref,
+                                                      livePage
+                                                          ? null
+                                                          : activeSession,
+                                                      playerContext,
+                                                      busy:
+                                                          refreshBusy ||
+                                                          autoSwitchBusy,
+                                                    ),
+                                                lineNav: _buildLineNav(
+                                                  ref,
+                                                  livePage
+                                                      ? null
+                                                      : activeSession,
+                                                  playerContext,
+                                                  busy:
+                                                      refreshBusy ||
+                                                      autoSwitchBusy,
+                                                ),
+                                                playbackModeNav:
+                                                    _buildPlaybackModeNav(ref),
+                                                liveSourceNav:
+                                                    liveChannels.isEmpty
+                                                    ? null
+                                                    : _buildLiveSourceNav(
+                                                        ref,
+                                                        innerContext,
+                                                      ),
+                                                onLivePrev: liveChannels.isEmpty
+                                                    ? null
+                                                    : () => unawaited(
+                                                        _switchLiveChannel(
+                                                          ref,
+                                                          -1,
+                                                        ),
+                                                      ),
+                                                onLiveNext: liveChannels.isEmpty
+                                                    ? null
+                                                    : () => unawaited(
+                                                        _switchLiveChannel(
+                                                          ref,
+                                                          1,
+                                                        ),
+                                                      ),
+                                                liveChannels: liveChannels,
+                                                liveCurrentIndex:
+                                                    livePlayingIndex < 0
                                                     ? 0
                                                     : livePlayingIndex,
-                                            liveFavoriteKeys: liveFavoriteKeys,
-                                            onLiveSelect: liveChannels.isEmpty
-                                                ? null
-                                                : (index) {
-                                                    if (!_isLiveCatalogPlaybackActive(
-                                                            ref) ||
-                                                        !identical(
-                                                            liveRuntime,
-                                                            ref.read(
-                                                                liveRuntimeProvider))) {
-                                                      return;
-                                                    }
-                                                    unawaited(_startLiveChannel(
+                                                liveFavoriteKeys:
+                                                    liveFavoriteKeys,
+                                                onLiveSelect:
+                                                    liveChannels.isEmpty
+                                                    ? null
+                                                    : (index) {
+                                                        if (!_isLiveCatalogPlaybackActive(
+                                                              ref,
+                                                            ) ||
+                                                            !identical(
+                                                              liveRuntime,
+                                                              ref.read(
+                                                                liveRuntimeProvider,
+                                                              ),
+                                                            )) {
+                                                          return;
+                                                        }
+                                                        unawaited(
+                                                          _startLiveChannel(
+                                                            ref,
+                                                            liveChannels,
+                                                            index,
+                                                          ),
+                                                        );
+                                                      },
+                                                onLiveManage: () => unawaited(
+                                                  _showLiveManagerDialog(
+                                                    innerContext,
+                                                    ref,
+                                                  ),
+                                                ),
+                                                refreshNav: PlayerRefreshNav(
+                                                  busy:
+                                                      refreshBusy ||
+                                                      autoSwitchBusy ||
+                                                      (activeSession
+                                                              ?.switching ??
+                                                          false),
+                                                  onRefresh: () =>
+                                                      _handleRefreshPlayback(
+                                                        playerContext,
                                                         ref,
-                                                        liveChannels,
-                                                        index));
-                                                  },
-                                            onLiveManage: () => unawaited(
-                                                _showLiveManagerDialog(
-                                                    innerContext, ref)),
-                                            refreshNav: PlayerRefreshNav(
-                                              busy: refreshBusy ||
-                                                  autoSwitchBusy ||
-                                                  (activeSession?.switching ??
-                                                      false),
-                                              onRefresh: () =>
-                                                  _handleRefreshPlayback(
-                                                      playerContext, ref),
-                                            ),
-                                            skipNav: _buildSkipNav(
-                                                ref,
-                                                livePage ? null : activeSession,
-                                                playerContext,
-                                                playSkipPreferences),
-                                            // §44 共享片段：与本地片头片尾是两个独立功能
-                                            segmentsNav:
-                                                !segmentsServiceConfigured ||
+                                                      ),
+                                                ),
+                                                driveLoginNavBuilder: (rawError) {
+                                                  final hint =
+                                                      driveHintFromMessage(
+                                                        rawError ?? '',
+                                                      );
+                                                  if (hint == null ||
+                                                      hint.optional ||
+                                                      !hint.supported) {
+                                                    return null;
+                                                  }
+                                                  final repo = ref.read(
+                                                    driveAccountRepositoryProvider,
+                                                  );
+                                                  if (!repo.needsLogin(
+                                                    hint.provider,
+                                                  )) {
+                                                    return null;
+                                                  }
+                                                  final account = repo
+                                                      .accountOf(hint.provider);
+                                                  final credential =
+                                                      (account?.credential ??
+                                                              '')
+                                                          .trim();
+                                                  final guest =
+                                                      account?.isGuest == true;
+                                                  return (
+                                                    label: credential.isEmpty
+                                                        ? '登录${hint.name}'
+                                                        : guest
+                                                        ? '刷新${hint.name}会话'
+                                                        : '重新登录${hint.name}',
+                                                    login: () =>
+                                                        promptDriveLogin(
+                                                          playerContext,
+                                                          repository: repo,
+                                                          hint: hint,
+                                                        ),
+                                                  );
+                                                },
+                                                skipNav: _buildSkipNav(
+                                                  ref,
+                                                  livePage
+                                                      ? null
+                                                      : activeSession,
+                                                  playerContext,
+                                                  playSkipPreferences,
+                                                ),
+                                                // §44 共享片段：与本地片头片尾是两个独立功能
+                                                segmentsNav:
+                                                    !segmentsServiceConfigured ||
                                                         activeSession == null ||
                                                         livePage
                                                     ? null
@@ -4821,121 +5360,164 @@ class YingshiTvApp extends ConsumerWidget {
                                                                 .feedback,
                                                         autoApply: ref
                                                             .read(
-                                                                settingsRepositoryProvider)
+                                                              settingsRepositoryProvider,
+                                                            )
                                                             .playerSettings
                                                             .segmentsAutoApply,
-                                                        onAutoApplyChanged:
-                                                            (v) {
+                                                        onAutoApplyChanged: (v) {
                                                           final repo = ref.read(
-                                                              settingsRepositoryProvider);
-                                                          unawaited(repo
-                                                              .updatePlayerSettings(repo
-                                                                  .playerSettings
+                                                            settingsRepositoryProvider,
+                                                          );
+                                                          unawaited(
+                                                            repo.updatePlayerSettings(
+                                                              repo.playerSettings
                                                                   .copyWith(
-                                                                      segmentsAutoApply:
-                                                                          v)));
+                                                                    segmentsAutoApply:
+                                                                        v,
+                                                                  ),
+                                                            ),
+                                                          );
                                                         },
-                                                        localOpeningMs: playSkipPreferences
+                                                        localOpeningMs:
+                                                            playSkipPreferences
                                                                 .enabled
                                                             ? (playSkipPreferences
-                                                                    .entryFor(
+                                                                      .entryFor(
                                                                         activeSession
                                                                             .item
-                                                                            .id)
-                                                                    ?.openingMs ??
-                                                                0)
+                                                                            .id,
+                                                                      )
+                                                                      ?.openingMs ??
+                                                                  0)
                                                             : 0,
                                                       ),
-                                            // §16 起播准备态：解析期间页内骨架 / 失败可重试
-                                            preparing: prepareIntent,
-                                            onRetryPrepare: prepareIntent
-                                                        ?.isFailed ==
-                                                    true
-                                                ? () => unawaited(
-                                                    retryPlayPreparation(ref))
-                                                : null,
-                                            onCancelPrepare: prepareIntent ==
-                                                    null
-                                                ? null
-                                                : () =>
-                                                    cancelPlayPreparation(ref),
-                                            onVolumeCommitted: (value) =>
-                                                _commitPlaybackVolume(
-                                                    ref, value),
-                                            onMutedPlaybackDetected: () =>
-                                                _showMutedHintForSpec(ref),
-                                            replayNav: PlayerReplayNav(
-                                              busy: refreshBusy ||
-                                                  autoSwitchBusy ||
-                                                  (activeSession?.switching ??
-                                                      false),
-                                              onReplay: () => unawaited(
-                                                  _handleReplayRequested(
+                                                // §16 起播准备态：解析期间页内骨架 / 失败可重试
+                                                preparing: prepareIntent,
+                                                onRetryPrepare:
+                                                    prepareIntent?.isFailed ==
+                                                        true
+                                                    ? () => unawaited(
+                                                        retryPlayPreparation(
+                                                          ref,
+                                                        ),
+                                                      )
+                                                    : null,
+                                                onCancelPrepare:
+                                                    prepareIntent == null
+                                                    ? null
+                                                    : () =>
+                                                          cancelPlayPreparation(
+                                                            ref,
+                                                          ),
+                                                onVolumeCommitted: (value) =>
+                                                    _commitPlaybackVolume(
+                                                      ref,
+                                                      value,
+                                                    ),
+                                                onMutedPlaybackDetected: () =>
+                                                    _showMutedHintForSpec(ref),
+                                                replayNav: PlayerReplayNav(
+                                                  busy:
+                                                      refreshBusy ||
+                                                      autoSwitchBusy ||
+                                                      (activeSession
+                                                              ?.switching ??
+                                                          false),
+                                                  onReplay: () => unawaited(
+                                                    _handleReplayRequested(
                                                       playerContext,
                                                       ref,
-                                                      playerEngine)),
-                                            ),
-                                            videoTracksNav: trackNavs?.video,
-                                            audioTracksNav: trackNavs?.audio,
-                                            subtitleTracksNav:
-                                                trackNavs?.subtitle,
-                                            onScaleChanged: (value) =>
-                                                _handleScaleChanged(ref, value),
-                                            resetNav: PlayerResetNav(
-                                              enabled: !refreshBusy &&
-                                                  !autoSwitchBusy &&
-                                                  !(activeSession?.switching ??
-                                                      false),
-                                              onReset: () =>
-                                                  _handleResetPlayerData(
-                                                      ref, playerEngine),
-                                            ),
-                                            onBack: () {
-                                              cancelPlayPreparation(ref);
-                                              ref
-                                                  .read(autoLineSwitchProvider)
-                                                  .disarm();
-                                              // 先同步捕获最终播放位置写入历史，再停止引擎（stop 会重置位置）
-                                              unawaited(ref
-                                                  .read(
-                                                      playbackHistoryTrackerProvider)
-                                                  .stop());
-                                              playerEngine.stop();
-                                              ref
-                                                  .read(activePlaySpecProvider
-                                                      .notifier)
-                                                  .state = null;
+                                                      playerEngine,
+                                                    ),
+                                                  ),
+                                                ),
+                                                videoTracksNav:
+                                                    trackNavs?.video,
+                                                audioTracksNav:
+                                                    trackNavs?.audio,
+                                                subtitleTracksNav:
+                                                    trackNavs?.subtitle,
+                                                onScaleChanged: (value) =>
+                                                    _handleScaleChanged(
+                                                      ref,
+                                                      value,
+                                                    ),
+                                                resetNav: PlayerResetNav(
+                                                  enabled:
+                                                      !refreshBusy &&
+                                                      !autoSwitchBusy &&
+                                                      !(activeSession
+                                                              ?.switching ??
+                                                          false),
+                                                  onReset: () =>
+                                                      _handleResetPlayerData(
+                                                        ref,
+                                                        playerEngine,
+                                                      ),
+                                                ),
+                                                onBack: () {
+                                                  cancelPlayPreparation(ref);
+                                                  ref
+                                                      .read(
+                                                        autoLineSwitchProvider,
+                                                      )
+                                                      .disarm();
+                                                  // 先同步捕获最终播放位置写入历史，再停止引擎（stop 会重置位置）
+                                                  unawaited(
+                                                    ref
+                                                        .read(
+                                                          playbackHistoryTrackerProvider,
+                                                        )
+                                                        .stop(),
+                                                  );
+                                                  playerEngine.stop();
+                                                  ref
+                                                          .read(
+                                                            activePlaySpecProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      null;
 
-                                              // ⑤ 修复：加载态中返回同样撤销（迟到起播作废，见 _enterLive）
-                                              ref
-                                                  .read(liveEntryLoadingProvider
-                                                      .notifier)
-                                                  .state = false;
-                                              // §43 退出播放：取消在途弹幕请求，开关回到设置默认
-                                              danmakuController.clear();
-                                              segmentsController.clear();
-                                              ref
-                                                  .read(
-                                                      danmakuSessionOverrideProvider
-                                                          .notifier)
-                                                  .state = null;
-                                              // 关闭播放会话并作废在途切换结果
-                                              ref
-                                                  .read(
-                                                      episodeBrowseSourceIndexProvider
-                                                          .notifier)
-                                                  .state = null;
-                                              _playbackSessionEpoch++;
-                                              ref
-                                                  .read(
-                                                      activePlaybackSessionProvider
-                                                          .notifier)
-                                                  .state = null;
-                                            },
+                                                  // ⑤ 修复：加载态中返回同样撤销（迟到起播作废，见 _enterLive）
+                                                  ref
+                                                          .read(
+                                                            liveEntryLoadingProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      false;
+                                                  // §43 退出播放：取消在途弹幕请求，开关回到设置默认
+                                                  danmakuController.clear();
+                                                  segmentsController.clear();
+                                                  ref
+                                                          .read(
+                                                            danmakuSessionOverrideProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      null;
+                                                  // 关闭播放会话并作废在途切换结果
+                                                  ref
+                                                          .read(
+                                                            episodeBrowseSourceIndexProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      null;
+                                                  _playbackSessionEpoch++;
+                                                  ref
+                                                          .read(
+                                                            activePlaybackSessionProvider
+                                                                .notifier,
+                                                          )
+                                                          .state =
+                                                      null;
+                                                },
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ),
@@ -4977,12 +5559,18 @@ class _LiveEntryLoadingOverlay extends StatelessWidget {
                 width: 34,
                 height: 34,
                 child: CircularProgressIndicator(
-                    strokeWidth: 3.5, color: palette.accentInk),
+                  strokeWidth: 3.5,
+                  color: palette.accentInk,
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Text('正在加载直播频道…',
-                  style: TextStyle(
-                      color: palette.playerText, fontSize: AppType.body)),
+              Text(
+                '正在加载直播频道…',
+                style: TextStyle(
+                  color: palette.playerText,
+                  fontSize: AppType.body,
+                ),
+              ),
             ],
           ),
         ),
@@ -5065,8 +5653,11 @@ class WallpaperBackdrop extends ConsumerStatefulWidget {
   final WallpaperStore store;
   final Widget child;
 
-  const WallpaperBackdrop(
-      {super.key, required this.store, required this.child});
+  const WallpaperBackdrop({
+    super.key,
+    required this.store,
+    required this.child,
+  });
 
   @override
   ConsumerState<WallpaperBackdrop> createState() => _WallpaperBackdropState();
@@ -5079,7 +5670,8 @@ class _WallpaperBackdropState extends ConsumerState<WallpaperBackdrop> {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    final preferences = ref.watch(appearancePreferencesProvider).valueOrNull ??
+    final preferences =
+        ref.watch(appearancePreferencesProvider).valueOrNull ??
         AppearancePreferences.none;
     if (preferences.wallpaperFileName != _fileName) {
       _fileName = preferences.wallpaperFileName;
@@ -5096,8 +5688,9 @@ class _WallpaperBackdropState extends ConsumerState<WallpaperBackdrop> {
             final path = snapshot.data;
             if (path == null) return const SizedBox.shrink();
             final windowWidth = MediaQuery.sizeOf(context).width;
-            final cacheWidth =
-                windowWidth <= 0 ? null : windowWidth.clamp(1, 2560).round();
+            final cacheWidth = windowWidth <= 0
+                ? null
+                : windowWidth.clamp(1, 2560).round();
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -5403,19 +5996,26 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
   void _syncAggregateSearchSites() {
     final config = ref.read(configRepositoryProvider);
-    unawaited(ref.read(settingsRepositoryProvider).reconcileSearchSites(
-      config.currentConfigIdentity,
-      config.currentVodConfig.searchableSites.map((site) => site.key),
-    ));
+    unawaited(
+      ref
+          .read(settingsRepositoryProvider)
+          .reconcileSearchSites(
+            config.currentConfigIdentity,
+            config.currentVodConfig.searchableSites.map((site) => site.key),
+          ),
+    );
   }
 
   List<Site> _aggregateSearchTargets() {
     final config = ref.read(configRepositoryProvider);
     final preferences = ref.read(settingsRepositoryProvider).searchPreferences;
     final selected = preferences.aggregate
-        ? preferences.aggregateSitesFor(config.currentConfigIdentity) : null;
-    return [for (final site in config.currentVodConfig.searchableSites)
-      if (selected == null || selected.contains(site.key)) site];
+        ? preferences.aggregateSitesFor(config.currentConfigIdentity)
+        : null;
+    return [
+      for (final site in config.currentVodConfig.searchableSites)
+        if (selected == null || selected.contains(site.key)) site,
+    ];
   }
 
   /// 懒建网盘代理自恢复：只在真正起播时读引擎（测试与首页路径可能未注入播放器）。
@@ -5440,7 +6040,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   void _syncSearchBridge() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final searchPrefs = ref.read(searchPreferencesProvider).valueOrNull ??
+      final searchPrefs =
+          ref.read(searchPreferencesProvider).valueOrNull ??
           const SearchPreferences();
       ref.read(homeSearchBridgeProvider.notifier).state = HomeSearchBridge(
         searchController: _searchController,
@@ -5487,16 +6088,26 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     return site != null && isBuiltinSite(site);
   }
 
-  Future<void> _loadDoubanBillboard(int generation, String? identity,
-      {required bool forceRefresh}) async {
+  Future<void> _loadDoubanBillboard(
+    int generation,
+    String? identity, {
+    required bool forceRefresh,
+  }) async {
     try {
-      final items = await ref.read(doubanRepositoryProvider).fetchCategory(
-          doubanCinemaMovieCollection,
-          count: 10,
-          forceRefresh: forceRefresh);
+      final items = await ref
+          .read(doubanRepositoryProvider)
+          .fetchCategory(
+            doubanCinemaMovieCollection,
+            count: 10,
+            forceRefresh: forceRefresh,
+          );
       if (!_acceptContent(generation, identity) || !_isDoubanHome) return;
-      setState(() => _doubanBillboardItems =
-          items.take(10).map((item) => item.toVodItem()).toList());
+      setState(
+        () => _doubanBillboardItems = items
+            .take(10)
+            .map((item) => item.toVodItem())
+            .toList(),
+      );
     } catch (_) {
       if (!_acceptContent(generation, identity) || !_isDoubanHome) return;
       setState(() => _doubanBillboardItems = const []);
@@ -5534,13 +6145,18 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       _doubanLoadingMore = false;
     });
     if (!_doubanViewingSingleCategory) {
-      unawaited(_loadDoubanBillboard(generation, identity,
-          forceRefresh: forceRefresh));
+      unawaited(
+        _loadDoubanBillboard(generation, identity, forceRefresh: forceRefresh),
+      );
     }
 
     try {
-      final page = await repository.fetchPage(target.id,
-          start: 0, count: _doubanPageSize, forceRefresh: forceRefresh);
+      final page = await repository.fetchPage(
+        target.id,
+        start: 0,
+        count: _doubanPageSize,
+        forceRefresh: forceRefresh,
+      );
       if (!_acceptContent(generation, identity) || !mounted) return;
       if (_doubanCollection != target.id) return;
       setState(() {
@@ -5558,13 +6174,15 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         repository
             .fetchPage(cat.id, start: 0, count: _doubanPageSize)
             .then((p) {
-          if (!_acceptContent(generation, identity) || !_isDoubanHome) return;
-          setState(() {
-            _doubanCategoryItems[cat.id] = [
-              for (final it in p.items) it.toVodItem()
-            ];
-          });
-        }).catchError((_) {});
+              if (!_acceptContent(generation, identity) || !_isDoubanHome)
+                return;
+              setState(() {
+                _doubanCategoryItems[cat.id] = [
+                  for (final it in p.items) it.toVodItem(),
+                ];
+              });
+            })
+            .catchError((_) {});
       }
     } on DoubanException catch (error) {
       if (!_acceptContent(generation, identity) || !mounted) return;
@@ -5598,10 +6216,13 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     setState(() => _doubanLoadingMore = true);
 
     try {
-      final page = await ref.read(doubanRepositoryProvider).fetchPage(
-          collection,
-          start: _doubanNextStart,
-          count: _doubanPageSize);
+      final page = await ref
+          .read(doubanRepositoryProvider)
+          .fetchPage(
+            collection,
+            start: _doubanNextStart,
+            count: _doubanPageSize,
+          );
       if (!_acceptContent(generation, identity) || !mounted) return;
       if (_doubanCollection != collection) return; // 期间换了分类：丢弃
       final known = <String>{for (final item in _items) item.id};
@@ -5783,11 +6404,15 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     final cancelToken = _renewCategoryCancelToken();
     setState(() => _categoryLoadingMore = true);
     try {
-      final result = await ref.read(siteApiProvider).fetchCategory(site,
-          categoryId: category.id,
-          page: requested,
-          extend: _filterExtendFor(category),
-          cancelToken: cancelToken);
+      final result = await ref
+          .read(siteApiProvider)
+          .fetchCategory(
+            site,
+            categoryId: category.id,
+            page: requested,
+            extend: _filterExtendFor(category),
+            cancelToken: cancelToken,
+          );
       if (!_acceptContent(generation, identity) || !mounted) return;
       // 等的时候用户可能已经切了分类：键不匹配就整批丢弃。
       if (pageKey != _categoryPageKeyFor(_selectedCategory)) return;
@@ -5840,10 +6465,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   /// 加载当前站源数据：
   /// - 当 category 为 null 时：拉取该站源的首页信息动态填充分类滚动条，并默认选中第一个分类，展示该分类下的视频数据；
   /// - 当指定 category 时：拉取对应分类的视频数据并刷新瀑布流。
-  Future<void> loadSiteData(
-      {VodCategory? category,
-      bool preserveCategories = false,
-      bool forceRefresh = false}) async {
+  Future<void> loadSiteData({
+    VodCategory? category,
+    bool preserveCategories = false,
+    bool forceRefresh = false,
+  }) async {
     // 冷启动直播入口期间推迟主视图加载，避免因页面偏好发起站源请求
     if (_startupLiveEntryPending) return;
     if (!mounted) return;
@@ -5856,8 +6482,13 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     _prewarmTimer = Timer(const Duration(seconds: 3), () {
       _prewarmTimer = null;
       if (!mounted) return;
-      unawaited(ref.read(siteApiProvider).prewarmCompanionJars(
-          ref.read(configRepositoryProvider).currentVodConfig.sites));
+      unawaited(
+        ref
+            .read(siteApiProvider)
+            .prewarmCompanionJars(
+              ref.read(configRepositoryProvider).currentVodConfig.sites,
+            ),
+      );
     });
     final site = ref.read(configRepositoryProvider).selectedSite;
     debugPrint('${site?.toJson()}'); // Map 直接打印
@@ -5890,10 +6521,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     if (isBuiltinSite(site)) {
       _siteFilters = const {};
       await _loadDouban(
-          generation: generation,
-          identity: identity,
-          category: category,
-          forceRefresh: forceRefresh);
+        generation: generation,
+        identity: identity,
+        category: category,
+        forceRefresh: forceRefresh,
+      );
       return;
     }
 
@@ -5902,10 +6534,12 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     print('\n================ [yingshi-tv 站源调试] ================');
     // ignore: avoid_print
     print(
-        '[站源信息]: ${site.name} (Key: ${site.key}, Type: ${site.type}, Api: ${site.api})');
+      '[站源信息]: ${site.name} (Key: ${site.key}, Type: ${site.type}, Api: ${site.api})',
+    );
     // ignore: avoid_print
     print(
-        '[当前操作]: ${category == null ? "获取站源首页推荐与动态分类" : "切换到分类: ${category.name} (ID: ${category.id})"}');
+      '[当前操作]: ${category == null ? "获取站源首页推荐与动态分类" : "切换到分类: ${category.name} (ID: ${category.id})"}',
+    );
     // ignore: avoid_print
     print('===========================================================');
 
@@ -5929,14 +6563,17 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         final homeRes = await siteApi.fetchHome(site);
         if (!_acceptContent(generation, identity)) return;
         if (identity != null) {
-          ref.read(homeSiteIconProvider.notifier).state =
-              (identity: identity, icon: homeRes.siteIcon);
+          ref.read(homeSiteIconProvider.notifier).state = (
+            identity: identity,
+            icon: homeRes.siteIcon,
+          );
         }
         final fetchedCats = homeRes.categories;
 
         // ignore: avoid_print
         print(
-            '--> [站源返回分类数]: ${fetchedCats.length} 个 -> [ ${fetchedCats.map((c) => "${c.name}(${c.id})").join(", ")} ]');
+          '--> [站源返回分类数]: ${fetchedCats.length} 个 -> [ ${fetchedCats.map((c) => "${c.name}(${c.id})").join(", ")} ]',
+        );
 
         if (fetchedCats.isNotEmpty) {
           final firstCat = fetchedCats.first;
@@ -5955,16 +6592,20 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
             final extend = _filterExtendFor(firstCat);
             VodPageResult catRes;
             try {
-              catRes = await siteApi.fetchCategory(site,
-                  categoryId: firstCat.id,
-                  extend: extend,
-                  cancelToken: cancelToken);
+              catRes = await siteApi.fetchCategory(
+                site,
+                categoryId: firstCat.id,
+                extend: extend,
+                cancelToken: cancelToken,
+              );
             } catch (error) {
               // Home already succeeded: a failing first category must not wipe its recommendations.
               if (homeRes.list.isEmpty) rethrow;
               if (!_acceptContent(generation, identity)) return;
-              showAppMessage('「${firstCat.name}」加载失败：$error',
-                  type: AppMessageType.warning);
+              showAppMessage(
+                '「${firstCat.name}」加载失败：$error',
+                type: AppMessageType.warning,
+              );
               catRes = const VodPageResult.empty();
             }
             if (!_acceptContent(generation, identity)) return;
@@ -5982,9 +6623,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
             // catRes 为空时 itemsToShow 实际是首页推荐，不是这个分类的数据；
             // 此时不能挂上分类游标，否则第 2 页会把分类结果接到首页推荐后面。
             _resetCategoryPagination(
-                page: showCategory ? catRes : null,
-                category: firstCat,
-                items: itemsToShow);
+              page: showCategory ? catRes : null,
+              category: firstCat,
+              items: itemsToShow,
+            );
             _maybeFillCategoryPage();
           } else {
             // ignore: avoid_print
@@ -5996,7 +6638,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
               });
             }
             _resetCategoryPagination(
-                page: homeRes, category: firstCat, items: homeRes.list);
+              page: homeRes,
+              category: firstCat,
+              items: homeRes.list,
+            );
           }
         } else {
           // 站源未返回分类结构，展示首页推荐数据
@@ -6021,21 +6666,26 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
         VodPageResult catRes;
         if (category.id.isNotEmpty) {
-          catRes = await siteApi.fetchCategory(site,
-              categoryId: category.id,
-              extend: _filterExtendFor(category),
-              cancelToken: cancelToken);
+          catRes = await siteApi.fetchCategory(
+            site,
+            categoryId: category.id,
+            extend: _filterExtendFor(category),
+            cancelToken: cancelToken,
+          );
         } else {
           catRes = await siteApi.fetchHome(site);
         }
         if (!_acceptContent(generation, identity)) return;
         if (category.id.isEmpty && identity != null) {
-          ref.read(homeSiteIconProvider.notifier).state =
-              (identity: identity, icon: catRes.siteIcon);
+          ref.read(homeSiteIconProvider.notifier).state = (
+            identity: identity,
+            icon: catRes.siteIcon,
+          );
         }
         // ignore: avoid_print
         print(
-            '--> [分类切换成功]: ${category.name} (ID: ${category.id})，返回视频数: ${catRes.list.length} 部');
+          '--> [分类切换成功]: ${category.name} (ID: ${category.id})，返回视频数: ${catRes.list.length} 部',
+        );
 
         if (mounted) {
           setState(() {
@@ -6044,7 +6694,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           });
         }
         _resetCategoryPagination(
-            page: catRes, category: category, items: catRes.list);
+          page: catRes,
+          category: category,
+          items: catRes.list,
+        );
         _maybeFillCategoryPage();
       }
     } catch (e) {
@@ -6053,8 +6706,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           ? (e.message?.toString() ?? e.toString())
           : '加载站点内容失败: $e';
       // ignore: avoid_print
-      print('--> [站源数据加载失败]: '
-          '${e is SpiderCallException ? '加载站点内容失败: ${e.diagnostic}' : errorMsg}');
+      print(
+        '--> [站源数据加载失败]: '
+        '${e is SpiderCallException ? '加载站点内容失败: ${e.diagnostic}' : errorMsg}',
+      );
       _categoryHasMore = false;
       _categoryLoadingMore = false;
       if (mounted) {
@@ -6067,7 +6722,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   }
 
   /// 搜索：聚合开时逐站增量渲染（先完成先显示）；聚合关时仅检索当前站源（不受支持时明确提示且不发起请求）
-  Future<void> _handleSearch(String keyword, {bool forceAggregate = false}) async {
+  Future<void> _handleSearch(
+    String keyword, {
+    bool forceAggregate = false,
+  }) async {
     _cardPreview?.cancel();
     _leaveCatalogDetail();
     final query = keyword.trim();
@@ -6110,7 +6768,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         final preferences = settings.searchPreferences;
         if (targets.isEmpty &&
             preferences.aggregate &&
-            preferences.aggregateSitesFor(config.currentConfigIdentity)?.isEmpty == true) {
+            preferences
+                    .aggregateSitesFor(config.currentConfigIdentity)
+                    ?.isEmpty ==
+                true) {
           setState(() {
             _isLoading = false;
             _searchPending = false;
@@ -6121,7 +6782,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         final cancelToken = SearchCancelToken();
         _searchCancelToken = cancelToken;
         _listenToSearch(
-          searchEngine.searchAllIncremental(targets, query, cancelToken: cancelToken),
+          searchEngine.searchAllIncremental(
+            targets,
+            query,
+            cancelToken: cancelToken,
+          ),
           generation: generation,
           identity: identity,
         );
@@ -6151,8 +6816,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       final cancelToken = SearchCancelToken();
       _searchCancelToken = cancelToken;
       _listenToSearch(
-        searchEngine
-            .searchAllIncremental([site], query, cancelToken: cancelToken),
+        searchEngine.searchAllIncremental(
+          [site],
+          query,
+          cancelToken: cancelToken,
+        ),
         generation: generation,
         identity: identity,
       );
@@ -6220,7 +6888,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
   TmdbCardPreview? _preloadCard(VodItem item, Site site) {
     _finishCardPreview(_cardPreview);
-    final prefs = ref.read(settingsRepositoryProvider).appearancePreferences.tmdb;
+    final prefs = ref
+        .read(settingsRepositoryProvider)
+        .appearancePreferences
+        .tmdb;
     if (!prefs.cinematic || localConfigCenterUrlOf(item.content) != null) {
       return null;
     }
@@ -6229,16 +6900,22 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         .preloadCard(item, prefs, allowPosterOnly: !site.usesCompanion);
     final pending = preview?.movie;
     if (preview != null && pending != null) {
-      unawaited(pending.then((movie) {
-        if (!mounted || movie == null || preview.cancelled ||
-            _cinematicPage != null || !identical(_cardPreview, preview)) {
-          return;
-        }
-        for (final url in {movie.backdrop, movie.logo}.whereType<String>()) {
-          unawaited(precacheImage(NetworkImage(url), context,
-              onError: (_, _) {}));
-        }
-      }));
+      unawaited(
+        pending.then((movie) {
+          if (!mounted ||
+              movie == null ||
+              preview.cancelled ||
+              _cinematicPage != null ||
+              !identical(_cardPreview, preview)) {
+            return;
+          }
+          for (final url in {movie.backdrop, movie.logo}.whereType<String>()) {
+            unawaited(
+              precacheImage(NetworkImage(url), context, onError: (_, _) {}),
+            );
+          }
+        }),
+      );
     }
     return preview;
   }
@@ -6261,8 +6938,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     // 优先使用条目自带的 siteKey (跨站聚合搜索条目)，其次回退为当前选定站源
     Site? targetSite;
     if (item.siteKey != null && item.siteKey!.isNotEmpty) {
-      final matches =
-          repo.currentVodConfig.sites.where((s) => s.key == item.siteKey);
+      final matches = repo.currentVodConfig.sites.where(
+        (s) => s.key == item.siteKey,
+      );
       if (matches.isNotEmpty) {
         targetSite = matches.first;
       }
@@ -6282,13 +6960,16 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       _cancelSearchStream();
       _cancelCategoryRequest();
       _categoryLoadingMore = false;
-      _folderReturnOffset =
-          _gridScrollController.hasClients ? _gridScrollController.offset : 0;
-      setState(() => _folderRoot = (
-            site: targetSite!,
-            item: item,
-            extend: Map.unmodifiable(_filterExtendFor(_selectedCategory))
-          ));
+      _folderReturnOffset = _gridScrollController.hasClients
+          ? _gridScrollController.offset
+          : 0;
+      setState(
+        () => _folderRoot = (
+          site: targetSite!,
+          item: item,
+          extend: Map.unmodifiable(_filterExtendFor(_selectedCategory)),
+        ),
+      );
       return;
     }
 
@@ -6340,15 +7021,19 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       }
       if (targetSite.usesCompanion && detail.sources.isEmpty) {
         showAppDialog<void>(
-            context: context,
-            builder: (_) => SiteInformationDialog(
-                  item: detail.item,
-                  onOpenUrl: ref.read(installerLauncherProvider).openUrl,
-                ));
+          context: context,
+          builder: (_) => SiteInformationDialog(
+            item: detail.item,
+            onOpenUrl: ref.read(installerLauncherProvider).openUrl,
+          ),
+        );
         return;
       }
-      await _showDetailDialog(detail.withCardFallbacks(item), targetSite,
-          preview: preview);
+      await _showDetailDialog(
+        detail.withCardFallbacks(item),
+        targetSite,
+        preview: preview,
+      );
     } catch (e) {
       if (!mounted || generation != _contentGeneration) return;
       if (e is SpiderCallException &&
@@ -6389,9 +7074,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           final remaining = deadline.difference(DateTime.now());
           if (remaining <= Duration.zero) break;
           final result = await douban
-              .fetchPage(collection,
-                  start: page * _ratingPickPageSize,
-                  count: _ratingPickPageSize)
+              .fetchPage(
+                collection,
+                start: page * _ratingPickPageSize,
+                count: _ratingPickPageSize,
+              )
               .timeout(remaining);
           items.addAll(result.items.map((item) => item.toVodItem()));
           if (!result.hasMore) break;
@@ -6403,16 +7090,17 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       if (items.isNotEmpty) break;
     }
     if (items.isNotEmpty) return items;
-    throw RatingPickUnavailable(
-        failure == null ? '豆瓣榜单没有返回内容' : '$failure');
+    throw RatingPickUnavailable(failure == null ? '豆瓣榜单没有返回内容' : '$failure');
   }
 
   /// 在已配置站源里按片名找同一部片：等第一个「归一化片名完全一致」的结果。
   ///
   /// 只等 [budget]：盲开是「点一下就去」的操作，不能让用户对着转圈等几十个站源全部
   /// 返回；超时当没找到，界面退回按片名检索。
-  Future<VodItem?> _locateVodByTitle(String title,
-      {Duration budget = const Duration(seconds: 8)}) async {
+  Future<VodItem?> _locateVodByTitle(
+    String title, {
+    Duration budget = const Duration(seconds: 8),
+  }) async {
     final sites = _aggregateSearchTargets();
     final keyword = DoubanRepository.searchKeyword(title);
     if (sites.isEmpty || keyword.isEmpty) return null;
@@ -6423,19 +7111,19 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         .read(searchEngineProvider)
         .searchAllIncremental(sites, keyword, cancelToken: token)
         .listen(
-      (batch) {
-        for (final item in batch.items) {
-          if (!found.isCompleted && _ratingTitleKey(item.name) == target) {
-            found.complete(item);
-            return;
-          }
-        }
-      },
-      onError: (Object _) {},
-      onDone: () {
-        if (!found.isCompleted) found.complete(null);
-      },
-    );
+          (batch) {
+            for (final item in batch.items) {
+              if (!found.isCompleted && _ratingTitleKey(item.name) == target) {
+                found.complete(item);
+                return;
+              }
+            }
+          },
+          onError: (Object _) {},
+          onDone: () {
+            if (!found.isCompleted) found.complete(null);
+          },
+        );
     try {
       return await found.future.timeout(budget, onTimeout: () => null);
     } finally {
@@ -6471,12 +7159,17 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       final detail = loaded.value;
       if (detail == null ||
           (detail.item.name.isEmpty && detail.sources.isEmpty)) {
-        showAppMessage('评分盲开：《${item.name}》没有取到详情，稍后再试',
-            type: AppMessageType.error);
+        showAppMessage(
+          '评分盲开：《${item.name}》没有取到详情，稍后再试',
+          type: AppMessageType.error,
+        );
         return;
       }
-      await _showDetailDialog(detail.withCardFallbacks(item), site,
-          preview: preview);
+      await _showDetailDialog(
+        detail.withCardFallbacks(item),
+        site,
+        preview: preview,
+      );
     } catch (e) {
       if (!mounted || generation != _contentGeneration) return;
       showAppMessage('评分盲开失败：$e', type: AppMessageType.error);
@@ -6492,8 +7185,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   Future<void> _openRatingPick(VodItem picked) async {
     final sites = ref.read(configRepositoryProvider).currentVodConfig.sites;
     if (sites.isEmpty) {
-      showAppMessage('评分盲开：还没有配置影视源，先添加站源再试',
-          type: AppMessageType.warning);
+      showAppMessage('评分盲开：还没有配置影视源，先添加站源再试', type: AppMessageType.warning);
       return;
     }
     final ownSite = _siteOfVod(picked);
@@ -6510,8 +7202,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     }
     final keyword = DoubanRepository.searchKeyword(picked.name);
     showAppMessage(
-        '评分盲开：选中的《${picked.name}》没有同名站源条目，已按片名检索',
-        type: AppMessageType.warning);
+      '评分盲开：选中的《${picked.name}》没有同名站源条目，已按片名检索',
+      type: AppMessageType.warning,
+    );
     _searchController.text = keyword;
     FocusScope.of(context).unfocus();
     await _handleSearch(keyword);
@@ -6532,10 +7225,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           context: context,
           builder: (_) => SiteInformationDialog(
             item: VodItem(
-                id: action,
-                name: '${site.name} · 网页配置',
-                pic: '',
-                content: '在本机浏览器中打开设置。保存后返回并关闭此窗口，即可刷新站点。\n\n$webUrl'),
+              id: action,
+              name: '${site.name} · 网页配置',
+              pic: '',
+              content: '在本机浏览器中打开设置。保存后返回并关闭此窗口，即可刷新站点。\n\n$webUrl',
+            ),
             webUrl: webUrl,
             onOpenUrl: ref.read(installerLauncherProvider).openUrl,
           ),
@@ -6592,9 +7286,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       folder.refresh();
     } else {
       loadSiteData(
-          category: _selectedCategory,
-          preserveCategories: true,
-          forceRefresh: true);
+        category: _selectedCategory,
+        preserveCategories: true,
+        forceRefresh: true,
+      );
     }
   }
 
@@ -6640,16 +7335,18 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   /// [since] 之后载荷给了什么反馈：弹窗优先，其次 Toast。弹窗 / Toast 事件经合并与长轮询
   /// 才到达，可能晚于 RPC 响应，所以最多再等 [wait]；收到 Toast 后再等 [toastGrace]，
   /// 防止「先提示、后弹窗」时误判。
-  Future<_SiteFeedback> _awaitSiteFeedbackSince(DateTime since,
-      {Duration wait = const Duration(milliseconds: 800),
-      Duration toastGrace = const Duration(milliseconds: 300)}) async {
+  Future<_SiteFeedback> _awaitSiteFeedbackSince(
+    DateTime since, {
+    Duration wait = const Duration(milliseconds: 800),
+    Duration toastGrace = const Duration(milliseconds: 300),
+  }) async {
     final channel = ref.read(companionUiChannelProvider);
     const step = Duration(milliseconds: 50);
     // 按轮次计时而非墙钟：生产环境等价，测试的 fake async 也能确定性地推进
     final maxTicks = wait.inMilliseconds ~/ step.inMilliseconds;
     final graceTicks = toastGrace.inMilliseconds ~/ step.inMilliseconds;
     int? toastTick;
-    for (var tick = 0;; tick++) {
+    for (var tick = 0; ; tick++) {
       final shownAt = channel.lastDialogShownAt;
       if (shownAt != null && !shownAt.isBefore(since)) {
         return _SiteFeedback.dialog;
@@ -6670,8 +7367,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   ///
   /// 同时记住起播来源：用户从选集里点某一集后，弹窗会先关闭、进入播放器；
   /// 退出播放器时应回到这个弹窗继续选集，而不是掉回首页。
-  Future<void> _showDetailDialog(VodDetail detail, Site? site,
-      {TmdbCardPreview? preview}) {
+  Future<void> _showDetailDialog(
+    VodDetail detail,
+    Site? site, {
+    TmdbCardPreview? preview,
+  }) {
     return _showDetailDialogWithCurrentEpisode(
       detail,
       site,
@@ -6687,69 +7387,90 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
   /// 打开弹窗并**显式**指定当前集：`null` 即零高亮，不再回落推断。
   Future<void> _showDetailDialogWithCurrentEpisode(
-      VodDetail detail, Site? site, CurrentEpisode? currentEpisode,
-      {TmdbCardPreview? preview}) {
+    VodDetail detail,
+    Site? site,
+    CurrentEpisode? currentEpisode, {
+    TmdbCardPreview? preview,
+  }) {
     final repo = ref.read(configRepositoryProvider);
-    final prefs = ref.read(settingsRepositoryProvider).appearancePreferences.tmdb;
-    final cinematic = prefs.cinematic &&
+    final prefs = ref
+        .read(settingsRepositoryProvider)
+        .appearancePreferences
+        .tmdb;
+    final cinematic =
+        prefs.cinematic &&
         detail.sources.any((s) => s.episodes.isNotEmpty) &&
         !detail.item.isFolder &&
         detail.item.action == null &&
         localConfigCenterUrlOf(detail.item.content) == null;
-    final history = latestHistoryForDetail(repo.historyRecords,
-        vodId: detail.item.id, siteKey: site?.key);
+    final history = latestHistoryForDetail(
+      repo.historyRecords,
+      vodId: detail.item.id,
+      siteKey: site?.key,
+    );
     final preloaded = cinematic
         ? preview?.forDetail(detail.item, prefs, sources: detail.sources)
         : null;
     if (!cinematic) preview?.cancel();
     Widget page(BuildContext _) => VodDetailDialog(
-        detail: detail,
-        isFavorite: repo.isFavorite(detail.item.id),
-        currentEpisode: currentEpisode,
-        lastWatched: history,
-        historySelection: cinematic && history != null
-            ? _locateHistorySelection(detail, history)
-            : null,
-        loadCinematicMetadata: cinematic
-            ? (cancel) => preloaded ??
-                ref.read(tmdbRepositoryProvider).lookup(detail.item, prefs,
-                    sources: detail.sources, cancel: cancel)
-            : null,
-        loadDoubanMetadata: cinematic
-            ? (cancel) => ref.read(doubanRepositoryProvider)
+      detail: detail,
+      isFavorite: repo.isFavorite(detail.item.id),
+      currentEpisode: currentEpisode,
+      lastWatched: history,
+      historySelection: cinematic && history != null
+          ? _locateHistorySelection(detail, history)
+          : null,
+      loadCinematicMetadata: cinematic
+          ? (cancel) =>
+                preloaded ??
+                ref
+                    .read(tmdbRepositoryProvider)
+                    .lookup(
+                      detail.item,
+                      prefs,
+                      sources: detail.sources,
+                      cancel: cancel,
+                    )
+          : null,
+      loadDoubanMetadata: cinematic
+          ? (cancel) => ref
+                .read(doubanRepositoryProvider)
                 .detailMetadataFor(detail.item, cancel: cancel)
-            : null,
-        loadDoubanBackdrops: cinematic
-            ? (subject, cancel) => ref.read(doubanRepositoryProvider)
+          : null,
+      loadDoubanBackdrops: cinematic
+          ? (subject, cancel) => ref
+                .read(doubanRepositoryProvider)
                 .detailBackdropsFor(subject, cancel: cancel)
-            : null,
-        loadHotComments: cinematic
-            ? (cancel) => ref.read(doubanRepositoryProvider)
+          : null,
+      loadHotComments: cinematic
+          ? (cancel) => ref
+                .read(doubanRepositoryProvider)
                 .hotCommentsFor(detail.item, cancel: cancel)
-            : null,
-        onSearchRecommendation: cinematic ? (title) {
-          _searchController.text = title;
-          FocusScope.of(context).unfocus();
-          unawaited(_handleSearch(title, forceAggregate: true));
-        } : null,
-        onOpenUrl: ref.read(installerLauncherProvider).openUrl,
-        onToggleFavorite: () async {
-          try {
-            await repo.toggleFavorite(detail.item);
-            return null;
-          } on DataRestorePendingRestartException catch (error) {
-            return error.message;
-          } catch (_) {
-            return '收藏保存失败，请稍后重试';
-          }
-        },
-        onPlayEpisode: (selection) {
-          _playbackOriginDetail = detail;
-          _playbackOriginSite = site;
-          unawaited(
-              _startPlayEpisode(detail.item, selection, targetSite: site));
-        },
-      );
+          : null,
+      onSearchRecommendation: cinematic
+          ? (title) {
+              _searchController.text = title;
+              FocusScope.of(context).unfocus();
+              unawaited(_handleSearch(title, forceAggregate: true));
+            }
+          : null,
+      onOpenUrl: ref.read(installerLauncherProvider).openUrl,
+      onToggleFavorite: () async {
+        try {
+          await repo.toggleFavorite(detail.item);
+          return null;
+        } on DataRestorePendingRestartException catch (error) {
+          return error.message;
+        } catch (_) {
+          return '收藏保存失败，请稍后重试';
+        }
+      },
+      onPlayEpisode: (selection) {
+        _playbackOriginDetail = detail;
+        _playbackOriginSite = site;
+        unawaited(_startPlayEpisode(detail.item, selection, targetSite: site));
+      },
+    );
     return cinematic
         ? _presentCatalogDetail(page)
         : showAppDialog<void>(context: context, builder: page);
@@ -6815,13 +7536,21 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
   /// 详情页选集播放（薄封装）：立意图 → 解析 → 启动，见 [startEpisodePlaybackWithIntent]。
   /// 管线与播放内切集共用（顶层 `_startEpisodePlayback` / `_switchEpisode`）。
-  Future<void> _startPlayEpisode(VodItem item, EpisodeSelection selection,
-          {Site? targetSite}) =>
-      startEpisodePlaybackWithIntent(ref, item, selection,
-          targetSite: targetSite);
+  Future<void> _startPlayEpisode(
+    VodItem item,
+    EpisodeSelection selection, {
+    Site? targetSite,
+  }) => startEpisodePlaybackWithIntent(
+    ref,
+    item,
+    selection,
+    targetSite: targetSite,
+  );
 
   Future<({VodDetail? value, bool cancelled})> _loadDetailForHistory(
-      HistoryRecord record, Site site) async {
+    HistoryRecord record,
+    Site site,
+  ) async {
     try {
       return await loadWithDialog<VodDetail>(
         context: context,
@@ -6841,14 +7570,19 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
   /// 优先按线路名匹配；线路改名了就找包含该集（直链优先、集名兜底）的线路；
   /// 都没有返回 null（调用方退回单集直链续播）。
   EpisodeSelection? _locateHistorySelection(
-      VodDetail detail, HistoryRecord record) {
+    VodDetail detail,
+    HistoryRecord record,
+  ) {
     if (detail.sources.isEmpty) return null;
-    var sourceIndex =
-        detail.sources.indexWhere((s) => s.name == record.sourceName);
+    var sourceIndex = detail.sources.indexWhere(
+      (s) => s.name == record.sourceName,
+    );
     if (sourceIndex < 0) {
-      bool hasEpisode(PlayFrom source) => source.episodes.any((e) =>
-          (record.episodeUrl.isNotEmpty && e.url == record.episodeUrl) ||
-          e.name == record.episodeName);
+      bool hasEpisode(PlayFrom source) => source.episodes.any(
+        (e) =>
+            (record.episodeUrl.isNotEmpty && e.url == record.episodeUrl) ||
+            e.name == record.episodeName,
+      );
       sourceIndex = detail.sources.indexWhere(hasEpisode);
     }
     if (sourceIndex < 0) return null;
@@ -6857,8 +7591,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         ? -1
         : source.episodes.indexWhere((e) => e.url == record.episodeUrl);
     if (episodeIndex < 0) {
-      episodeIndex =
-          source.episodes.indexWhere((e) => e.name == record.episodeName);
+      episodeIndex = source.episodes.indexWhere(
+        (e) => e.name == record.episodeName,
+      );
     }
     if (episodeIndex < 0) return null;
     return EpisodeSelection(
@@ -6876,8 +7611,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     final repo = ref.read(configRepositoryProvider);
     Site? site;
     if (record.siteKey != null && record.siteKey!.isNotEmpty) {
-      final matches =
-          repo.currentVodConfig.sites.where((s) => s.key == record.siteKey);
+      final matches = repo.currentVodConfig.sites.where(
+        (s) => s.key == record.siteKey,
+      );
       if (matches.isNotEmpty) site = matches.first;
     }
 
@@ -6920,10 +7656,13 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     MediaPlaySpec? resolvedSpec;
     if (record.episodeUrl.isNotEmpty) {
       try {
-        final resolved = await ref.read(siteApiProvider).resolvePlayback(
+        final resolved = await ref
+            .read(siteApiProvider)
+            .resolvePlayback(
               site,
               id: record.episodeUrl,
               flag: record.sourceName,
+              episodeName: record.episodeName,
               parses: repo.currentVodConfig.parses,
               parseEngine: ref.read(parseEngineProvider),
             );
@@ -6933,8 +7672,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       } catch (e) {
         if (site?.usesCompanion ?? false) {
           if (mounted) {
-            showAppMessage(playResolveFailureText(e),
-                type: AppMessageType.error);
+            showAppMessage(
+              playResolveFailureText(e),
+              type: AppMessageType.error,
+            );
           }
           return;
         }
@@ -7063,9 +7804,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       final liveRepository = ref.read(liveRepositoryProvider);
       List<Live> channels;
       try {
-        channels = (await liveRepository.load(lives,
-                baseUri: sourceUrl == null ? null : Uri.tryParse(sourceUrl)))
-            .channels;
+        channels = (await liveRepository.load(
+          lives,
+          baseUri: sourceUrl == null ? null : Uri.tryParse(sourceUrl),
+        )).channels;
       } catch (_) {
         channels = const [];
       }
@@ -7079,8 +7821,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       final lastKey = await liveRepository.loadLastChannelKey();
       if (!mounted || cancelled()) return;
       await _startLiveChannel(
-          ref, channels, resolveLiveBookmark(channels, lastKey),
-          isStale: cancelled);
+        ref,
+        channels,
+        resolveLiveBookmark(channels, lastKey),
+        isStale: cancelled,
+      );
     } finally {
       if (!cancelled()) loading.state = false;
       _liveEntryBusy = false;
@@ -7099,9 +7844,20 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
           ref.read(playbackIntentProvider.notifier).state = null;
           return _launchPlayback(ref, spec);
         },
-        onPlaybackOrigin: (origin) => ref
-            .read(webDavBrowseOriginProvider.notifier)
-            .state = origin,
+        onPlaybackOrigin: (origin) =>
+            ref.read(webDavBrowseOriginProvider.notifier).state = origin,
+        resolveNetdiskShare: (input) async {
+          final resolver = ref.read(siteApiProvider).netdiskShareResolver;
+          if (resolver == null || !resolver.looksLikeShare(input)) return null;
+          final link = await resolver.resolve(input);
+          if (!link.ok || link.url.isEmpty) {
+            throw FormatException('网盘解链失败：${link.reason}');
+          }
+          return MediaPlaySpec(
+            url: link.url,
+            headers: link.headers.isEmpty ? null : link.headers,
+          );
+        },
       ),
     );
   }
@@ -7130,20 +7886,24 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     if (!favorite.isScripted && (favorite.scriptKey?.isEmpty ?? true)) {
       try {
         final sourceUrl = repo.currentWindowConfig.lastConfigUrl;
-        final catalog = await ref.read(liveRepositoryProvider).load(
+        final catalog = await ref
+            .read(liveRepositoryProvider)
+            .load(
               config.lives,
               baseUri: sourceUrl == null ? null : Uri.tryParse(sourceUrl),
             );
-        final match = catalog.channels.indexWhere((channel) =>
-            !channel.isScripted &&
-            (channel.scriptKey?.isEmpty ?? true) &&
-            channel.matchesKey(favorite.key));
+        final match = catalog.channels.indexWhere(
+          (channel) =>
+              !channel.isScripted &&
+              (channel.scriptKey?.isEmpty ?? true) &&
+              channel.matchesKey(favorite.key),
+        );
         if (match >= 0) {
           channels = catalog.channels;
           index = match;
-          final line = channels[index]
-              .lines
-              .indexWhere((line) => line.url == favorite.url);
+          final line = channels[index].lines.indexWhere(
+            (line) => line.url == favorite.url,
+          );
           lineIndex = line < 0 ? 0 : line;
         }
       } catch (_) {
@@ -7151,8 +7911,13 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       }
     }
     if (staleContext() || epoch != _playbackSessionEpoch) return;
-    await _startLiveChannel(ref, channels, index,
-        lineIndex: lineIndex, isStale: staleContext);
+    await _startLiveChannel(
+      ref,
+      channels,
+      index,
+      lineIndex: lineIndex,
+      isStale: staleContext,
+    );
   }
 
   void _showFavoritesDialog() {
@@ -7203,7 +7968,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
         catalog,
         if (page != null)
           CallbackShortcuts(
-            bindings: {const SingleActivator(LogicalKeyboardKey.escape): _leaveCatalogDetail},
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape):
+                  _leaveCatalogDetail,
+            },
             child: Focus(autofocus: true, child: Builder(builder: page)),
           ),
       ],
@@ -7212,7 +7980,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
 
   Widget _buildCatalog(BuildContext context) {
     final palette = context.palette;
-    final appearance = ref.watch(appearancePreferencesProvider).valueOrNull ??
+    final appearance =
+        ref.watch(appearancePreferencesProvider).valueOrNull ??
         ref.read(settingsRepositoryProvider).appearancePreferences;
     ref.listen<Site?>(currentSiteProvider, (_, __) => _synchronizeSite());
     ref.listen<VodConfig>(vodConfigProvider, (_, __) {
@@ -7224,8 +7993,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
       if (next != null) _lastPlayedSession = next;
     });
     // 设置「分类页筛选条默认展开」一改，丢掉页面上的临时展开 / 收起，按新默认显示。
-    ref.listen<AsyncValue<SearchPreferences>>(searchPreferencesProvider,
-        (previous, next) {
+    ref.listen<AsyncValue<SearchPreferences>>(searchPreferencesProvider, (
+      previous,
+      next,
+    ) {
       final before = previous?.valueOrNull?.filterBarExpanded;
       final after = next.valueOrNull?.filterBarExpanded;
       if (before != null && after != null && before != after) {
@@ -7251,7 +8022,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     });
 
     final config = ref.watch(vodConfigProvider);
-    final searchPrefs = ref.watch(searchPreferencesProvider).valueOrNull ??
+    final searchPrefs =
+        ref.watch(searchPreferencesProvider).valueOrNull ??
         const SearchPreferences();
     _syncSearchBridge();
 
@@ -7259,7 +8031,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
     final searchSiteGroups = _isSearching
         ? groupSearchResultsBySite(_items)
         : const <SearchSiteGroup>[];
-    final activeSearchSiteKey = _isSearching &&
+    final activeSearchSiteKey =
+        _isSearching &&
             _searchSiteGroupKey != null &&
             searchSiteGroups.any((group) => group.key == _searchSiteGroupKey)
         ? _searchSiteGroupKey
@@ -7312,8 +8085,11 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                     ),
                   ],
                 ),
-                child: Icon(Icons.tv_rounded,
-                    size: 42, color: context.palette.accentInk),
+                child: Icon(
+                  Icons.tv_rounded,
+                  size: 42,
+                  color: context.palette.accentInk,
+                ),
               ),
               const SizedBox(height: 18),
               Text(
@@ -7341,17 +8117,24 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                   backgroundColor: context.palette.accent,
                   // 品牌底上必须显式前景 onPrimary：M3 默认前景是 primary=品牌色，会同色不可见
                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 26,
+                    vertical: 13,
+                  ),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadii.pill)),
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                  ),
                   elevation: 2,
                   shadowColor: context.palette.accentInk.withValues(alpha: 0.3),
                 ),
                 icon: const Icon(Icons.settings_rounded, size: 18),
-                label: const Text('立即配置影视源',
-                    style: TextStyle(
-                        fontSize: AppType.title, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  '立即配置影视源',
+                  style: TextStyle(
+                    fontSize: AppType.title,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 onPressed: () {
                   showConfigDialog(context, ref);
                 },
@@ -7364,28 +8147,38 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: context.glassBorder, width: 1.0),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadii.pill)),
+                        borderRadius: BorderRadius.circular(AppRadii.pill),
+                      ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
                     onPressed: _enterLive,
                     icon: const Icon(Icons.live_tv_rounded, size: 16),
-                    label: const Text('打开电视直播',
-                        style: TextStyle(fontSize: AppType.caption)),
+                    label: const Text(
+                      '打开电视直播',
+                      style: TextStyle(fontSize: AppType.caption),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: context.glassBorder, width: 1.0),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadii.pill)),
+                        borderRadius: BorderRadius.circular(AppRadii.pill),
+                      ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
                     onPressed: _showPushDialog,
                     icon: const Icon(Icons.send_rounded, size: 16),
-                    label: const Text('打开直链推送',
-                        style: TextStyle(fontSize: AppType.caption)),
+                    label: const Text(
+                      '打开直链推送',
+                      style: TextStyle(fontSize: AppType.caption),
+                    ),
                   ),
                 ],
               ),
@@ -7428,9 +8221,12 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                         onItemTap: (item) {
                           final folder = _folderRoot;
                           if (folder != null) {
-                            _onItemClicked(item.copyWith(
+                            _onItemClicked(
+                              item.copyWith(
                                 siteKey: folder.site.key,
-                                siteName: folder.site.name));
+                                siteName: folder.site.name,
+                              ),
+                            );
                           }
                         },
                         onClose: () {
@@ -7439,10 +8235,13 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (mounted && _gridScrollController.hasClients) {
                               _gridScrollController.jumpTo(
-                                  _folderReturnOffset.clamp(
-                                      0,
-                                      _gridScrollController
-                                          .position.maxScrollExtent));
+                                _folderReturnOffset.clamp(
+                                  0,
+                                  _gridScrollController
+                                      .position
+                                      .maxScrollExtent,
+                                ),
+                              );
                             }
                           });
                         },
@@ -7460,7 +8259,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                     _searchPending)) ...[
                               SearchSiteBar(
                                 key: ValueKey(
-                                    'search-sites-$_contentGeneration'),
+                                  'search-sites-$_contentGeneration',
+                                ),
                                 groups: searchSiteGroups,
                                 totalCount: _items.length,
                                 selectedKey: activeSearchSiteKey,
@@ -7469,7 +8269,8 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                 progress: _searchPending
                                     ? _SearchProgressPill(
                                         completed: _searchCompleted,
-                                        total: _searchTotal)
+                                        total: _searchTotal,
+                                      )
                                     : null,
                               ),
                               const SizedBox(height: 10),
@@ -7481,8 +8282,9 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                               Padding(
                                 key: const ValueKey('category-filter-section'),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.lg,
-                                    vertical: AppSpacing.md),
+                                  horizontal: AppSpacing.lg,
+                                  vertical: AppSpacing.md,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
@@ -7493,19 +8295,22 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                           child: Container(
                                             height: 38,
                                             padding: const EdgeInsets.symmetric(
-                                                vertical: 2),
+                                              vertical: 2,
+                                            ),
                                             // 分类多时鼠标滚轮 / 按住拖动都能横向滚动（§41）。
                                             child: HorizontalScrollArea(
                                               controller:
                                                   _categoryScrollController,
                                               child: ListView.separated(
                                                 key: const ValueKey(
-                                                    'category-bar'),
+                                                  'category-bar',
+                                                ),
                                                 controller:
                                                     _categoryScrollController,
                                                 scrollDirection:
                                                     Axis.horizontal,
-                                                itemCount: _categories.length +
+                                                itemCount:
+                                                    _categories.length +
                                                     (_isDoubanHome &&
                                                             _doubanViewingSingleCategory
                                                         ? 1
@@ -7533,7 +8338,7 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                                       _categories[index];
                                                   final isSelected =
                                                       _selectedCategory?.id ==
-                                                          cat.id;
+                                                      cat.id;
 
                                                   return FilterPill(
                                                     label: cat.name,
@@ -7541,9 +8346,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                                     onTap: () {
                                                       _searchController.clear();
                                                       loadSiteData(
-                                                          category: cat,
-                                                          preserveCategories:
-                                                              true);
+                                                        category: cat,
+                                                        preserveCategories:
+                                                            true,
+                                                      );
                                                     },
                                                   );
                                                 },
@@ -7558,9 +8364,10 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                                             filters: currentFilters,
                                             selection: currentFilterSelection,
                                             expanded: filterBarExpanded,
-                                            onToggle: () => setState(() =>
-                                                _filterBarExpandedOverride =
-                                                    !filterBarExpanded),
+                                            onToggle: () => setState(
+                                              () => _filterBarExpandedOverride =
+                                                  !filterBarExpanded,
+                                            ),
                                           ),
                                         ],
                                       ],
@@ -7587,21 +8394,29 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                               _searchNotice != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Row(children: [
-                                Expanded(
-                                    child: Text(_searchNotice!,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: AppType.caption,
-                                            color: palette.danger))),
-                                TextButton(
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _searchNotice!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: AppType.caption,
+                                        color: palette.danger,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
                                     onPressed: _searchBusy
                                         ? null
                                         : () => _handleSearch(
-                                            _searchController.text),
-                                    child: const Text('重试')),
-                              ]),
+                                            _searchController.text,
+                                          ),
+                                    child: const Text('重试'),
+                                  ),
+                                ],
+                              ),
                             ),
 
                           // 豆瓣单一分类网格提示：明确「点片=搜索」，避免被当成进豆瓣详情（§17）
@@ -7609,13 +8424,16 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                               !_isSearching &&
                               _doubanViewingSingleCategory) ...[
                             Padding(
-                              padding:
-                                  const EdgeInsets.only(left: 2, bottom: 8),
+                              padding: const EdgeInsets.only(
+                                left: 2,
+                                bottom: 8,
+                              ),
                               child: Text(
                                 '点海报即在已启用站源里搜索该片，不进豆瓣详情',
                                 style: TextStyle(
-                                    fontSize: AppType.caption,
-                                    color: context.palette.textSub),
+                                  fontSize: AppType.caption,
+                                  color: context.palette.textSub,
+                                ),
                               ),
                             ),
                           ],
@@ -7624,254 +8442,255 @@ class _DesktopMainViewState extends ConsumerState<DesktopMainView> {
                           Expanded(
                             child: Container(
                               decoration: const BoxDecoration(
-                                  color: Colors.transparent),
+                                color: Colors.transparent,
+                              ),
                               child: _isLoading
                                   // B2 首屏加载：首页 / 分类用海报骨架（与真网格同布局，
                                   // 加载完成不跳变）；搜索加载为整块等待（B3：带文案解释）。
                                   ? (_isSearching
-                                      ? Center(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              CircularProgressIndicator(
-                                                  color: context
-                                                      .palette.accentInk),
-                                              const SizedBox(height: 12),
-                                              // 等待要有解释（skill: Loading Indicators；B3）
-                                              Text('正在搜索…',
-                                                  style: TextStyle(
-                                                      fontSize: AppType.body,
-                                                      color: context
-                                                          .palette.textSub)),
-                                            ],
-                                          ),
-                                        )
-                                      : const VodGridSkeleton())
-                                  : _errorMessage != null
-                                      ? AppEmptyState(
-                                          icon: Icons.error_outline_rounded,
-                                          title: '暂时无法加载',
-                                          message: _errorMessage!,
-                                          action: FilledButton.icon(
-                                            icon: const Icon(Icons.refresh_rounded, size: 16),
-                                            label: const Text('重试'),
-                                            onPressed: () => _isSearching
-                                                ? _handleSearch(_searchController.text)
-                                                : loadSiteData(category: _selectedCategory, preserveCategories: true),
-                                          ),
-                                        )
-                                      : visibleItems.isEmpty
-                                          ? AppEmptyState(
-                                              icon: _isSearching
-                                                  ? Icons.search_off_rounded
-                                                  : Icons.inbox_rounded,
-                                              title: _searchNotice ??
-                                                  (_isSearching
-                                                      ? (_searchPending
-                                                          ? (activeSearchSiteKey != null
-                                                              ? '正在搜索…（该站点暂无结果）'
-                                                              : '正在搜索…（已返回 0 条）')
-                                                          : (searchPrefs.aggregate
-                                                              ? '未找到相关聚合搜索结果'
-                                                              : '未找到相关搜索结果'))
-                                                      : (currentFilterSelection.isNotEmpty
-                                                          ? '当前筛选条件下暂无内容'
-                                                          : '当前分类下暂无内容')),
-                                              message: _isSearching && !_searchPending && _searchNotice == null
-                                                  ? '可尝试更换关键词，或切换站源'
-                                                  : null,
-                                              action: FilledButton.icon(
-                                                icon: Icon(
-                                                  _isSearching || hasActiveFilterOnEmpty
-                                                      ? Icons.clear_rounded : Icons.refresh_rounded,
-                                                  size: 16,
+                                        ? Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                CircularProgressIndicator(
+                                                  color:
+                                                      context.palette.accentInk,
                                                 ),
-                                                label: Text(_isSearching ? '清空搜索'
-                                                    : hasActiveFilterOnEmpty ? '清除筛选' : '刷新'),
-                                                onPressed: _isSearching ? _clearSearchToHome
-                                                    : hasActiveFilterOnEmpty
-                                                        ? () => _onFilterChanged(const {})
-                                                        : () => loadSiteData(category: _selectedCategory, preserveCategories: true),
+                                                const SizedBox(height: 12),
+                                                // 等待要有解释（skill: Loading Indicators；B3）
+                                                Text(
+                                                  '正在搜索…',
+                                                  style: TextStyle(
+                                                    fontSize: AppType.body,
+                                                    color:
+                                                        context.palette.textSub,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : const VodGridSkeleton())
+                                  : _errorMessage != null
+                                  ? AppEmptyState(
+                                      icon: Icons.error_outline_rounded,
+                                      title: '暂时无法加载',
+                                      message: _errorMessage!,
+                                      action: FilledButton.icon(
+                                        icon: const Icon(
+                                          Icons.refresh_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const Text('重试'),
+                                        onPressed: () => _isSearching
+                                            ? _handleSearch(
+                                                _searchController.text,
+                                              )
+                                            : loadSiteData(
+                                                category: _selectedCategory,
+                                                preserveCategories: true,
                                               ),
-                                            )
-                                          : (_isSearching &&
-                                                  searchPrefs.display ==
-                                                      SearchDisplay.list)
-                                              ? VodListView(
-                                                  items: visibleItems,
-                                                  onItemTap: _onItemClicked,
-                                                )
-                                              : (_isDoubanHome &&
-                                                      !_isSearching &&
-                                                      !_doubanViewingSingleCategory)
-                                                  ? NetflixHomeView(
-                                                      scrollController:
-                                                          _gridScrollController,
-                                                      onScrollNotification:
-                                                          _onGridScroll,
-                                                      categoryItemsMap:
-                                                          _doubanCategoryItems,
-                                                      categories: _categories,
-                                                      billboardItems:
-                                                          _doubanBillboardItems,
-                                                      isLoading: _isLoading,
-                                                      onItemTap: _onItemClicked,
-                                                      onCategoryTap:
-                                                          (category) {
-                                                        setState(() {
-                                                          _doubanViewingSingleCategory =
-                                                              true;
-                                                          _selectedCategory =
-                                                              category;
-                                                          _items =
-                                                              _doubanCategoryItems[
-                                                                      category
-                                                                          .id] ??
-                                                                  [];
-                                                        });
-                                                        loadSiteData(
-                                                            category: category,
-                                                            preserveCategories:
-                                                                true);
-                                                      },
-                                                      stillUrlFor: (item) => ref
-                                                          .read(
-                                                              doubanRepositoryProvider)
-                                                          .stillUrlFor(item.id),
-                                                      // 豆瓣合集条目不带简介：按需问详情接口
-                                                      synopsisFor: (item) => ref
-                                                          .read(
-                                                              doubanRepositoryProvider)
-                                                          .introFor(item.id),
-                                                      imageProviderFor:
-                                                          (item, spec) {
-                                                        // 站源海报可能带 `@Referer=…` 尾巴：
-                                                        // 先拆出真实地址再判豆瓣图床
-                                                        final pic =
-                                                            PosterSource.parse(
-                                                                    item.pic)
-                                                                .url;
-                                                        if (!DoubanRepository
-                                                            .isDoubanPoster(
-                                                                pic)) {
-                                                          return null;
-                                                        }
-                                                        // 巨幅位优先横版剧照（16:9）；
-                                                        // 拉不到时 urlOverride 为空，
-                                                        // 回落竖版原图（现状口径）。
-                                                        final url = spec
-                                                                .urlOverride ??
-                                                            (spec.highRes
-                                                                ? DoubanRepository
-                                                                    .highResPosterUrl(
-                                                                        pic)
-                                                                : pic);
-                                                        return DoubanPosterImage(
-                                                          url,
-                                                          fallbackUrl:
-                                                              spec.highRes
-                                                                  ? pic
-                                                                  : null,
-                                                          targetWidth:
-                                                              spec.targetWidth,
-                                                        );
-                                                      },
-                                                    )
-                                                  : Stack(
-                                                      children: [
-                                                        // §19 无限滚动：滚动通知从内部 GridView
-                                                        // 冒泡上来，接近底部时续页
-                                                        NotificationListener<
-                                                            ScrollNotification>(
-                                                          onNotification:
-                                                              _onGridScroll,
-                                                          child: VodGridView(
-                                                            items: visibleItems,
-                                                            onItemTap:
-                                                                _onItemClicked,
-                                                            controller:
-                                                                _gridScrollController,
-                                                            // 统一海报入口：豆瓣图床自己发请求
-                                                            // （NetworkImage 的 headers.add 会叠两条
-                                                            // UA → 403，§17）；站源 `@头` 尾巴拆开带上
-                                                            imageProviderFor: (item) =>
-                                                                posterImageProvider(
-                                                                    item.pic,
-                                                                    targetWidth:
-                                                                        512),
-                                                          ),
-                                                        ),
-                                                        if (_doubanLoadingMore &&
-                                                            _isDoubanHome &&
-                                                            !_isSearching)
-                                                          Positioned(
-                                                            left: 0,
-                                                            right: 0,
-                                                            bottom: 14,
-                                                            child: Center(
-                                                              child: Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        14,
-                                                                    vertical:
-                                                                        8),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: context
-                                                                      .palette
-                                                                      .raised
-                                                                      .withValues(
-                                                                          alpha:
-                                                                              0.92),
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                          AppRadii
-                                                                              .pill),
-                                                                  border: Border.all(
-                                                                      color: context
-                                                                          .palette
-                                                                          .border),
-                                                                ),
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    SizedBox(
-                                                                      width: 12,
-                                                                      height:
-                                                                          12,
-                                                                      child:
-                                                                          CircularProgressIndicator(
-                                                                        strokeWidth:
-                                                                            2,
-                                                                        color: context
-                                                                            .palette
-                                                                            .accentInk,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            8),
-                                                                    Text(
-                                                                      '正在加载更多…',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            AppType.caption,
-                                                                        color: context
-                                                                            .palette
-                                                                            .textSub,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                      ],
+                                      ),
+                                    )
+                                  : visibleItems.isEmpty
+                                  ? AppEmptyState(
+                                      icon: _isSearching
+                                          ? Icons.search_off_rounded
+                                          : Icons.inbox_rounded,
+                                      title:
+                                          _searchNotice ??
+                                          (_isSearching
+                                              ? (_searchPending
+                                                    ? (activeSearchSiteKey !=
+                                                              null
+                                                          ? '正在搜索…（该站点暂无结果）'
+                                                          : '正在搜索…（已返回 0 条）')
+                                                    : (searchPrefs.aggregate
+                                                          ? '未找到相关聚合搜索结果'
+                                                          : '未找到相关搜索结果'))
+                                              : (currentFilterSelection
+                                                        .isNotEmpty
+                                                    ? '当前筛选条件下暂无内容'
+                                                    : '当前分类下暂无内容')),
+                                      message:
+                                          _isSearching &&
+                                              !_searchPending &&
+                                              _searchNotice == null
+                                          ? '可尝试更换关键词，或切换站源'
+                                          : null,
+                                      action: FilledButton.icon(
+                                        icon: Icon(
+                                          _isSearching || hasActiveFilterOnEmpty
+                                              ? Icons.clear_rounded
+                                              : Icons.refresh_rounded,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          _isSearching
+                                              ? '清空搜索'
+                                              : hasActiveFilterOnEmpty
+                                              ? '清除筛选'
+                                              : '刷新',
+                                        ),
+                                        onPressed: _isSearching
+                                            ? _clearSearchToHome
+                                            : hasActiveFilterOnEmpty
+                                            ? () => _onFilterChanged(const {})
+                                            : () => loadSiteData(
+                                                category: _selectedCategory,
+                                                preserveCategories: true,
+                                              ),
+                                      ),
+                                    )
+                                  : (_isSearching &&
+                                        searchPrefs.display ==
+                                            SearchDisplay.list)
+                                  ? VodListView(
+                                      items: visibleItems,
+                                      onItemTap: _onItemClicked,
+                                    )
+                                  : (_isDoubanHome &&
+                                        !_isSearching &&
+                                        !_doubanViewingSingleCategory)
+                                  ? NetflixHomeView(
+                                      scrollController: _gridScrollController,
+                                      onScrollNotification: _onGridScroll,
+                                      categoryItemsMap: _doubanCategoryItems,
+                                      categories: _categories,
+                                      billboardItems: _doubanBillboardItems,
+                                      isLoading: _isLoading,
+                                      onItemTap: _onItemClicked,
+                                      onCategoryTap: (category) {
+                                        setState(() {
+                                          _doubanViewingSingleCategory = true;
+                                          _selectedCategory = category;
+                                          _items =
+                                              _doubanCategoryItems[category
+                                                  .id] ??
+                                              [];
+                                        });
+                                        loadSiteData(
+                                          category: category,
+                                          preserveCategories: true,
+                                        );
+                                      },
+                                      stillUrlFor: (item) => ref
+                                          .read(doubanRepositoryProvider)
+                                          .stillUrlFor(item.id),
+                                      // 豆瓣合集条目不带简介：按需问详情接口
+                                      synopsisFor: (item) => ref
+                                          .read(doubanRepositoryProvider)
+                                          .introFor(item.id),
+                                      imageProviderFor: (item, spec) {
+                                        // 站源海报可能带 `@Referer=…` 尾巴：
+                                        // 先拆出真实地址再判豆瓣图床
+                                        final pic = PosterSource.parse(
+                                          item.pic,
+                                        ).url;
+                                        if (!DoubanRepository.isDoubanPoster(
+                                          pic,
+                                        )) {
+                                          return null;
+                                        }
+                                        // 巨幅位优先横版剧照（16:9）；
+                                        // 拉不到时 urlOverride 为空，
+                                        // 回落竖版原图（现状口径）。
+                                        final url =
+                                            spec.urlOverride ??
+                                            (spec.highRes
+                                                ? DoubanRepository.highResPosterUrl(
+                                                    pic,
+                                                  )
+                                                : pic);
+                                        return DoubanPosterImage(
+                                          url,
+                                          fallbackUrl: spec.highRes
+                                              ? pic
+                                              : null,
+                                          targetWidth: spec.targetWidth,
+                                        );
+                                      },
+                                    )
+                                  : Stack(
+                                      children: [
+                                        // §19 无限滚动：滚动通知从内部 GridView
+                                        // 冒泡上来，接近底部时续页
+                                        NotificationListener<
+                                          ScrollNotification
+                                        >(
+                                          onNotification: _onGridScroll,
+                                          child: VodGridView(
+                                            items: visibleItems,
+                                            onItemTap: _onItemClicked,
+                                            controller: _gridScrollController,
+                                            // 统一海报入口：豆瓣图床自己发请求
+                                            // （NetworkImage 的 headers.add 会叠两条
+                                            // UA → 403，§17）；站源 `@头` 尾巴拆开带上
+                                            imageProviderFor: (item) =>
+                                                posterImageProvider(
+                                                  item.pic,
+                                                  targetWidth: 512,
+                                                ),
+                                          ),
+                                        ),
+                                        if (_doubanLoadingMore &&
+                                            _isDoubanHome &&
+                                            !_isSearching)
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 14,
+                                            child: Center(
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 8,
                                                     ),
+                                                decoration: BoxDecoration(
+                                                  color: context.palette.raised
+                                                      .withValues(alpha: 0.92),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        AppRadii.pill,
+                                                      ),
+                                                  border: Border.all(
+                                                    color:
+                                                        context.palette.border,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 12,
+                                                      height: 12,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: context
+                                                                .palette
+                                                                .accentInk,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      '正在加载更多…',
+                                                      style: TextStyle(
+                                                        fontSize:
+                                                            AppType.caption,
+                                                        color: context
+                                                            .palette
+                                                            .textSub,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                             ),
                           ),
                         ],
