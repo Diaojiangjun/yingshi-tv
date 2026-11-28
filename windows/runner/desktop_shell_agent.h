@@ -61,6 +61,13 @@ class DesktopShellAgent {
   std::optional<LRESULT> HandleMessage(UINT message, WPARAM wparam,
                                        LPARAM lparam);
 
+  /// 取出并清除「托盘菜单点了退出」标记。
+  ///
+  /// 托盘退出不直接触发关闭链，而是置位后投递 `WM_CLOSE`，让它和标题栏
+  /// 关闭键走同一条入口（见 HandleMessage）。Dart 侧在 onWindowClose 里
+  /// 取这个标记，区分「收进托盘」与「真正退出」。
+  bool ConsumeTrayExit();
+
  private:
   void ShowMainWindow();
   void ToggleBossKey();
@@ -80,6 +87,8 @@ class DesktopShellAgent {
   flutter::BinaryMessenger* messenger_ = nullptr;
   bool keep_awake_ = false;
   bool tray_added_ = false;
+  /// 托盘菜单「退出」已按下，等待随后的 WM_CLOSE 消费。
+  bool tray_exit_pending_ = false;
   HICON tray_icon_ = nullptr;
   bool boss_key_registered_ = false;
   UINT boss_key_modifiers_ = 0;

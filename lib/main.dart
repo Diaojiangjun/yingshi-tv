@@ -139,9 +139,8 @@ Future<void> main() async {
     // 桌面外壳：系统托盘、老板键（Ctrl + Alt + Y）、播放时阻止系统休眠。
     final desktopShell = DesktopShellBridge.instance;
     desktopShell.installHandler();
-    // 托盘「退出」必须走完整关闭链：停播放 → 关 companion → 落盘窗口几何。
-    // 原生直接销毁窗口会跳过这些，留下孤儿 Java 进程。
-    desktopShell.onExitRequested = () => unawaited(windowManager.close());
+    // 托盘「退出」不再单独接线：原生置位后投递 WM_CLOSE，窗口管理器在
+    // onWindowClose 里读取标记，与标题栏关闭键共用同一条关闭链。
     // 老板键只把窗口藏起来，音频还在继续播放，由这里补上暂停。
     desktopShell.onHiddenByBossKey = () => unawaited(playerEngine.pause());
     // 点 X 收进托盘（窗口不可见）后：同样要停声，并第一次提示「还在后台运行」，

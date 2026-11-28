@@ -36,10 +36,6 @@ class DesktopShellBridge {
 
   bool _handlerInstalled = false;
 
-  /// 托盘菜单「退出」：交给窗口管理器走完整关闭链
-  /// （停播放 → 关 companion → 落盘窗口几何），不能用原生销毁窗口。
-  VoidCallback? onExitRequested;
-
   /// 老板键隐藏窗口后回调：此时窗口已不可见，但音频还在放，
   /// 由调用方暂停播放，避免「藏起来了却还有声音」。
   VoidCallback? onHiddenByBossKey;
@@ -49,20 +45,35 @@ class DesktopShellBridge {
     if (_handlerInstalled) return;
     _handlerInstalled = true;
     channel.setMethodCallHandler((call) async {
-      final value = switch (call.arguments) {
-        final Map<Object?, Object?> map => map['value']?.toString(),
-        _ => null,
-      };
-      switch (call.method) {
-        case 'trayCommand':
-          if (value == 'exit') onExitRequested?.call();
-          break;
-        case 'bossKeyHidden':
-          onHiddenByBossKey?.call();
-          break;
-      }
+      if (call.method == 'bossKeyHidden') onHiddenByBossKey?.call();
       return null;
     });
+  }
+
+  /// 取走「托盘菜单点了退出」标记（读后即清）。
+  ///
+  /// 原生按下托盘退出后只置位并投递 `WM_CLOSE`，随后窗口管理器在
+  /// `onWindowClose` 里问一次：true 走关闭链，false 收进托盘。这样退出入口
+  /// 与标题栏关闭键完全一致——从托盘命令回调里直接触发关闭，进程收尾会在
+  /// WebView 插件创建的 DispatcherQueue 上崩在 coremessaging.dll。
+  ///
+  /// 通道不可用时返回 false：退化成「收进托盘」比误退出更安全。
+  Future<bool> consumeTrayExit() async {
+    final reply = await _invoke<bool>('consumeTrayExit', const {});
+    return reply ?? false;
+  }
+
+  /// 关闭链收尾：清理完成后以退出码 0 结束进程。
+  ///
+  /// 走原生 `TerminateProcess` 而不是让引擎自己拆：托盘开启时引擎收尾会经过
+  /// WebView 插件启动时创建的 STA DispatcherQueue，实测稳定崩在
+  /// coremessaging.dll（0xC0000005），用户侧表现为「退出时弹出程序停止工作」。
+  ///
+  /// 返回 false 表示原生不可用（非 Windows / 单元测试），调用方应回退到
+  /// `windowManager.destroy()`。
+  Future<bool> quitNow() async {
+    final applied = await _invoke<bool>('quitNow', const {});
+    return applied ?? false;
   }
 
   /// 播放期间阻止系统待机与关屏。返回原生侧实际是否处于该状态。

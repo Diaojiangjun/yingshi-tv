@@ -6,6 +6,7 @@ import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../core/config/config_repository.dart';
 import '../../../core/config/models/desktop_window_config.dart';
+import '../../../core/desktop/desktop_shell_bridge.dart';
 import 'window_geometry_guard.dart';
 import '../../../core/brand.dart';
 
@@ -341,7 +342,13 @@ class DesktopWindowManager with WindowListener {
         debugPrint('[yingshi-tv] 退出钩子超过 ${beforeCloseTimeout.inSeconds}s 未完成，继续关闭窗口');
       });
       await _flushPersistWindowGeometry();
-      await windowManager.destroy();
+      // 收尾不能交给引擎自己拆：托盘开启时，ExitProcess 会走到第三方 WebView
+      // 插件在启动时创建的 STA DispatcherQueue（coremessaging.dll），实测稳定
+      // 崩在 0xC0000005。此刻该做的都做完了（停播放、关 companion、落盘几何），
+      // 直接以退出码 0 结束进程。通道不可用（非 Windows / 测试）仍走原路径。
+      if (!await DesktopShellBridge.instance.quitNow()) {
+        await windowManager.destroy();
+      }
     } catch (error, stack) {
       // 保留「失败不销毁窗口、可重试」语义（test/desktop_shutdown_test.dart 钉住）：
       // 把已隐藏的窗口恢复出来，让用户能再次点关闭；外层 close() 会清空
@@ -400,17 +407,28 @@ class DesktopWindowManager with WindowListener {
 
   @override
   void onWindowClose() {
-    // 托盘开着时 X 只收进托盘；退出统一走托盘菜单（原生回调 trayCommand=exit
-    // 会直接调 close()，不经过这里）。
+    // 托盘开着时 X 只收进托盘；托盘菜单「退出」同样从这里进来——原生只置位
+    // 再投递 WM_CLOSE，由 [DesktopShellBridge.consumeTrayExit] 区分两者，
+    // 这样退出的入口与点关闭键完全一致（详情见 bridge 里的注释）。
     if (_hideOnClose) {
-      unawaited(_hideToTray().catchError((Object error, StackTrace stack) {
-        debugPrint('[yingshi-tv] hide to tray failed: $error\n$stack');
+      unawaited(_handleTrayClose().catchError((Object error, StackTrace stack) {
+        debugPrint('[yingshi-tv] tray close failed: $error\n$stack');
       }));
       return;
     }
     unawaited(close().catchError((Object error, StackTrace stack) {
       debugPrint('[yingshi-tv] close failed; window kept open: $error\n$stack');
     }));
+  }
+
+  /// 托盘开启时的关闭键：默认收进托盘，托盘菜单点过「退出」才真正关闭。
+  Future<void> _handleTrayClose() async {
+    if (_closing != null) return;
+    if (await DesktopShellBridge.instance.consumeTrayExit()) {
+      await close();
+      return;
+    }
+    await _hideToTray();
   }
 
   /// 防抖保存窗口几何参数至持久化配置，避免高频拖拽导致频繁磁盘 I/O

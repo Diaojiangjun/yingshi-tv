@@ -12,7 +12,7 @@
 
     检查项：产物与 SHA256SUMS 自检、版本资源、zip 条目分隔符、必需文件清单、与干净暂存目录
     逐文件一致、PE 依赖闭包、内置 JRE 可运行、zip 解压 / 安装包静默安装到临时目录后
-    分别启动（存活、可见、有内容、运行库来源、正常关闭退出码 0、无 hs_err / 崩溃转储）。
+    分别启动（存活、可见、有内容、运行库来源、关闭键隐藏到托盘、托盘菜单退出码 0、无 hs_err / 崩溃转储）。
 
 .PARAMETER Version
     期望版本号 x.y.z。
@@ -456,15 +456,33 @@ function Test-Launch([string]$Scope, [string]$Root) {
             "$($VcCrtFiles -join ' / ') 均来自安装目录"
         }
 
-        Invoke-Check $Scope "正常关闭（退出码 0）" {
+        # 主窗口 X 不再退出：托盘开关默认开启时 WindowListener.onWindowClose 只隐藏窗口
+        # （见 desktop_window_manager.dart）。所以这里分两步：先验隐藏，再验托盘退出。
+        Invoke-Check $Scope "点击关闭键隐藏到托盘" {
             if ($proc.HasExited) { throw ("进程已退出，退出码 0x{0:X8}" -f $proc.ExitCode) }
-            # WM_CLOSE，走与点关闭按钮相同的退出路径（§48 关闭崩溃即发生在这里）。
+            # WM_CLOSE，走与点关闭按钮相同的路径。
             if (-not $hwnd -or [XgWin]::FindTopLevel($proc.Id, "FLUTTER_RUNNER_WIN32_WINDOW") -ne $hwnd) { throw "关闭前主窗口句柄已失效" }
             if (-not [XgWin]::PostMessage($hwnd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) {
                 throw "WM_CLOSE 投递失败，Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
             }
-            if (-not $proc.WaitForExit(20000)) {
-                throw "WM_CLOSE 已投递但 20 秒内未退出；visible=$([XgWin]::IsWindowVisible($hwnd)) iconic=$([XgWin]::IsIconic($hwnd)) responding=$($proc.Responding)"
+            $deadline = (Get-Date).AddSeconds(20)
+            while ((Get-Date) -lt $deadline) {
+                if ($proc.HasExited) { throw ("点关闭键后进程直接退出（退出码 0x{0:X8}），应隐藏到托盘" -f $proc.ExitCode) }
+                if (-not [XgWin]::IsWindowVisible($hwnd)) { return "窗口已隐藏，进程仍在（pid $($proc.Id)）" }
+                Start-Sleep -Milliseconds 300
+            }
+            throw "WM_CLOSE 已投递但 20 秒内窗口未隐藏；visible=$([XgWin]::IsWindowVisible($hwnd)) responding=$($proc.Responding)"
+        }
+
+        Invoke-Check $Scope "托盘菜单退出（退出码 0）" {
+            if ($proc.HasExited) { throw ("进程已退出，退出码 0x{0:X8}" -f $proc.ExitCode) }
+            # 托盘「退出」= WM_COMMAND(0x5A02, kTrayMenuExit)：原生只通知 Dart，
+            # 由 Dart 关闭链停播放 / 关 companion / 落盘窗口几何，最后正常退出。
+            if (-not [XgWin]::PostMessage($hwnd, 0x0111, [IntPtr]0x5A02, [IntPtr]::Zero)) {
+                throw "托盘退出命令投递失败，Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+            }
+            if (-not $proc.WaitForExit(30000)) {
+                throw "托盘退出命令已投递但 30 秒内未退出；responding=$($proc.Responding)"
             }
             if ($proc.ExitCode -ne 0) { throw ("退出码 0x{0:X8}" -f $proc.ExitCode) }
             "退出码 0"

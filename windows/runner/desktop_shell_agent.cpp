@@ -268,6 +268,12 @@ void DesktopShellAgent::NotifyDart(const char* method,
                    [](const uint8_t*, size_t) {});
 }
 
+bool DesktopShellAgent::ConsumeTrayExit() {
+  const bool pending = tray_exit_pending_;
+  tray_exit_pending_ = false;
+  return pending;
+}
+
 std::optional<LRESULT> DesktopShellAgent::HandleMessage(UINT message,
                                                         WPARAM wparam,
                                                         LPARAM lparam) {
@@ -306,8 +312,12 @@ std::optional<LRESULT> DesktopShellAgent::HandleMessage(UINT message,
         return 0;
       case kTrayMenuExit:
         // 退出要走 Dart 的关闭链：停播放、关 companion、落盘窗口几何。
-        // 原生直接 DestroyWindow 会跳过这些，留下孤儿 Java 进程。
-        NotifyDart("trayCommand", "exit");
+        // 但不能在这里直接发通道消息——实测从托盘命令回调里直接进关闭链，
+        // 进程收尾会在第三方 WebView 插件创建的 DispatcherQueue 上
+        // 崩在 coremessaging.dll（0xC0000005）。改为置位后投递 WM_CLOSE，
+        // 让退出复用标题栏关闭键那条已验证的入口，由 Dart 读标记决定关还是藏。
+        tray_exit_pending_ = true;
+        ::PostMessage(window_, WM_CLOSE, 0, 0);
         return 0;
       default:
         break;
@@ -359,6 +369,23 @@ RegisterDesktopShellChannel(flutter::BinaryMessenger* messenger,
           }
           result->Success(flutter::EncodableValue(
               agent->SetTrayEnabled(*value, tooltip)));
+          return;
+        }
+
+        if (call.method_name() == "quitNow") {
+          // 关闭链已经收尾（停播放 / 关 companion / 落盘几何），直接以退出码 0
+          // 结束进程。不能走引擎自身析构：托盘开启时收尾会经过 WebView 插件
+          // 启动时创建的 STA DispatcherQueue，实测稳定崩在 coremessaging.dll
+          // （0xC0000005），用户看到的是「退出时程序停止工作」。
+          // 成功时不会返回；返回 false 说明调用失败，交回 Dart 回退。
+          if (!::TerminateProcess(::GetCurrentProcess(), 0)) {
+            result->Success(flutter::EncodableValue(false));
+          }
+          return;
+        }
+
+        if (call.method_name() == "consumeTrayExit") {
+          result->Success(flutter::EncodableValue(agent->ConsumeTrayExit()));
           return;
         }
 
